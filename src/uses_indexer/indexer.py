@@ -136,6 +136,27 @@ CREATE TABLE IF NOT EXISTS edges (
   FOREIGN KEY(statement_id) REFERENCES statements(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_id INTEGER NOT NULL,
+  procedure_id INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  chunk_type TEXT NOT NULL,
+  line_start INTEGER NOT NULL,
+  line_end INTEGER NOT NULL,
+  statement_start_seq INTEGER NOT NULL,
+  statement_end_seq INTEGER NOT NULL,
+  statement_count INTEGER NOT NULL,
+  anchor_kinds_json TEXT NOT NULL DEFAULT '[]',
+  action_names_json TEXT NOT NULL DEFAULT '[]',
+  target_names_json TEXT NOT NULL DEFAULT '[]',
+  variable_names_json TEXT NOT NULL DEFAULT '[]',
+  content TEXT NOT NULL,
+  summary_text TEXT NOT NULL,
+  FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE,
+  FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS procedures_fts USING fts5(
   name,
   chinese_name,
@@ -172,6 +193,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS edges_fts USING fts5(
   tokenize='unicode61 remove_diacritics 0'
 );
 
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+  chunk_type,
+  procedure_name,
+  file_path,
+  summary_text,
+  content,
+  tokenize='unicode61 remove_diacritics 0'
+);
+
 CREATE INDEX IF NOT EXISTS idx_files_prefix ON files(prefix);
 CREATE INDEX IF NOT EXISTS idx_files_unit_kind ON files(unit_kind);
 CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);
@@ -182,6 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_actions_action_name ON actions(action_name);
 CREATE INDEX IF NOT EXISTS idx_variable_refs_name ON variable_refs(var_name);
 CREATE INDEX IF NOT EXISTS idx_edges_target_name ON edges(target_name);
 CREATE INDEX IF NOT EXISTS idx_edges_edge_type ON edges(edge_type);
+CREATE INDEX IF NOT EXISTS idx_chunks_procedure_seq ON chunks(procedure_id, seq);
 """
 
 READ_ACTIONS = {"获取记录", "获取字段", "遍历记录开始", "遍历记录池开始", "记录为空", "记录不为空"}
@@ -189,6 +220,7 @@ WRITE_ACTIONS = {"插入记录", "修改记录", "清空记录池", "数据回�
 COMPONENT_ACTIONS = {"获取组件", "插入组件", "尾部插入组件", "遍历组件开始", "遍历组件结束", "组件大小"}
 TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
 QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
+CHUNK_SIGNIFICANT_LIMIT = 6
 CHINESE_QUERY_SPLIT_RE = re.compile(r"(?:在哪里|在哪儿|哪里|什么|如何|怎么|是否|能否|可以|请问|一下|的|了|在|是|和|与|及|或|并|把|将|从|到|为|对|按|里)")
 GENERIC_QUERY_TERMS = {
     "逻辑",
@@ -232,11 +264,12 @@ class SQLiteIndexer:
         edge_counter: Counter[str] = Counter()
         variable_ref_counter: Counter[str] = Counter()
         action_counter: Counter[str] = Counter()
+        chunk_counter: Counter[str] = Counter()
 
         with conn:
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(len(files))))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "3"))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "4"))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
 
             for path in files:
@@ -249,10 +282,11 @@ class SQLiteIndexer:
                 for statement in unit.statements:
                     statement_counter[statement.kind] += 1
 
-                local_edges, local_var_refs, local_actions = self._insert_statements(conn, file_id, procedure_id, unit)
+                local_edges, local_var_refs, local_actions, local_chunks = self._insert_statements(conn, file_id, procedure_id, unit)
                 edge_counter.update(local_edges)
                 variable_ref_counter.update(local_var_refs)
                 action_counter.update(local_actions)
+                chunk_counter.update(local_chunks)
 
         conn.close()
 
@@ -265,11 +299,13 @@ class SQLiteIndexer:
             "statement_counts": dict(statement_counter),
             "edge_counts": dict(edge_counter),
             "variable_ref_counts": dict(variable_ref_counter),
+            "chunk_counts": dict(chunk_counter),
             "fts_counts": {
                 "procedures_fts": len(files),
                 "statements_fts": sum(statement_counter.values()),
                 "actions_fts": sum(action_counter.values()),
                 "edges_fts": sum(edge_counter.values()),
+                "chunks_fts": sum(chunk_counter.values()),
             },
         }
 
@@ -294,15 +330,18 @@ class SQLiteIndexer:
             "actions": scalar("SELECT COUNT(*) FROM actions"),
             "variable_refs": scalar("SELECT COUNT(*) FROM variable_refs"),
             "edges": scalar("SELECT COUNT(*) FROM edges"),
+            "chunks": scalar("SELECT COUNT(*) FROM chunks"),
             "fts_counts": {
                 "procedures_fts": scalar("SELECT COUNT(*) FROM procedures_fts"),
                 "statements_fts": scalar("SELECT COUNT(*) FROM statements_fts"),
                 "actions_fts": scalar("SELECT COUNT(*) FROM actions_fts"),
                 "edges_fts": scalar("SELECT COUNT(*) FROM edges_fts"),
+                "chunks_fts": scalar("SELECT COUNT(*) FROM chunks_fts"),
             },
             "file_prefix_counts": grouped("SELECT prefix, COUNT(*) FROM files GROUP BY prefix ORDER BY COUNT(*) DESC"),
             "statement_kind_counts": grouped("SELECT kind, COUNT(*) FROM statements GROUP BY kind ORDER BY COUNT(*) DESC"),
             "edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
+            "chunk_type_counts": grouped("SELECT chunk_type, COUNT(*) FROM chunks GROUP BY chunk_type ORDER BY COUNT(*) DESC"),
         }
         conn.close()
         return summary
@@ -349,12 +388,15 @@ class SQLiteIndexer:
             if procedure_counts[procedure_id] >= 2:
                 continue
 
-            context = self._fetch_context_block(
-                conn,
-                procedure_id=procedure_id,
-                statement_id=_maybe_int(candidate.get("statement_id")),
-                context_window=context_window,
-            )
+            if candidate["hit_type"] == "chunk":
+                context = self._fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
+            else:
+                context = self._fetch_context_block(
+                    conn,
+                    procedure_id=procedure_id,
+                    statement_id=_maybe_int(candidate.get("statement_id")),
+                    context_window=context_window,
+                )
             context_key = (
                 procedure_id,
                 int(context["line_start"]),
@@ -377,6 +419,8 @@ class SQLiteIndexer:
                     "file_path": candidate["file_path"],
                     "matched_text": candidate["matched_text"],
                     "reasons": list(candidate["reasons"]),
+                    "chunk_type": context.get("chunk_type"),
+                    "chunk_summary": context.get("summary_text"),
                     "line_start": context["line_start"],
                     "line_end": context["line_end"],
                     "excerpt": context["excerpt"],
@@ -493,10 +537,11 @@ class SQLiteIndexer:
         file_id: int,
         procedure_id: int,
         unit: ParsedUnit,
-    ) -> tuple[Counter[str], Counter[str], Counter[str]]:
+    ) -> tuple[Counter[str], Counter[str], Counter[str], Counter[str]]:
         edge_counter: Counter[str] = Counter()
         variable_ref_counter: Counter[str] = Counter()
         action_counter: Counter[str] = Counter()
+        chunk_counter: Counter[str] = Counter()
 
         for seq, statement in enumerate(unit.statements, start=1):
             cursor = conn.execute(
@@ -553,7 +598,77 @@ class SQLiteIndexer:
             )
             action_counter.update(inserted_actions)
 
-        return edge_counter, variable_ref_counter, action_counter
+        chunk_counter.update(self._insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit))
+
+        return edge_counter, variable_ref_counter, action_counter, chunk_counter
+
+    def _insert_chunks(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        file_id: int,
+        procedure_id: int,
+        unit: ParsedUnit,
+    ) -> Counter[str]:
+        counter: Counter[str] = Counter()
+        for seq, chunk in enumerate(_build_semantic_chunks(unit.name, unit.statements), start=1):
+            cursor = conn.execute(
+                """
+                INSERT INTO chunks(
+                  file_id,
+                  procedure_id,
+                  seq,
+                  chunk_type,
+                  line_start,
+                  line_end,
+                  statement_start_seq,
+                  statement_end_seq,
+                  statement_count,
+                  anchor_kinds_json,
+                  action_names_json,
+                  target_names_json,
+                  variable_names_json,
+                  content,
+                  summary_text
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    file_id,
+                    procedure_id,
+                    seq,
+                    chunk["chunk_type"],
+                    chunk["line_start"],
+                    chunk["line_end"],
+                    chunk["statement_start_seq"],
+                    chunk["statement_end_seq"],
+                    chunk["statement_count"],
+                    _json(chunk["anchor_kinds"]),
+                    _json(chunk["action_names"]),
+                    _json(chunk["target_names"]),
+                    _json(chunk["variable_names"]),
+                    chunk["content"],
+                    chunk["summary_text"],
+                ),
+            )
+            chunk_id = int(cursor.lastrowid)
+            conn.execute(
+                """
+                INSERT INTO chunks_fts(rowid, chunk_type, procedure_name, file_path, summary_text, content)
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    chunk_id,
+                    chunk["chunk_type"],
+                    unit.name,
+                    unit.path,
+                    chunk["summary_text"],
+                    chunk["content"],
+                ),
+            )
+            counter[str(chunk["chunk_type"])] += 1
+
+        return counter
 
     def _insert_variable_refs(
         self,
@@ -788,6 +903,33 @@ class SQLiteIndexer:
             (
                 """
                 SELECT
+                  'chunk' AS hit_type,
+                  111.0 AS base_score,
+                  'fts_chunk' AS retrieval_source,
+                  c.id AS entity_id,
+                  c.procedure_id AS procedure_id,
+                  c.file_id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  c.line_start AS line_start,
+                  c.line_end AS line_end,
+                  COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
+                  'chunk_summary' AS match_source,
+                  -bm25(chunks_fts, 2.0, 1.5, 1.0, 6.0, 4.0) AS source_rank,
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM chunks_fts
+                JOIN chunks c ON c.id = chunks_fts.rowid
+                JOIN procedures p ON p.id = c.procedure_id
+                JOIN files f ON f.id = c.file_id
+                WHERE chunks_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
                   'procedure' AS hit_type,
                   115.0 AS base_score,
                   'fts_procedure' AS retrieval_source,
@@ -922,6 +1064,32 @@ class SQLiteIndexer:
     ) -> list[dict[str, object]]:
         like = f"%{query}%"
         queries = [
+            (
+                """
+                SELECT
+                  'chunk' AS hit_type,
+                  74.0 AS base_score,
+                  'like_chunk' AS retrieval_source,
+                  c.id AS entity_id,
+                  c.procedure_id AS procedure_id,
+                  c.file_id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  c.line_start AS line_start,
+                  c.line_end AS line_end,
+                  COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
+                  'chunk_summary' AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM chunks c
+                JOIN procedures p ON p.id = c.procedure_id
+                JOIN files f ON f.id = c.file_id
+                WHERE COALESCE(c.summary_text, '') LIKE ? OR COALESCE(c.content, '') LIKE ?
+                LIMIT ?
+                """,
+                (like, like, limit),
+            ),
             (
                 """
                 SELECT
@@ -1120,10 +1288,17 @@ class SQLiteIndexer:
             score += 4.0
             reasons.append("file_path_match")
 
-        if candidate["hit_type"] == "action":
+        if candidate["hit_type"] == "chunk":
+            score += 5.0
+        elif candidate["hit_type"] == "action":
             score += 4.0
         elif candidate["hit_type"] == "procedure":
             score += 3.0
+
+        matched_via = list(candidate.get("matched_via", []))
+        if len(matched_via) > 1:
+            score += min(len(matched_via) * 1.5, 4.5)
+            reasons.append(f"multi_source_match={len(matched_via)}")
 
         score += max(min(float(candidate.get("source_rank") or 0.0), 12.0), -12.0)
 
@@ -1204,6 +1379,64 @@ class SQLiteIndexer:
             "excerpt": _format_excerpt(statements),
         }
 
+    def _fetch_chunk_block(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        chunk_id: int,
+    ) -> dict[str, object]:
+        chunk_row = conn.execute(
+            """
+            SELECT
+              procedure_id,
+              chunk_type,
+              line_start,
+              line_end,
+              statement_start_seq,
+              statement_end_seq,
+              summary_text
+            FROM chunks
+            WHERE id = ?
+            """,
+            (chunk_id,),
+        ).fetchone()
+        if chunk_row is None:
+            raise ValueError(f"Chunk does not exist: {chunk_id}")
+
+        rows = conn.execute(
+            """
+            SELECT id, seq, kind, line_start, line_end, raw
+            FROM statements
+            WHERE procedure_id = ? AND seq BETWEEN ? AND ?
+            ORDER BY seq
+            """,
+            (
+                int(chunk_row["procedure_id"]),
+                int(chunk_row["statement_start_seq"]),
+                int(chunk_row["statement_end_seq"]),
+            ),
+        ).fetchall()
+
+        statements = [
+            {
+                "statement_id": int(row["id"]),
+                "seq": int(row["seq"]),
+                "kind": str(row["kind"]),
+                "line_start": int(row["line_start"]),
+                "line_end": int(row["line_end"]),
+                "raw": str(row["raw"]),
+            }
+            for row in rows
+        ]
+        return {
+            "chunk_type": str(chunk_row["chunk_type"]),
+            "summary_text": str(chunk_row["summary_text"]),
+            "line_start": int(chunk_row["line_start"]),
+            "line_end": int(chunk_row["line_end"]),
+            "statements": statements,
+            "excerpt": _format_excerpt(statements),
+        }
+
     def _fetch_related_context(
         self,
         conn: sqlite3.Connection,
@@ -1271,12 +1504,73 @@ class SQLiteIndexer:
             ).fetchall()
         ]
 
+        related_procedures = self._fetch_related_procedure_summaries(
+            conn,
+            outgoing_calls=outgoing_calls,
+            incoming_callers=incoming_callers,
+            related_limit=related_limit,
+        )
+
         return {
             "outgoing_calls": outgoing_calls,
             "incoming_callers": incoming_callers,
             "related_tables": related_tables,
             "related_actions": related_actions,
+            "related_procedures": related_procedures,
         }
+
+    def _fetch_related_procedure_summaries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        outgoing_calls: list[str],
+        incoming_callers: list[str],
+        related_limit: int,
+    ) -> list[dict[str, object]]:
+        related: list[dict[str, object]] = []
+        seen: set[tuple[str, str]] = set()
+
+        for relation_type, names in (("calls", outgoing_calls), ("called_by", incoming_callers)):
+            for procedure_name in names[:related_limit]:
+                row = conn.execute(
+                    """
+                    SELECT
+                      p.name AS procedure_name,
+                      f.path AS file_path,
+                      c.line_start AS line_start,
+                      c.line_end AS line_end,
+                      c.chunk_type AS chunk_type,
+                      c.summary_text AS summary_text
+                    FROM procedures p
+                    JOIN files f ON f.id = p.file_id
+                    LEFT JOIN chunks c ON c.procedure_id = p.id
+                    WHERE p.name = ?
+                    ORDER BY c.seq
+                    LIMIT 1
+                    """,
+                    (procedure_name,),
+                ).fetchone()
+                if row is None:
+                    continue
+                key = (relation_type, str(row["procedure_name"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                related.append(
+                    {
+                        "relation_type": relation_type,
+                        "procedure_name": str(row["procedure_name"]),
+                        "file_path": str(row["file_path"]),
+                        "line_start": _maybe_int(row["line_start"]),
+                        "line_end": _maybe_int(row["line_end"]),
+                        "chunk_type": str(row["chunk_type"]) if row["chunk_type"] is not None else None,
+                        "summary_text": str(row["summary_text"]) if row["summary_text"] is not None else None,
+                    }
+                )
+                if len(related) >= related_limit:
+                    return related
+
+        return related
 
     def _build_llm_context(self, query: str, evidence_blocks: list[dict[str, object]]) -> str:
         lines = [
@@ -1303,6 +1597,10 @@ class SQLiteIndexer:
             )
 
             related = block["related_context"]
+            if block.get("chunk_type"):
+                lines.append(f"Chunk type: {block['chunk_type']}")
+            if block.get("chunk_summary"):
+                lines.append(f"Chunk summary: {block['chunk_summary']}")
             if related["outgoing_calls"]:
                 lines.append(f"Related calls: {', '.join(related['outgoing_calls'])}")
             if related["incoming_callers"]:
@@ -1315,8 +1613,194 @@ class SQLiteIndexer:
                 lines.append(f"Related tables: {table_desc}")
             if related["related_actions"]:
                 lines.append(f"Related actions: {', '.join(related['related_actions'])}")
+            if related["related_procedures"]:
+                for item in related["related_procedures"]:
+                    summary_text = item["summary_text"] or ""
+                    lines.append(
+                        f"Related procedure ({item['relation_type']}): {item['procedure_name']} "
+                        f"[{item['line_start']}-{item['line_end']}] {summary_text}".strip()
+                    )
 
         return "\n".join(lines)
+
+
+def _build_semantic_chunks(
+    procedure_name: str,
+    statements: list[CodeStatement],
+) -> list[dict[str, object]]:
+    chunks: list[dict[str, object]] = []
+    current: list[tuple[int, CodeStatement]] = []
+    significant_count = 0
+
+    def flush() -> None:
+        nonlocal current, significant_count
+        chunk = _make_chunk(procedure_name, current)
+        if chunk is not None:
+            chunks.append(chunk)
+        current = []
+        significant_count = 0
+
+    for seq, statement in enumerate(statements, start=1):
+        if statement.kind == "brace":
+            if current:
+                current.append((seq, statement))
+            continue
+
+        if current and _should_start_new_chunk(current, statement, significant_count):
+            flush()
+
+        current.append((seq, statement))
+        if statement.kind != "comment":
+            significant_count += 1
+
+    flush()
+    return chunks
+
+
+def _should_start_new_chunk(
+    current: list[tuple[int, CodeStatement]],
+    statement: CodeStatement,
+    significant_count: int,
+) -> bool:
+    if statement.kind == "label":
+        return True
+    if significant_count >= CHUNK_SIGNIFICANT_LIMIT:
+        return True
+    if statement.kind in {"control", "goto"} and significant_count >= 2:
+        return True
+    if statement.kind in {"call", "action"} and any(item.kind == "control" for _, item in current):
+        return True
+    return False
+
+
+def _make_chunk(
+    procedure_name: str,
+    entries: list[tuple[int, CodeStatement]],
+) -> dict[str, object] | None:
+    if not entries:
+        return None
+
+    significant_entries = [(seq, statement) for seq, statement in entries if statement.kind != "brace"]
+    if not significant_entries:
+        return None
+
+    non_comment_entries = [
+        (seq, statement)
+        for seq, statement in significant_entries
+        if statement.kind != "comment"
+    ]
+    if not non_comment_entries:
+        return None
+
+    line_start = min(statement.line_start for _, statement in significant_entries)
+    line_end = max(statement.line_end for _, statement in significant_entries)
+    statement_start_seq = min(seq for seq, _ in significant_entries)
+    statement_end_seq = max(seq for seq, _ in significant_entries)
+
+    anchor_kinds = _unique_preserve_order(statement.kind for _, statement in non_comment_entries)
+    action_names = _unique_preserve_order(
+        statement.name
+        for _, statement in non_comment_entries
+        if statement.kind in {"action", "call"} and statement.name
+    )
+    target_names = _unique_preserve_order(
+        target
+        for _, statement in non_comment_entries
+        for target in _statement_targets(statement)
+    )
+    variable_names = _unique_preserve_order(
+        variable
+        for _, statement in non_comment_entries
+        for variable in [*statement.reads, *statement.writes]
+    )
+    conditions = _unique_preserve_order(
+        statement.condition
+        for _, statement in non_comment_entries
+        if statement.condition
+    )
+    comment_fragments = _unique_preserve_order(
+        _clean_comment(statement.raw)
+        for _, statement in significant_entries
+        if statement.kind == "comment" and _clean_comment(statement.raw)
+    )
+
+    chunk_type = _infer_chunk_type(non_comment_entries)
+    summary_parts = [procedure_name, chunk_type]
+    if action_names:
+        summary_parts.append(f"actions: {', '.join(action_names[:4])}")
+    if target_names:
+        summary_parts.append(f"targets: {', '.join(target_names[:4])}")
+    if conditions:
+        summary_parts.append(f"conditions: {', '.join(conditions[:2])}")
+    if variable_names:
+        summary_parts.append(f"vars: {', '.join(variable_names[:6])}")
+    if comment_fragments:
+        summary_parts.append(f"notes: {'; '.join(comment_fragments[:2])}")
+
+    content = "\n".join(statement.raw.rstrip("\n") for _, statement in entries if statement.raw.strip())
+    return {
+        "chunk_type": chunk_type,
+        "line_start": line_start,
+        "line_end": line_end,
+        "statement_start_seq": statement_start_seq,
+        "statement_end_seq": statement_end_seq,
+        "statement_count": len(significant_entries),
+        "anchor_kinds": anchor_kinds,
+        "action_names": action_names,
+        "target_names": target_names,
+        "variable_names": variable_names,
+        "content": content,
+        "summary_text": " | ".join(summary_parts),
+    }
+
+
+def _infer_chunk_type(entries: list[tuple[int, CodeStatement]]) -> str:
+    kinds = {statement.kind for _, statement in entries}
+    if "control" in kinds:
+        return "control_block"
+    if "call" in kinds and "action" in kinds:
+        return "call_flow"
+    if "call" in kinds:
+        return "call_block"
+    if "action" in kinds:
+        return "action_block"
+    if "assignment" in kinds:
+        return "assignment_block"
+    if "raw" in kinds:
+        return "raw_block"
+    return "statement_block"
+
+
+def _statement_targets(statement: CodeStatement) -> list[str]:
+    targets: list[str] = []
+    derived_target, derived_kind = _derive_target(statement)
+    if derived_target and derived_kind != "unknown":
+        targets.append(derived_target)
+    if statement.target and statement.target not in targets:
+        targets.append(statement.target)
+    return targets
+
+
+def _clean_comment(raw: str) -> str:
+    stripped = raw.strip()
+    if stripped.startswith("//"):
+        return stripped[2:].strip()
+    return stripped
+
+
+def _unique_preserve_order(values: list[str] | tuple[str, ...] | object) -> list[str]:
+    items = list(values)
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in items:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _derive_target(statement: CodeStatement) -> tuple[str | None, str]:

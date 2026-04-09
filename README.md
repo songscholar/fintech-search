@@ -26,8 +26,10 @@
 - 提供 CLI 入口，可对单文件或目录进行解析并输出 JSON
 - 提供 SQLite 索引构建能力
 - 提供 SQLite FTS + SQL fallback 的混合检索能力
+- 提供语义块 `chunk` 切分与 `chunks_fts` 检索能力
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
+- 提供一跳关系过程摘要扩展，使证据不只停留在命中过程本身
 - 提供本地 `answer-codebase` 回答入口
 - 提供本地 HTTP API，包括最终回答接口 `POST /answer`
 - 提供本地 stdio MCP server，包括 `db_summary / query_codebase / assemble_evidence / ask_codebase / answer_codebase`
@@ -66,10 +68,12 @@
 - `actions`: `26225`
 - `variable_refs`: `214948`
 - `edges`: `61249`
+- `chunks`: 由建库时按过程语义块自动生成
 - `procedures_fts`: `2564`
 - `statements_fts`: `159148`
 - `actions_fts`: `26225`
 - `edges_fts`: `61249`
+- `chunks_fts`: 与 `chunks` 一一对应
 
 摘要文件：
 
@@ -193,8 +197,10 @@ python3 -m uses_indexer assemble-evidence \
 这个命令会返回：
 
 - 重排后的证据块
+- 语义块命中及其摘要
 - 每个证据块对应的代码片段
 - 相关调用、来路调用、表访问
+- 一跳关联过程的摘要
 - 一段可直接交给 LLM 的 `llm_context`
 
 生成完整的问答包：

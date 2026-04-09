@@ -3,34 +3,85 @@
   "query": "证券代码获取的逻辑在哪里",
   "fts_query": "证券代码获取*",
   "retrieval_strategy": "fts + sql fallback + python rerank + evidence assembly",
-  "candidate_count": 120,
-  "evidence_count": 2,
+  "candidate_count": 192,
+  "evidence_count": 6,
   "evidence": [
     {
       "rank": 1,
-      "score": 155.296,
-      "hit_type": "action",
-      "retrieval_source": "fts_action",
-      "match_source": "action_fts",
-      "procedure_name": "AF_SECUPUB_WITHDRAW_CHECK",
-      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_WITHDRAW_CHECK.uftatomfunction",
-      "matched_text": "AF_系统参数公用_证券代码获取",
+      "score": 159.168,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK.uftfunction",
+      "matched_text": "LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @stock_code2, @usps_stkcode, @error_no",
       "reasons": [
         "fts_hit",
         "token_overlap=1/1"
       ],
-      "line_start": 142,
-      "line_end": 144,
-      "excerpt": "L142:       {\nL143:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL144:         hs_strcpy(@stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr);",
+      "chunk_type": "call_block",
+      "chunk_summary": "LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @stock_code2, @usps_stkcode, @error_no",
+      "line_start": 146,
+      "line_end": 147,
+      "excerpt": "L146:         <M>[AF_系统参数公用_证券代码获取][stock_code = @stock_code2][usps_stkcode = @usps_stkcode]\nL147:         @error_no = lpIUFTContext->nErrorNo;",
       "context_statements": [
         {
-          "statement_id": 13113,
-          "seq": 118,
-          "kind": "brace",
-          "line_start": 142,
-          "line_end": 142,
-          "raw": "      {"
+          "statement_id": 42013,
+          "seq": 107,
+          "kind": "call",
+          "line_start": 146,
+          "line_end": 146,
+          "raw": "        <M>[AF_系统参数公用_证券代码获取][stock_code = @stock_code2][usps_stkcode = @usps_stkcode]"
         },
+        {
+          "statement_id": 42014,
+          "seq": 108,
+          "kind": "assignment",
+          "line_start": 147,
+          "line_end": 147,
+          "raw": "        @error_no = lpIUFTContext->nErrorNo;"
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_交易公用_发行主体评级获取",
+          "AF_交易资金公用_资金表字段获取",
+          "AF_存管公用(证券)_客户一码通账户获取"
+        ],
+        "incoming_callers": [],
+        "related_tables": [
+          {
+            "name": "bond_risk_arg",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "SQL结果集解包开始",
+          "SQL结果集解包结束",
+          "业务报错返回"
+        ],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 2,
+      "score": 159.163,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SECUPUB_WITHDRAW_CHECK",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_WITHDRAW_CHECK.uftatomfunction",
+      "matched_text": "AF_SECUPUB_WITHDRAW_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1"
+      ],
+      "chunk_type": "call_block",
+      "chunk_summary": "AF_SECUPUB_WITHDRAW_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr",
+      "line_start": 143,
+      "line_end": 144,
+      "excerpt": "L143:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL144:         hs_strcpy(@stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr);",
+      "context_statements": [
         {
           "statement_id": 13114,
           "seq": 119,
@@ -51,62 +102,244 @@
       "related_context": {
         "outgoing_calls": [
           "AF_系统公用_ETF代码信息获取",
-          "AF_系统公用_费用详细属性获取"
+          "AF_系统公用_费用详细属性获取",
+          "AF_系统参数公用_PBU获取"
         ],
         "incoming_callers": [],
         "related_tables": [],
         "related_actions": [
           "业务报错返回",
           "继续执行"
-        ]
+        ],
+        "related_procedures": []
       }
     },
     {
-      "rank": 2,
-      "score": 155.296,
-      "hit_type": "action",
-      "retrieval_source": "fts_action",
-      "match_source": "action_fts",
-      "procedure_name": "AF_SESBIDPUB_OPTSTOCK_UPDATE",
-      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_OPTSTOCK_UPDATE.uftatomfunction",
-      "matched_text": "AF_系统参数公用_证券代码获取",
+      "rank": 3,
+      "score": 159.144,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESPUB_STDBOND_ENABLE_ADJUST",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_STDBOND_ENABLE_ADJUST.uftatomfunction",
+      "matched_text": "AF_SESPUB_STDBOND_ENABLE_ADJUST | call_flow | actions: AF_系统参数公用_证券代码获取, 处理失败, 继续执行 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @sub_stock_type_t",
       "reasons": [
         "fts_hit",
         "token_overlap=1/1"
       ],
-      "line_start": 10,
-      "line_end": 12,
-      "excerpt": "L10:   //20180927 yijie mod 增加输出stkcode_status 修改单：M201809201026\nL11:   [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL12:   [获取字段][usps_stkcode][stock_type = @stock_type, stock_real_back = @stock_real_back, stkcode_status = @stkcode_status]",
+      "chunk_type": "call_flow",
+      "chunk_summary": "AF_SESPUB_STDBOND_ENABLE_ADJUST | call_flow | actions: AF_系统参数公用_证券代码获取, 处理失败, 继续执行 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @sub_stock_type_t",
+      "line_start": 6,
+      "line_end": 10,
+      "excerpt": "L6:     <M>[AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL7:     [处理失败]\nL8:     {\nL9:       hs_strcpy(@sub_stock_type_t , \" \");\nL10:       [继续执行]",
       "context_statements": [
         {
-          "statement_id": 21297,
+          "statement_id": 31464,
+          "seq": 4,
+          "kind": "call",
+          "line_start": 6,
+          "line_end": 6,
+          "raw": "    <M>[AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]"
+        },
+        {
+          "statement_id": 31465,
+          "seq": 5,
+          "kind": "action",
+          "line_start": 7,
+          "line_end": 7,
+          "raw": "    [处理失败]"
+        },
+        {
+          "statement_id": 31466,
+          "seq": 6,
+          "kind": "brace",
+          "line_start": 8,
+          "line_end": 8,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 31467,
+          "seq": 7,
+          "kind": "assignment",
+          "line_start": 9,
+          "line_end": 9,
+          "raw": "      hs_strcpy(@sub_stock_type_t , \" \");"
+        },
+        {
+          "statement_id": 31468,
           "seq": 8,
-          "kind": "comment",
+          "kind": "action",
           "line_start": 10,
           "line_end": 10,
-          "raw": "  //20180927 yijie mod 增加输出stkcode_status 修改单：M201809201026"
-        },
-        {
-          "statement_id": 21298,
-          "seq": 9,
-          "kind": "call",
-          "line_start": 11,
-          "line_end": 11,
-          "raw": "  [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]"
-        },
-        {
-          "statement_id": 21299,
-          "seq": 10,
-          "kind": "action",
-          "line_start": 12,
-          "line_end": 12,
-          "raw": "  [获取字段][usps_stkcode][stock_type = @stock_type, stock_real_back = @stock_real_back, stkcode_status = @stkcode_status]"
+          "raw": "      [继续执行]"
         }
       ],
       "related_context": {
         "outgoing_calls": [
-          "AF_系统公用_证券交易参数获取",
-          "AF_系统参数公用_系统配置信息获取"
+          "AF_系统参数公用_证券代码获取",
+          "AF_证券公用_托管单元信息获取",
+          "AF_证券公用_证券可用余额更新"
+        ],
+        "incoming_callers": [],
+        "related_tables": [
+          {
+            "name": "uses_stock_real_jour",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "事务处理开始",
+          "事务处理结束"
+        ],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 4,
+      "score": 159.139,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+      "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1"
+      ],
+      "chunk_type": "call_block",
+      "chunk_summary": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type",
+      "line_start": 51,
+      "line_end": 53,
+      "excerpt": "L51:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL53:         hs_strcpy(@stock_type_t, @usps_stkcode.stock_type);",
+      "context_statements": [
+        {
+          "statement_id": 13877,
+          "seq": 40,
+          "kind": "call",
+          "line_start": 51,
+          "line_end": 51,
+          "raw": "        [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]"
+        },
+        {
+          "statement_id": 13878,
+          "seq": 41,
+          "kind": "assignment",
+          "line_start": 53,
+          "line_end": 53,
+          "raw": "        hs_strcpy(@stock_type_t, @usps_stkcode.stock_type);"
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_系统参数公用_投顾产品信息获取",
+          "AF_系统参数公用_投顾产品标的信息获取",
+          "AF_系统参数公用_投顾产品签约检查"
+        ],
+        "incoming_callers": [],
+        "related_tables": [],
+        "related_actions": [
+          "正常返回",
+          "遍历组件开始",
+          "遍历组件结束"
+        ],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 5,
+      "score": 159.139,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+      "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_real_back, @usps_stkcode.stock_real_back",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1"
+      ],
+      "chunk_type": "call_block",
+      "chunk_summary": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_real_back, @usps_stkcode.stock_real_back",
+      "line_start": 67,
+      "line_end": 68,
+      "excerpt": "L67:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL68:         @stock_real_back = @usps_stkcode.stock_real_back;",
+      "context_statements": [
+        {
+          "statement_id": 13890,
+          "seq": 53,
+          "kind": "call",
+          "line_start": 67,
+          "line_end": 67,
+          "raw": "        [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]"
+        },
+        {
+          "statement_id": 13891,
+          "seq": 54,
+          "kind": "assignment",
+          "line_start": 68,
+          "line_end": 68,
+          "raw": "        @stock_real_back = @usps_stkcode.stock_real_back;"
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_系统参数公用_投顾产品信息获取",
+          "AF_系统参数公用_投顾产品标的信息获取",
+          "AF_系统参数公用_投顾产品签约检查"
+        ],
+        "incoming_callers": [],
+        "related_tables": [],
+        "related_actions": [
+          "正常返回",
+          "遍历组件开始",
+          "遍历组件结束"
+        ],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 6,
+      "score": 159.115,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET.uftfunction",
+      "matched_text": "LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @exchange_type_bak, @frozen_code, @usps_stkcode, @error_no",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1"
+      ],
+      "chunk_type": "call_block",
+      "chunk_summary": "LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @exchange_type_bak, @frozen_code, @usps_stkcode, @error_no",
+      "line_start": 186,
+      "line_end": 187,
+      "excerpt": "L186:             <M>[AF_系统参数公用_证券代码获取][exchange_type = @exchange_type_bak, stock_code = @frozen_code][usps_stkcode = @usps_stkcode]\nL187:             @error_no = lpIUFTContext->nErrorNo;",
+      "context_statements": [
+        {
+          "statement_id": 41335,
+          "seq": 134,
+          "kind": "call",
+          "line_start": 186,
+          "line_end": 186,
+          "raw": "            <M>[AF_系统参数公用_证券代码获取][exchange_type = @exchange_type_bak, stock_code = @frozen_code][usps_stkcode = @usps_stkcode]"
+        },
+        {
+          "statement_id": 41336,
+          "seq": 135,
+          "kind": "assignment",
+          "line_start": 187,
+          "line_end": 187,
+          "raw": "            @error_no = lpIUFTContext->nErrorNo;"
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_系统参数公用_抵押比率信息获取",
+          "AF_系统参数公用_系统配置信息获取",
+          "AF_系统参数公用_证券代码获取"
         ],
         "incoming_callers": [],
         "related_tables": [
@@ -116,11 +349,13 @@
           }
         ],
         "related_actions": [
-          "业务报错返回",
-          "获取字段"
-        ]
+          "PRO*C语句块开始",
+          "SQL结果集解包开始",
+          "SQL结果集解包结束"
+        ],
+        "related_procedures": []
       }
     }
   ],
-  "llm_context": "Question: 证券代码获取的逻辑在哪里\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: AF_SECUPUB_WITHDRAW_CHECK\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_WITHDRAW_CHECK.uftatomfunction\nLines: 142-144\nMatched text: AF_系统参数公用_证券代码获取\nMatch source: action_fts\nRetrieval source: fts_action\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL142:       {\nL143:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL144:         hs_strcpy(@stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr);\nRelated calls: AF_系统公用_ETF代码信息获取, AF_系统公用_费用详细属性获取\nRelated actions: 业务报错返回, 继续执行\n\n[Evidence 2]\nProcedure: AF_SESBIDPUB_OPTSTOCK_UPDATE\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_OPTSTOCK_UPDATE.uftatomfunction\nLines: 10-12\nMatched text: AF_系统参数公用_证券代码获取\nMatch source: action_fts\nRetrieval source: fts_action\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL10:   //20180927 yijie mod 增加输出stkcode_status 修改单：M201809201026\nL11:   [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL12:   [获取字段][usps_stkcode][stock_type = @stock_type, stock_real_back = @stock_real_back, stkcode_status = @stkcode_status]\nRelated calls: AF_系统公用_证券交易参数获取, AF_系统参数公用_系统配置信息获取\nRelated tables: reads_table:usps_stkcode\nRelated actions: 业务报错返回, 获取字段"
+  "llm_context": "Question: 证券代码获取的逻辑在哪里\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK.uftfunction\nLines: 146-147\nMatched text: LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @stock_code2, @usps_stkcode, @error_no\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL146:         <M>[AF_系统参数公用_证券代码获取][stock_code = @stock_code2][usps_stkcode = @usps_stkcode]\nL147:         @error_no = lpIUFTContext->nErrorNo;\nChunk type: call_block\nChunk summary: LF_INNERSESOQUERY_QRYACCT_IMPAWNSTOCK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @stock_code2, @usps_stkcode, @error_no\nRelated calls: AF_交易公用_发行主体评级获取, AF_交易资金公用_资金表字段获取, AF_存管公用(证券)_客户一码通账户获取\nRelated tables: reads_table:bond_risk_arg\nRelated actions: SQL结果集解包开始, SQL结果集解包结束, 业务报错返回\n\n[Evidence 2]\nProcedure: AF_SECUPUB_WITHDRAW_CHECK\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_WITHDRAW_CHECK.uftatomfunction\nLines: 143-144\nMatched text: AF_SECUPUB_WITHDRAW_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL143:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL144:         hs_strcpy(@stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr);\nChunk type: call_block\nChunk summary: AF_SECUPUB_WITHDRAW_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stkcode_ctrlstr, @usps_stkcode.stkcode_ctrlstr\nRelated calls: AF_系统公用_ETF代码信息获取, AF_系统公用_费用详细属性获取, AF_系统参数公用_PBU获取\nRelated actions: 业务报错返回, 继续执行\n\n[Evidence 3]\nProcedure: AF_SESPUB_STDBOND_ENABLE_ADJUST\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_STDBOND_ENABLE_ADJUST.uftatomfunction\nLines: 6-10\nMatched text: AF_SESPUB_STDBOND_ENABLE_ADJUST | call_flow | actions: AF_系统参数公用_证券代码获取, 处理失败, 继续执行 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @sub_stock_type_t\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL6:     <M>[AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL7:     [处理失败]\nL8:     {\nL9:       hs_strcpy(@sub_stock_type_t , \" \");\nL10:       [继续执行]\nChunk type: call_flow\nChunk summary: AF_SESPUB_STDBOND_ENABLE_ADJUST | call_flow | actions: AF_系统参数公用_证券代码获取, 处理失败, 继续执行 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @sub_stock_type_t\nRelated calls: AF_系统参数公用_证券代码获取, AF_证券公用_托管单元信息获取, AF_证券公用_证券可用余额更新\nRelated tables: reads_table:uses_stock_real_jour\nRelated actions: 业务报错返回, 事务处理开始, 事务处理结束\n\n[Evidence 4]\nProcedure: AF_SESBIDPUB_ADV_TAKE_CHECK\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction\nLines: 51-53\nMatched text: AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL51:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL53:         hs_strcpy(@stock_type_t, @usps_stkcode.stock_type);\nChunk type: call_block\nChunk summary: AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type\nRelated calls: AF_系统参数公用_投顾产品信息获取, AF_系统参数公用_投顾产品标的信息获取, AF_系统参数公用_投顾产品签约检查\nRelated actions: 正常返回, 遍历组件开始, 遍历组件结束\n\n[Evidence 5]\nProcedure: AF_SESBIDPUB_ADV_TAKE_CHECK\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction\nLines: 67-68\nMatched text: AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_real_back, @usps_stkcode.stock_real_back\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL67:         [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]\nL68:         @stock_real_back = @usps_stkcode.stock_real_back;\nChunk type: call_block\nChunk summary: AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_real_back, @usps_stkcode.stock_real_back\nRelated calls: AF_系统参数公用_投顾产品信息获取, AF_系统参数公用_投顾产品标的信息获取, AF_系统参数公用_投顾产品签约检查\nRelated actions: 正常返回, 遍历组件开始, 遍历组件结束\n\n[Evidence 6]\nProcedure: LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET.uftfunction\nLines: 186-187\nMatched text: LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @exchange_type_bak, @frozen_code, @usps_stkcode, @error_no\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1\nSnippet:\nL186:             <M>[AF_系统参数公用_证券代码获取][exchange_type = @exchange_type_bak, stock_code = @frozen_code][usps_stkcode = @usps_stkcode]\nL187:             @error_no = lpIUFTContext->nErrorNo;\nChunk type: call_block\nChunk summary: LF_INNERSESOQUERY_QRYACCT_BONDCONCRATIO_GET | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @exchange_type_bak, @frozen_code, @usps_stkcode, @error_no\nRelated calls: AF_系统参数公用_抵押比率信息获取, AF_系统参数公用_系统配置信息获取, AF_系统参数公用_证券代码获取\nRelated tables: reads_table:usps_stkcode\nRelated actions: PRO*C语句块开始, SQL结果集解包开始, SQL结果集解包结束"
 }

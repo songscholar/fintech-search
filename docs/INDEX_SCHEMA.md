@@ -108,6 +108,26 @@
 - `target_kind`
 - `detail_json`
 
+### `chunks`
+
+按过程内语义块切出来的检索单元。
+
+主要字段：
+
+- `seq`
+- `chunk_type`
+- `line_start`
+- `line_end`
+- `statement_start_seq`
+- `statement_end_seq`
+- `statement_count`
+- `anchor_kinds_json`
+- `action_names_json`
+- `target_names_json`
+- `variable_names_json`
+- `content`
+- `summary_text`
+
 ### `procedures_fts`
 
 过程级全文索引，主要用于过程名、中文名、路径检索。
@@ -123,6 +143,10 @@
 ### `edges_fts`
 
 关系级全文索引，主要用于调用目标、表名、目标对象检索。
+
+### `chunks_fts`
+
+语义块级全文索引，主要用于比单条语句更稳定的上下文检索。
 
 ## 当前边类型
 
@@ -140,10 +164,12 @@
 - 还没有精确恢复 `if/while/transaction/exception` 的层级结构
 - `reads_table/writes_table` 目前基于动作名和目标形态做启发式推断
 - 检索目前采用：
+  - `chunks_fts` 块级召回
   - FTS5 召回
   - SQL `LIKE` fallback
   - Python 重排
   - 证据上下文组装
+- 证据组装会补一跳过程关系摘要
 - 还没有向量检索
 
 ## 后续扩展方向

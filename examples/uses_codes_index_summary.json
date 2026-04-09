@@ -37,10 +37,19 @@
     "read": 181264,
     "write": 33684
   },
+  "chunk_counts": {
+    "action_block": 4143,
+    "raw_block": 67,
+    "control_block": 19645,
+    "assignment_block": 701,
+    "call_flow": 2201,
+    "call_block": 1991
+  },
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 61249
+    "edges_fts": 61249,
+    "chunks_fts": 28748
   }
 }

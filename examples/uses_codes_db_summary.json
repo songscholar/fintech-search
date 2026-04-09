@@ -8,11 +8,13 @@
   "actions": 26225,
   "variable_refs": 214948,
   "edges": 61249,
+  "chunks": 28748,
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 61249
+    "edges_fts": 61249,
+    "chunks_fts": 28748
   },
   "file_prefix_counts": {
     "LF": 1466,
@@ -39,5 +41,13 @@
     "reads_table": 1704,
     "writes_table": 849,
     "uses_component": 287
+  },
+  "chunk_type_counts": {
+    "control_block": 19645,
+    "action_block": 4143,
+    "call_flow": 2201,
+    "call_block": 1991,
+    "assignment_block": 701,
+    "raw_block": 67
   }
 }
