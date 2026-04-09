@@ -246,6 +246,24 @@
 - HTTP 和 MCP 共用同一套业务逻辑
 - 后续要换成更完整的 SDK，也不会影响现有检索层和回答层
 
+## 本地安装层
+
+为了让 repo-local plugin 更容易真正接入 Codex，本项目还补了一个本地安装器：
+
+- `install-codex-integration`
+
+它负责三件事：
+
+1. 把 repo-local plugin 以符号链接方式挂到 `~/plugins/uses-codebase-plugin`
+2. 把仓库技能以符号链接方式挂到 `~/.codex/skills/uses-codebase-search`
+3. 在 `~/.agents/plugins/marketplace.json` 里补齐本地 marketplace 入口
+
+这里选择“符号链接”而不是“复制目录”，原因是：
+
+- 插件启动脚本需要保留 repo-local 相对路径关系
+- 后续仓库更新后，本地集成不需要再次复制整份文件
+- 更适合当前这个快速演进中的原型项目
+
 ## 下一阶段索引方向
 
 当当前索引层稳定后，下一阶段会继续增加：

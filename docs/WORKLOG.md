@@ -159,6 +159,20 @@
   - `tools/call`
   - stdio 输出格式
 
+### 阶段 12：本地安装器
+
+- 新增 `CodexIntegrationInstaller`
+- 新增 CLI：
+  - `install-codex-integration`
+- 当前安装器会以符号链接方式安装：
+  - `~/plugins/uses-codebase-plugin`
+  - `~/.codex/skills/uses-codebase-search`
+- 当前安装器还会维护：
+  - `~/.agents/plugins/marketplace.json`
+- 补充安装层测试，覆盖：
+  - 首次安装
+  - 重复安装幂等
+
 ### 后续计划
 
 - 增加块级结构恢复

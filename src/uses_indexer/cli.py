@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
+from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
 from .mcp_server import CodebaseMcpServer
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
@@ -74,11 +75,15 @@ def main() -> int:
     mcp_parser = subparsers.add_parser("serve-mcp", help="Run a local stdio MCP server around the index and QA package.")
     mcp_parser.add_argument("--db", help="Default SQLite database path. If omitted, the server will try examples/uses_codes_index.db.")
 
+    install_parser = subparsers.add_parser("install-codex-integration", help="Install repo-local plugin and skill into the local Codex home via symlinks.")
+    install_parser.add_argument("--force", action="store_true", help="Replace an existing local plugin or skill target if needed.")
+
     args = parser.parse_args()
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa)
+    installer = CodexIntegrationInstaller()
     api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=getattr(args, "db", None))
     default_mcp_db = getattr(args, "db", None) or _discover_default_db(Path.cwd())
     mcp_server = CodebaseMcpServer(indexer=indexer, qa=qa, answerer=answerer, default_db_path=default_mcp_db)
@@ -88,6 +93,11 @@ def main() -> int:
         return 0
     if args.command == "serve-mcp":
         mcp_server.serve()
+        return 0
+    if args.command == "install-codex-integration":
+        data = installer.install(force=args.force)
+        rendered = json.dumps(data, ensure_ascii=False, indent=2)
+        print(rendered)
         return 0
 
     if args.command == "parse-file":

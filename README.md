@@ -307,6 +307,24 @@ python3 ./scripts/run_mcp_server.py
 python3 ./scripts/run_mcp_server.py --db /absolute/path/to/your.db
 ```
 
+把 repo-local plugin 和技能安装到本机 Codex：
+
+```bash
+python3 -m uses_indexer install-codex-integration
+```
+
+这个命令会：
+
+- 在 `~/plugins/uses-codebase-plugin` 创建指向仓库插件目录的符号链接
+- 在 `~/.codex/skills/uses-codebase-search` 创建指向仓库技能目录的符号链接
+- 在 `~/.agents/plugins/marketplace.json` 写入本地插件入口
+
+如果本地已有同名目标，需要显式覆盖：
+
+```bash
+python3 -m uses_indexer install-codex-integration --force
+```
+
 ## 外部模型配置
 
 `answer-codebase` 和 `POST /answer` 支持一个 OpenAI-compatible 的聊天接口，使用这些环境变量：
