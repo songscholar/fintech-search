@@ -52,6 +52,9 @@ DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <code><![CDATA[
   [获取记录][uses_deep_table(idx_x)][fund_account = @fund_account]
   [通用SQL执行][update uses_deep_table set deep_flag = 1 where fund_account = @fund_account][]
+  @table_name = "uses_dynamic_table";
+  sprintf(@sql_str, "delete from %s where fund_account = %s", @table_name, @fund_account);
+  [通用SQL执行][@sql_str][]
   @deep_flag = 1;
   ]]></code>
 </business:Function>
@@ -99,7 +102,7 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     assert conn.execute("SELECT COUNT(*) FROM actions").fetchone()[0] >= 4
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'calls_procedure'").fetchone()[0] == 3
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'reads_table'").fetchone()[0] >= 3
-    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'writes_table'").fetchone()[0] >= 1
+    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'writes_table'").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0] >= 3
@@ -162,6 +165,15 @@ def test_query_index_extracts_sql_table_edges_and_multi_hop_bonus(tmp_path: Path
     assert result["hit_count"] >= 1
     assert any("call_chain_" in " ".join(hit["reasons"]) for hit in result["hits"])
     assert any("uses_deep_table" in str(hit["matched_text"]) or "uses_deep_table" in " ".join(hit["reasons"]) for hit in result["hits"])
+
+
+def test_query_index_recovers_dynamic_sql_tables(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_dynamic_table", limit=10)
+
+    assert result["hit_count"] >= 1
+    assert any("uses_dynamic_table" in str(hit["matched_text"]) or "uses_dynamic_table" in " ".join(hit["reasons"]) for hit in result["hits"])
 
 
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:

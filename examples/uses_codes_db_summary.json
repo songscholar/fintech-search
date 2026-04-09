@@ -7,16 +7,16 @@
   "statements": 159148,
   "actions": 26225,
   "variable_refs": 214948,
-  "edges": 62610,
+  "edges": 62645,
   "chunks": 28748,
   "chunk_vectors": 28748,
   "blocks": 4825,
-  "block_edges": 35877,
+  "block_edges": 35942,
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 62610,
+    "edges_fts": 62645,
     "chunks_fts": 28748,
     "blocks_fts": 4825
   },
@@ -24,6 +24,11 @@
     "provider": "local-hash",
     "model": "local-hash-256",
     "dimension": "256"
+  },
+  "unit_kind_counts": {
+    "Function": 1858,
+    "Service": 703,
+    "FactorService": 3
   },
   "file_prefix_counts": {
     "LF": 1466,
@@ -42,13 +47,17 @@
     "label": 39,
     "goto": 25
   },
+  "variable_ref_type_counts": {
+    "read": 181264,
+    "write": 33684
+  },
   "edge_type_counts": {
     "writes_variable": 23824,
     "uses_action": 18140,
     "uses_target": 8360,
     "calls_procedure": 8085,
-    "reads_table": 2632,
-    "writes_table": 1199,
+    "reads_table": 2652,
+    "writes_table": 1214,
     "uses_component": 287,
     "defines_label": 39,
     "jumps_to_label": 25,
@@ -61,6 +70,9 @@
     "call_block": 1991,
     "assignment_block": 701,
     "raw_block": 67
+  },
+  "vector_provider_counts": {
+    "local-hash": 28748
   },
   "block_type_counts": {
     "failure_handler": 1479,
@@ -80,9 +92,9 @@
     "uses_action": 16994,
     "writes_variable": 8333,
     "uses_target": 5523,
-    "reads_table": 2145,
+    "reads_table": 2180,
     "calls_procedure": 1381,
-    "writes_table": 1302,
+    "writes_table": 1332,
     "uses_component": 127,
     "jumps_to_label": 35,
     "jumps_to_exit": 29,

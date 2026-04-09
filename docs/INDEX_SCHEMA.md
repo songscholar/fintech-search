@@ -244,11 +244,21 @@
 - `delete from ...`
 - `merge into ...`
 
+并且当前还会先尝试恢复动态 SQL 文本，覆盖这些常见模式：
+
+- `@sql_str = "select ..."`
+- `hs_strcpy(@sql_str, "...")`
+- `sprintf(@sql_str, "select ... from %s", @table_name)`
+- `hs_snprintf(@sql_str_tmp, ..., "%s ...", @sql_str_tmp, "...")`
+
+如果能把动态 SQL 还原成具体文本，就继续抽取标准 `reads_table / writes_table`；如果只能恢复到变量级别，则保留原语句和变量关系，留给后续增强版处理。
+
 ## 当前检索方式
 
 - 还没有完整块级 AST
 - 还没有精确恢复 `if/while/transaction/exception` 的层级结构
 - `reads_table/writes_table` 目前基于动作名和目标形态做启发式推断
+- 动态 SQL 恢复当前是“最近一次字符串赋值 + 常见格式化函数”的轻量追踪，还不是完整数据流分析
 - 检索目前采用：
 - `chunks_fts` 块级召回
   - `chunk_vectors` 向量召回

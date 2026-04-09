@@ -1,0 +1,579 @@
+{
+  "db_path": "examples/uses_codes_index.db",
+  "query": "AF_DATASEINIT_SECONDLOADUSESTABLE 通过 table_name 动态拼接 SQL 时涉及哪些表",
+  "fts_query": "af_dataseinit_secondloadusestable* OR 通过* OR table_name* OR 动态拼接* OR sql* OR 时涉* OR 哪些表*",
+  "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank + evidence assembly",
+  "vector_status": {
+    "enabled": true,
+    "reason": "enabled",
+    "index_provider": "local-hash",
+    "index_model": "local-hash-256",
+    "index_dimension": 256,
+    "query_provider": "local-hash",
+    "query_model": "local-hash-256",
+    "query_dimension": 256
+  },
+  "candidate_count": 229,
+  "evidence_count": 4,
+  "evidence": [
+    {
+      "rank": 1,
+      "score": 166.714,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+      "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | conditions: hs_strcmp(@data_source,\"uargsvr\") == 0 | vars: @table_name, @sql_str, @load_mode, @packer_sms, @data_source",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=3/7",
+        "multi_source_match=2"
+      ],
+      "chunk_type": "control_block",
+      "chunk_summary": "AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | conditions: hs_strcmp(@data_source,\"uargsvr\") == 0 | vars: @table_name, @sql_str, @load_mode, @packer_sms, @data_source",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 47,
+      "line_end": 49,
+      "excerpt": "L47:             [手工打包体][@table_name, @sql_str, @load_mode][@packer_sms]\nL48:           }\nL49:           else if (hs_strcmp(@data_source,\"uargsvr\") == 0)",
+      "context_statements": [
+        {
+          "statement_id": 192,
+          "seq": 39,
+          "kind": "action",
+          "line_start": 47,
+          "line_end": 47,
+          "raw": "            [手工打包体][@table_name, @sql_str, @load_mode][@packer_sms]"
+        },
+        {
+          "statement_id": 193,
+          "seq": 40,
+          "kind": "brace",
+          "line_start": 48,
+          "line_end": 48,
+          "raw": "          }"
+        },
+        {
+          "statement_id": 194,
+          "seq": 41,
+          "kind": "control",
+          "line_start": 49,
+          "line_end": 49,
+          "raw": "          else if (hs_strcmp(@data_source,\"uargsvr\") == 0)"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "record_pool_loop",
+          "anchor_name": "遍历记录池开始",
+          "line_start": 19,
+          "line_end": 157,
+          "summary_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+          "relations": [
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "reads_table",
+              "target_name": "reload_fundacct",
+              "target_kind": "table"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_数据准备公用_SQL转换"
+        ],
+        "incoming_callers": [
+          "LF_DATASEINIT_SECONDLOADUSESTABLE"
+        ],
+        "related_tables": [
+          {
+            "name": "reload_fundacct",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "reload_fundacct",
+            "edge_type": "writes_table"
+          },
+          {
+            "name": "upbs_datasync",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "事务处理开始",
+          "事务处理结束"
+        ],
+        "control_flow": [
+          {
+            "edge_type": "defines_label",
+            "target_name": "svr_end"
+          }
+        ],
+        "two_hop_outgoing": [],
+        "two_hop_incoming": [
+          {
+            "procedure_name": "LS_DATASEINIT_SECONDLOADUSESTABLE",
+            "chinese_name": "LS_数据准备(证券)_二次加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LS_DATASEINIT_SECONDLOADUSESTABLE.uftservice",
+            "line_start": 2,
+            "line_end": 2,
+            "chunk_type": "call_block",
+            "summary_text": "LS_DATASEINIT_SECONDLOADUSESTABLE | call_block | actions: LF_数据准备(证券)_二次加载数据 | targets: LF_数据准备(证券)_二次加载数据 | vars: @remark",
+            "via_name": "LF_DATASEINIT_SECONDLOADUSESTABLE",
+            "direction": "incoming"
+          }
+        ],
+        "related_procedures": [
+          {
+            "relation_type": "called_by",
+            "procedure_name": "LF_DATASEINIT_SECONDLOADUSESTABLE",
+            "chinese_name": "LF_数据准备(证券)_二次加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LF_DATASEINIT_SECONDLOADUSESTABLE.uftfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "LF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: BIZSTATUSLOADED == @umt_node_status | vars: @umt_node_status, @remark"
+          }
+        ]
+      }
+    },
+    {
+      "rank": 2,
+      "score": 166.714,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+      "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | vars: @table_name, @sql_str, @load_mode, @packer_pbs",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=3/7",
+        "multi_source_match=2"
+      ],
+      "chunk_type": "control_block",
+      "chunk_summary": "AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | vars: @table_name, @sql_str, @load_mode, @packer_pbs",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 55,
+      "line_end": 57,
+      "excerpt": "L55:             [手工打包体][@table_name, @sql_str, @load_mode][@packer_pbs]\nL56:           }\nL57:           else",
+      "context_statements": [
+        {
+          "statement_id": 200,
+          "seq": 47,
+          "kind": "action",
+          "line_start": 55,
+          "line_end": 55,
+          "raw": "            [手工打包体][@table_name, @sql_str, @load_mode][@packer_pbs]"
+        },
+        {
+          "statement_id": 201,
+          "seq": 48,
+          "kind": "brace",
+          "line_start": 56,
+          "line_end": 56,
+          "raw": "          }"
+        },
+        {
+          "statement_id": 202,
+          "seq": 49,
+          "kind": "control",
+          "line_start": 57,
+          "line_end": 57,
+          "raw": "          else"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "record_pool_loop",
+          "anchor_name": "遍历记录池开始",
+          "line_start": 19,
+          "line_end": 157,
+          "summary_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+          "relations": [
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "reads_table",
+              "target_name": "reload_fundacct",
+              "target_kind": "table"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_数据准备公用_SQL转换"
+        ],
+        "incoming_callers": [
+          "LF_DATASEINIT_SECONDLOADUSESTABLE"
+        ],
+        "related_tables": [
+          {
+            "name": "reload_fundacct",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "reload_fundacct",
+            "edge_type": "writes_table"
+          },
+          {
+            "name": "upbs_datasync",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "事务处理开始",
+          "事务处理结束"
+        ],
+        "control_flow": [
+          {
+            "edge_type": "defines_label",
+            "target_name": "svr_end"
+          }
+        ],
+        "two_hop_outgoing": [],
+        "two_hop_incoming": [
+          {
+            "procedure_name": "LS_DATASEINIT_SECONDLOADUSESTABLE",
+            "chinese_name": "LS_数据准备(证券)_二次加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LS_DATASEINIT_SECONDLOADUSESTABLE.uftservice",
+            "line_start": 2,
+            "line_end": 2,
+            "chunk_type": "call_block",
+            "summary_text": "LS_DATASEINIT_SECONDLOADUSESTABLE | call_block | actions: LF_数据准备(证券)_二次加载数据 | targets: LF_数据准备(证券)_二次加载数据 | vars: @remark",
+            "via_name": "LF_DATASEINIT_SECONDLOADUSESTABLE",
+            "direction": "incoming"
+          }
+        ],
+        "related_procedures": [
+          {
+            "relation_type": "called_by",
+            "procedure_name": "LF_DATASEINIT_SECONDLOADUSESTABLE",
+            "chinese_name": "LF_数据准备(证券)_二次加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LF_DATASEINIT_SECONDLOADUSESTABLE.uftfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "LF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: BIZSTATUSLOADED == @umt_node_status | vars: @umt_node_status, @remark"
+          }
+        ]
+      }
+    },
+    {
+      "rank": 32,
+      "score": 159.643,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_DATASEINIT_LOADUSESTABLE",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_LOADUSESTABLE.uftatomfunction",
+      "matched_text": "AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: @dataload_type == '1', hs_strcmp(@table_name, \"uses_fund_account\") == 0 | vars: @dataload_type, @table_name, @sql_str, @partition_no",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/7",
+        "multi_source_match=2",
+        "call_chain_two_hop=AF_DATASEINIT_SECONDLOADUSESTABLE"
+      ],
+      "chunk_type": "control_block",
+      "chunk_summary": "AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: @dataload_type == '1', hs_strcmp(@table_name, \"uses_fund_account\") == 0 | vars: @dataload_type, @table_name, @sql_str, @partition_no",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 40,
+      "line_end": 44,
+      "excerpt": "L40:         if (@dataload_type == '1')\nL41:         {\nL42:           if (hs_strcmp(@table_name, \"uses_fund_account\") == 0)\nL43:           {\nL44:             sprintf(@sql_str, \"select a.* from uses_fund_account a where a.partition_no = %d\", @partition_no);",
+      "context_statements": [
+        {
+          "statement_id": 46,
+          "seq": 35,
+          "kind": "control",
+          "line_start": 40,
+          "line_end": 40,
+          "raw": "        if (@dataload_type == '1')"
+        },
+        {
+          "statement_id": 47,
+          "seq": 36,
+          "kind": "brace",
+          "line_start": 41,
+          "line_end": 41,
+          "raw": "        {"
+        },
+        {
+          "statement_id": 48,
+          "seq": 37,
+          "kind": "control",
+          "line_start": 42,
+          "line_end": 42,
+          "raw": "          if (hs_strcmp(@table_name, \"uses_fund_account\") == 0)"
+        },
+        {
+          "statement_id": 49,
+          "seq": 38,
+          "kind": "brace",
+          "line_start": 43,
+          "line_end": 43,
+          "raw": "          {"
+        },
+        {
+          "statement_id": 50,
+          "seq": 39,
+          "kind": "assignment",
+          "line_start": 44,
+          "line_end": 44,
+          "raw": "            sprintf(@sql_str, \"select a.* from uses_fund_account a where a.partition_no = %d\", @partition_no);"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "record_pool_loop",
+          "anchor_name": "遍历记录池开始",
+          "line_start": 26,
+          "line_end": 107,
+          "summary_text": "AF_DATASEINIT_LOADUSESTABLE 的 遍历记录池开始 代码块 | actions=AF_数据准备公用_SQL转换, else, else if, if | targets=@table_name,@data_source,@sql_str,960605,\"\",\"\", @table_name,@data_source,@sql_str,960605,\"fund_account\",\"资产账号\", AF_数据准备公用_SQL转换",
+          "relations": [
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "reads_table",
+              "target_name": "upbs_datasync",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@sql_str",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@sql_str",
+              "target_kind": "variable"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_数据准备公用_SQL转换",
+          "AF_系统参数公用_序列号信息更新",
+          "AF_系统参数公用_序列号恢复"
+        ],
+        "incoming_callers": [
+          "LF_DATASEINIT_LOADUSESTABLE"
+        ],
+        "related_tables": [
+          {
+            "name": "upbs_datasync",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "建立全量关联关系",
+          "开启因子处理"
+        ],
+        "control_flow": [
+          {
+            "edge_type": "defines_label",
+            "target_name": "svr_end"
+          }
+        ],
+        "two_hop_outgoing": [],
+        "two_hop_incoming": [
+          {
+            "procedure_name": "LS_DATASEINIT_LOADUSESTABLE",
+            "chinese_name": "LS_数据准备(证券)_加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LS_DATASEINIT_LOADUSESTABLE.uftservice",
+            "line_start": 1,
+            "line_end": 1,
+            "chunk_type": "call_block",
+            "summary_text": "LS_DATASEINIT_LOADUSESTABLE | call_block | actions: LF_数据准备(证券)_加载数据 | targets: LF_数据准备(证券)_加载数据 | vars: @remark",
+            "via_name": "LF_DATASEINIT_LOADUSESTABLE",
+            "direction": "incoming"
+          }
+        ],
+        "related_procedures": [
+          {
+            "relation_type": "called_by",
+            "procedure_name": "LF_DATASEINIT_LOADUSESTABLE",
+            "chinese_name": "LF_数据准备(证券)_加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LF_DATASEINIT_LOADUSESTABLE.uftfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "control_block",
+            "summary_text": "LF_DATASEINIT_LOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: (hs_isnull_c(@preload_flag) == 0) || @preload_flag == '0' | vars: @umt_node_status, @preload_flag | notes: 20250312 xiezy mod 新增二次上场标志preload_flag，新增数据一次上场功能分支 修改单：T202503063043; 20250812 zhaolz mod 状态设置放在逻辑里面 修改单号: T202508116368"
+          }
+        ]
+      }
+    },
+    {
+      "rank": 33,
+      "score": 159.643,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_DATASEINIT_LOADUSESTABLE",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_LOADUSESTABLE.uftatomfunction",
+      "matched_text": "AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: hs_strcmp(@table_name, \"client_prefer\") == 0 | vars: @table_name, @sql_str, @partition_no",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/7",
+        "multi_source_match=2",
+        "call_chain_two_hop=AF_DATASEINIT_SECONDLOADUSESTABLE"
+      ],
+      "chunk_type": "control_block",
+      "chunk_summary": "AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: hs_strcmp(@table_name, \"client_prefer\") == 0 | vars: @table_name, @sql_str, @partition_no",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 46,
+      "line_end": 48,
+      "excerpt": "L46:           else if (hs_strcmp(@table_name, \"client_prefer\") == 0)\nL47:           {\nL48:             sprintf(@sql_str, \"select a.* from %s a where exists(select 1 from uses_fund_account b where b.client_id = a.client_id and b.partition_no = %d)\", @table_name, @partition_no);",
+      "context_statements": [
+        {
+          "statement_id": 52,
+          "seq": 41,
+          "kind": "control",
+          "line_start": 46,
+          "line_end": 46,
+          "raw": "          else if (hs_strcmp(@table_name, \"client_prefer\") == 0)"
+        },
+        {
+          "statement_id": 53,
+          "seq": 42,
+          "kind": "brace",
+          "line_start": 47,
+          "line_end": 47,
+          "raw": "          {"
+        },
+        {
+          "statement_id": 54,
+          "seq": 43,
+          "kind": "assignment",
+          "line_start": 48,
+          "line_end": 48,
+          "raw": "            sprintf(@sql_str, \"select a.* from %s a where exists(select 1 from uses_fund_account b where b.client_id = a.client_id and b.partition_no = %d)\", @table_name, @partition_no);"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "record_pool_loop",
+          "anchor_name": "遍历记录池开始",
+          "line_start": 26,
+          "line_end": 107,
+          "summary_text": "AF_DATASEINIT_LOADUSESTABLE 的 遍历记录池开始 代码块 | actions=AF_数据准备公用_SQL转换, else, else if, if | targets=@table_name,@data_source,@sql_str,960605,\"\",\"\", @table_name,@data_source,@sql_str,960605,\"fund_account\",\"资产账号\", AF_数据准备公用_SQL转换",
+          "relations": [
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_数据准备公用_SQL转换",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "reads_table",
+              "target_name": "upbs_datasync",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@sql_str",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@sql_str",
+              "target_kind": "variable"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_数据准备公用_SQL转换",
+          "AF_系统参数公用_序列号信息更新",
+          "AF_系统参数公用_序列号恢复"
+        ],
+        "incoming_callers": [
+          "LF_DATASEINIT_LOADUSESTABLE"
+        ],
+        "related_tables": [
+          {
+            "name": "upbs_datasync",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "建立全量关联关系",
+          "开启因子处理"
+        ],
+        "control_flow": [
+          {
+            "edge_type": "defines_label",
+            "target_name": "svr_end"
+          }
+        ],
+        "two_hop_outgoing": [],
+        "two_hop_incoming": [
+          {
+            "procedure_name": "LS_DATASEINIT_LOADUSESTABLE",
+            "chinese_name": "LS_数据准备(证券)_加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LS_DATASEINIT_LOADUSESTABLE.uftservice",
+            "line_start": 1,
+            "line_end": 1,
+            "chunk_type": "call_block",
+            "summary_text": "LS_DATASEINIT_LOADUSESTABLE | call_block | actions: LF_数据准备(证券)_加载数据 | targets: LF_数据准备(证券)_加载数据 | vars: @remark",
+            "via_name": "LF_DATASEINIT_LOADUSESTABLE",
+            "direction": "incoming"
+          }
+        ],
+        "related_procedures": [
+          {
+            "relation_type": "called_by",
+            "procedure_name": "LF_DATASEINIT_LOADUSESTABLE",
+            "chinese_name": "LF_数据准备(证券)_加载数据",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/datainit/dataseinit/LF_DATASEINIT_LOADUSESTABLE.uftfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "control_block",
+            "summary_text": "LF_DATASEINIT_LOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: (hs_isnull_c(@preload_flag) == 0) || @preload_flag == '0' | vars: @umt_node_status, @preload_flag | notes: 20250312 xiezy mod 新增二次上场标志preload_flag，新增数据一次上场功能分支 修改单：T202503063043; 20250812 zhaolz mod 状态设置放在逻辑里面 修改单号: T202508116368"
+          }
+        ]
+      }
+    }
+  ],
+  "llm_context": "Question: AF_DATASEINIT_SECONDLOADUSESTABLE 通过 table_name 动态拼接 SQL 时涉及哪些表\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: AF_DATASEINIT_SECONDLOADUSESTABLE\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction\nLines: 47-49\nMatched text: AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | conditions: hs_strcmp(@data_source,\"uargsvr\") == 0 | vars: @table_name, @sql_str, @load_mode, @packer_sms, @data_source\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=3/7, multi_source_match=2\nSnippet:\nL47:             [手工打包体][@table_name, @sql_str, @load_mode][@packer_sms]\nL48:           }\nL49:           else if (hs_strcmp(@data_source,\"uargsvr\") == 0)\nChunk type: control_block\nChunk summary: AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | conditions: hs_strcmp(@data_source,\"uargsvr\") == 0 | vars: @table_name, @sql_str, @load_mode, @packer_sms, @data_source\nCovering block: record_pool_loop [19-157] AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode | calls_procedure:AF_数据准备公用_SQL转换, calls_procedure:AF_数据准备公用_SQL转换, calls_procedure:AF_数据准备公用_SQL转换, reads_table:reload_fundacct\nRelated calls: AF_数据准备公用_SQL转换\nIncoming callers: LF_DATASEINIT_SECONDLOADUSESTABLE\nRelated tables: reads_table:reload_fundacct, writes_table:reload_fundacct, reads_table:upbs_datasync\nRelated actions: 业务报错返回, 事务处理开始, 事务处理结束\nControl flow: defines_label:svr_end\nTwo-hop incoming chain: LS_DATASEINIT_SECONDLOADUSESTABLE -> LF_DATASEINIT_SECONDLOADUSESTABLE\nRelated procedure (called_by): LF_DATASEINIT_SECONDLOADUSESTABLE [2-5] LF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: BIZSTATUSLOADED == @umt_node_status | vars: @umt_node_status, @remark\n\n[Evidence 2]\nProcedure: AF_DATASEINIT_SECONDLOADUSESTABLE\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction\nLines: 55-57\nMatched text: AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | vars: @table_name, @sql_str, @load_mode, @packer_pbs\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=3/7, multi_source_match=2\nSnippet:\nL55:             [手工打包体][@table_name, @sql_str, @load_mode][@packer_pbs]\nL56:           }\nL57:           else\nChunk type: control_block\nChunk summary: AF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 手工打包体 | targets: @table_name, @sql_str, @load_mode | vars: @table_name, @sql_str, @load_mode, @packer_pbs\nCovering block: record_pool_loop [19-157] AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode | calls_procedure:AF_数据准备公用_SQL转换, calls_procedure:AF_数据准备公用_SQL转换, calls_procedure:AF_数据准备公用_SQL转换, reads_table:reload_fundacct\nRelated calls: AF_数据准备公用_SQL转换\nIncoming callers: LF_DATASEINIT_SECONDLOADUSESTABLE\nRelated tables: reads_table:reload_fundacct, writes_table:reload_fundacct, reads_table:upbs_datasync\nRelated actions: 业务报错返回, 事务处理开始, 事务处理结束\nControl flow: defines_label:svr_end\nTwo-hop incoming chain: LS_DATASEINIT_SECONDLOADUSESTABLE -> LF_DATASEINIT_SECONDLOADUSESTABLE\nRelated procedure (called_by): LF_DATASEINIT_SECONDLOADUSESTABLE [2-5] LF_DATASEINIT_SECONDLOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: BIZSTATUSLOADED == @umt_node_status | vars: @umt_node_status, @remark\n\n[Evidence 32]\nProcedure: AF_DATASEINIT_LOADUSESTABLE\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_LOADUSESTABLE.uftatomfunction\nLines: 40-44\nMatched text: AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: @dataload_type == '1', hs_strcmp(@table_name, \"uses_fund_account\") == 0 | vars: @dataload_type, @table_name, @sql_str, @partition_no\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=2/7, multi_source_match=2, call_chain_two_hop=AF_DATASEINIT_SECONDLOADUSESTABLE\nSnippet:\nL40:         if (@dataload_type == '1')\nL41:         {\nL42:           if (hs_strcmp(@table_name, \"uses_fund_account\") == 0)\nL43:           {\nL44:             sprintf(@sql_str, \"select a.* from uses_fund_account a where a.partition_no = %d\", @partition_no);\nChunk type: control_block\nChunk summary: AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: @dataload_type == '1', hs_strcmp(@table_name, \"uses_fund_account\") == 0 | vars: @dataload_type, @table_name, @sql_str, @partition_no\nCovering block: record_pool_loop [26-107] AF_DATASEINIT_LOADUSESTABLE 的 遍历记录池开始 代码块 | actions=AF_数据准备公用_SQL转换, else, else if, if | targets=@table_name,@data_source,@sql_str,960605,\"\",\"\", @table_name,@data_source,@sql_str,960605,\"fund_account\",\"资产账号\", AF_数据准备公用_SQL转换 | calls_procedure:AF_数据准备公用_SQL转换, reads_table:upbs_datasync, writes_variable:@sql_str, writes_variable:@sql_str\nRelated calls: AF_数据准备公用_SQL转换, AF_系统参数公用_序列号信息更新, AF_系统参数公用_序列号恢复\nIncoming callers: LF_DATASEINIT_LOADUSESTABLE\nRelated tables: reads_table:upbs_datasync\nRelated actions: 业务报错返回, 建立全量关联关系, 开启因子处理\nControl flow: defines_label:svr_end\nTwo-hop incoming chain: LS_DATASEINIT_LOADUSESTABLE -> LF_DATASEINIT_LOADUSESTABLE\nRelated procedure (called_by): LF_DATASEINIT_LOADUSESTABLE [2-7] LF_DATASEINIT_LOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: (hs_isnull_c(@preload_flag) == 0) || @preload_flag == '0' | vars: @umt_node_status, @preload_flag | notes: 20250312 xiezy mod 新增二次上场标志preload_flag，新增数据一次上场功能分支 修改单：T202503063043; 20250812 zhaolz mod 状态设置放在逻辑里面 修改单号: T202508116368\n\n[Evidence 33]\nProcedure: AF_DATASEINIT_LOADUSESTABLE\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_LOADUSESTABLE.uftatomfunction\nLines: 46-48\nMatched text: AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: hs_strcmp(@table_name, \"client_prefer\") == 0 | vars: @table_name, @sql_str, @partition_no\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=2/7, multi_source_match=2, call_chain_two_hop=AF_DATASEINIT_SECONDLOADUSESTABLE\nSnippet:\nL46:           else if (hs_strcmp(@table_name, \"client_prefer\") == 0)\nL47:           {\nL48:             sprintf(@sql_str, \"select a.* from %s a where exists(select 1 from uses_fund_account b where b.client_id = a.client_id and b.partition_no = %d)\", @table_name, @partition_no);\nChunk type: control_block\nChunk summary: AF_DATASEINIT_LOADUSESTABLE | control_block | conditions: hs_strcmp(@table_name, \"client_prefer\") == 0 | vars: @table_name, @sql_str, @partition_no\nCovering block: record_pool_loop [26-107] AF_DATASEINIT_LOADUSESTABLE 的 遍历记录池开始 代码块 | actions=AF_数据准备公用_SQL转换, else, else if, if | targets=@table_name,@data_source,@sql_str,960605,\"\",\"\", @table_name,@data_source,@sql_str,960605,\"fund_account\",\"资产账号\", AF_数据准备公用_SQL转换 | calls_procedure:AF_数据准备公用_SQL转换, reads_table:upbs_datasync, writes_variable:@sql_str, writes_variable:@sql_str\nRelated calls: AF_数据准备公用_SQL转换, AF_系统参数公用_序列号信息更新, AF_系统参数公用_序列号恢复\nIncoming callers: LF_DATASEINIT_LOADUSESTABLE\nRelated tables: reads_table:upbs_datasync\nRelated actions: 业务报错返回, 建立全量关联关系, 开启因子处理\nControl flow: defines_label:svr_end\nTwo-hop incoming chain: LS_DATASEINIT_LOADUSESTABLE -> LF_DATASEINIT_LOADUSESTABLE\nRelated procedure (called_by): LF_DATASEINIT_LOADUSESTABLE [2-7] LF_DATASEINIT_LOADUSESTABLE | control_block | actions: 获取业务状态 | targets: @umt_node_status | conditions: (hs_isnull_c(@preload_flag) == 0) || @preload_flag == '0' | vars: @umt_node_status, @preload_flag | notes: 20250312 xiezy mod 新增二次上场标志preload_flag，新增数据一次上场功能分支 修改单：T202503063043; 20250812 zhaolz mod 状态设置放在逻辑里面 修改单号: T202508116368"
+}

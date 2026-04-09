@@ -8,29 +8,29 @@
     "FactorService": 3
   },
   "prefix_counts": {
-    "AF": 391,
     "LF": 1466,
     "LS": 704,
+    "AF": 391,
     "RS": 3
   },
   "statement_counts": {
-    "action": 18140,
+    "brace": 50526,
     "comment": 33196,
     "assignment": 23673,
-    "raw": 3438,
     "control": 22026,
-    "brace": 50526,
+    "action": 18140,
     "call": 8085,
+    "raw": 3438,
     "label": 39,
     "goto": 25
   },
   "edge_counts": {
+    "writes_variable": 23824,
     "uses_action": 18140,
     "uses_target": 8360,
-    "writes_table": 1199,
-    "writes_variable": 23824,
-    "reads_table": 2632,
     "calls_procedure": 8085,
+    "reads_table": 2652,
+    "writes_table": 1214,
     "uses_component": 287,
     "defines_label": 39,
     "jumps_to_label": 25,
@@ -40,48 +40,52 @@
     "read": 181264,
     "write": 33684
   },
+  "action_counts": {
+    "action": 18140,
+    "call": 8085
+  },
   "chunk_counts": {
-    "action_block": 4143,
-    "raw_block": 67,
     "control_block": 19645,
-    "assignment_block": 701,
+    "action_block": 4143,
     "call_flow": 2201,
-    "call_block": 1991
+    "call_block": 1991,
+    "assignment_block": 701,
+    "raw_block": 67
   },
   "vector_counts": {
     "local-hash": 28748
   },
   "block_counts": {
-    "transaction": 494,
-    "record_pool_loop": 41,
-    "component_loop": 68,
-    "exit_label": 8,
-    "sql_execute": 1081,
     "failure_handler": 1479,
-    "record_loop": 348,
-    "sql_query": 173,
+    "sql_execute": 1081,
     "exception_handler": 560,
     "when_others_handler": 548,
+    "transaction": 494,
+    "record_loop": 348,
+    "sql_query": 173,
+    "component_loop": 68,
+    "record_pool_loop": 41,
     "goto_exit": 19,
+    "exit_label": 8,
     "goto_jump": 6
   },
   "block_edge_counts": {
     "uses_action": 16994,
-    "writes_table": 1302,
-    "calls_procedure": 1381,
-    "reads_table": 2145,
-    "uses_component": 127,
-    "uses_target": 5523,
     "writes_variable": 8333,
-    "defines_label": 8,
+    "uses_target": 5523,
+    "reads_table": 2180,
+    "calls_procedure": 1381,
+    "writes_table": 1332,
+    "uses_component": 127,
+    "jumps_to_label": 35,
     "jumps_to_exit": 29,
-    "jumps_to_label": 35
+    "defines_label": 8
   },
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 62610,
+    "edges_fts": 62645,
     "chunks_fts": 28748,
     "blocks_fts": 4825
   },

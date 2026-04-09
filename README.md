@@ -33,6 +33,7 @@
 - 提供结构块恢复：事务块、SQL 块、失败处理块、记录循环块
 - 提供异常与控制流恢复：`EXCEPTION`、`WHEN_OTHERS`、`goto svr_end`、退出标签
 - 提供 SQL 表访问抽取：从 `select/update/delete/insert/merge` 中恢复真实表名
+- 提供动态 SQL 恢复：支持从 `@sql_str = "..."`、`sprintf/hs_snprintf/hs_strcpy` 这类字符串构造中还原 SQL 文本
 - 提供两跳调用链扩展与重排
 - 提供块级关系摘要，使证据能带上“在哪个事务/SQL/失败路径里”
 - 提供 Python 层重排能力
@@ -75,7 +76,7 @@
 - `statements`: `159148`
 - `actions`: `26225`
 - `variable_refs`: `214948`
-- `edges`: `61249`
+- `edges`: `62645`
 - `chunks`: 由建库时按过程语义块自动生成
 - `chunk_vectors`: 与 `chunks` 一一对应
 - `blocks`: 由建库时按事务 / SQL / 失败处理 / 循环等稳定结构恢复生成
@@ -83,7 +84,7 @@
 - `procedures_fts`: `2564`
 - `statements_fts`: `159148`
 - `actions_fts`: `26225`
-- `edges_fts`: `61249`
+- `edges_fts`: `62645`
 - `chunks_fts`: 与 `chunks` 一一对应
 - `blocks_fts`: 与 `blocks` 一一对应
 
@@ -98,6 +99,7 @@
 - `examples/uses_codes_exit_flow_example.json`
 - `examples/uses_codes_sql_table_example.json`
 - `examples/uses_codes_call_chain_example.json`
+- `examples/uses_codes_dynamic_sql_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -140,6 +142,7 @@ examples/
   uses_codes_exit_flow_example.json
   uses_codes_sql_table_example.json
   uses_codes_call_chain_example.json
+  uses_codes_dynamic_sql_example.json
 plugins/
   uses-codebase-plugin/
     .codex-plugin/plugin.json

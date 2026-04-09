@@ -270,6 +270,23 @@
   - 两跳调用链证据
   - 两跳调用链重排
 
+### 阶段 19：动态 SQL 恢复
+
+- 建库阶段新增轻量字符串提示追踪
+- 当前支持从这些模式恢复 SQL 文本：
+  - `@sql_str = "..."`
+  - `hs_strcpy(@sql_str, "...")`
+  - `sprintf(@sql_str, "...%s...", @table_name)`
+  - `hs_snprintf(@sql_str_tmp, ..., "%s ...", @sql_str_tmp, "...")`
+- `通用SQL执行[@sql_str][]` 这类语句现在会优先尝试展开最近一次字符串构造结果
+- 如果展开成功，会继续按标准 SQL 规则抽取 `reads_table / writes_table`
+- 在真实仓库中已验证到 `AF_DATASEINIT_SECONDLOADUSESTABLE` 这类 `delete from %s` 模式能恢复出可用表访问证据
+- 新增样例：
+  - `examples/uses_codes_dynamic_sql_example.json`
+- 补充测试，覆盖：
+  - 动态 SQL 建库不回归
+  - 动态 SQL 表名检索
+
 ### 后续计划
 
 - 继续增强块级结构恢复

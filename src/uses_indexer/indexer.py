@@ -15,7 +15,7 @@ from .embeddings import (
     dot_similarity,
 )
 from .models import CodeStatement, ParsedUnit
-from .parser import SUPPORTED_SUFFIXES, UftDslParser
+from .parser import ASSIGN_RE, SUPPORTED_SUFFIXES, UftDslParser
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -325,6 +325,9 @@ SQL_DELETE_RE = re.compile(r"\bdelete\s+from\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.I
 SQL_MERGE_RE = re.compile(r"\bmerge\s+into\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
 SQL_STRING_RE = re.compile(r"'(?:''|[^'])*'")
 SQL_SKIP_TABLES = {"dual"}
+DOUBLE_QUOTED_STRING_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
+CALL_EXPR_RE = re.compile(r"(?P<func>hs_snprintf|snprintf|sprintf|hs_strcpy|strcpy)\s*\((?P<args>.*)\)\s*;?\s*$", re.DOTALL)
+TRACKED_STRING_VAR_TOKENS = ("sql", "table", "where", "column", "group", "order", "join")
 
 
 class SQLiteIndexer:
@@ -403,33 +406,27 @@ class SQLiteIndexer:
         conn.close()
         self._vector_cache.clear()
 
-        final_embedder_info = self.embedder.info
+        db_summary = self.summarize_db(db_file)
 
         return {
             "source_root": str(root),
             "db_path": str(db_file),
-            "file_count": len(files),
-            "unit_kind_counts": dict(unit_kind_counter),
-            "prefix_counts": dict(prefix_counter),
-            "statement_counts": dict(statement_counter),
-            "edge_counts": dict(edge_counter),
-            "variable_ref_counts": dict(variable_ref_counter),
-            "chunk_counts": dict(chunk_counter),
-            "vector_counts": dict(vector_counter),
-            "block_counts": dict(block_counter),
-            "block_edge_counts": dict(block_edge_counter),
-            "fts_counts": {
-                "procedures_fts": len(files),
-                "statements_fts": sum(statement_counter.values()),
-                "actions_fts": sum(action_counter.values()),
-                "edges_fts": sum(edge_counter.values()),
-                "chunks_fts": sum(chunk_counter.values()),
-                "blocks_fts": sum(block_counter.values()),
-            },
+            "file_count": int(db_summary["files"]),
+            "unit_kind_counts": db_summary["unit_kind_counts"],
+            "prefix_counts": db_summary["file_prefix_counts"],
+            "statement_counts": db_summary["statement_kind_counts"],
+            "edge_counts": db_summary["edge_type_counts"],
+            "variable_ref_counts": db_summary["variable_ref_type_counts"],
+            "action_counts": dict(action_counter),
+            "chunk_counts": db_summary["chunk_type_counts"],
+            "vector_counts": db_summary["vector_provider_counts"],
+            "block_counts": db_summary["block_type_counts"],
+            "block_edge_counts": db_summary["block_edge_type_counts"],
+            "fts_counts": db_summary["fts_counts"],
             "embedding": {
-                "provider": final_embedder_info.provider,
-                "model": final_embedder_info.model,
-                "dimension": final_embedder_info.dimension,
+                "provider": db_summary["embedding"]["provider"],
+                "model": db_summary["embedding"]["model"],
+                "dimension": int(db_summary["embedding"]["dimension"] or 0),
             },
         }
 
@@ -471,10 +468,13 @@ class SQLiteIndexer:
                 "model": self._metadata(conn, "embedding_model"),
                 "dimension": self._metadata(conn, "embedding_dimension"),
             },
+            "unit_kind_counts": grouped("SELECT unit_kind, COUNT(*) FROM files GROUP BY unit_kind ORDER BY COUNT(*) DESC"),
             "file_prefix_counts": grouped("SELECT prefix, COUNT(*) FROM files GROUP BY prefix ORDER BY COUNT(*) DESC"),
             "statement_kind_counts": grouped("SELECT kind, COUNT(*) FROM statements GROUP BY kind ORDER BY COUNT(*) DESC"),
+            "variable_ref_type_counts": grouped("SELECT access_type, COUNT(*) FROM variable_refs GROUP BY access_type ORDER BY COUNT(*) DESC"),
             "edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
             "chunk_type_counts": grouped("SELECT chunk_type, COUNT(*) FROM chunks GROUP BY chunk_type ORDER BY COUNT(*) DESC"),
+            "vector_provider_counts": grouped("SELECT provider, COUNT(*) FROM chunk_vectors GROUP BY provider ORDER BY COUNT(*) DESC"),
             "block_type_counts": grouped("SELECT block_type, COUNT(*) FROM blocks GROUP BY block_type ORDER BY COUNT(*) DESC"),
             "block_edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM block_edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
         }
@@ -710,6 +710,7 @@ class SQLiteIndexer:
         block_counter: Counter[str] = Counter()
         block_edge_counter: Counter[str] = Counter()
         statement_ids_by_seq: dict[int, int] = {}
+        string_hints: dict[str, str] = {}
 
         for seq, statement in enumerate(unit.statements, start=1):
             cursor = conn.execute(
@@ -764,8 +765,10 @@ class SQLiteIndexer:
                 statement=statement,
                 seq=seq,
                 edge_counter=edge_counter,
+                string_hints=string_hints,
             )
             action_counter.update(inserted_actions)
+            _update_string_hints(string_hints, statement)
 
         local_chunks, local_vectors = self._insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit)
         chunk_counter.update(local_chunks)
@@ -1015,7 +1018,7 @@ class SQLiteIndexer:
             JOIN statements s ON s.id = e.statement_id
             WHERE e.procedure_id = ?
               AND s.seq BETWEEN ? AND ?
-              AND e.edge_type IN ('reads_table', 'writes_table')
+              AND e.edge_type IN ('reads_table', 'writes_table', 'reads_dynamic_table', 'writes_dynamic_table')
             ORDER BY e.target_name
             """,
             (procedure_id, statement_start_seq, statement_end_seq),
@@ -1094,6 +1097,7 @@ class SQLiteIndexer:
         statement: CodeStatement,
         seq: int,
         edge_counter: Counter[str],
+        string_hints: dict[str, str],
     ) -> Counter[str]:
         action_counter: Counter[str] = Counter()
         action_name = statement.name if statement.kind in {"action", "call"} else None
@@ -1191,7 +1195,7 @@ class SQLiteIndexer:
                 )
                 edge_counter[edge_type] += 1
 
-            for sql_edge in _extract_sql_access_edges(statement):
+            for sql_edge in _extract_sql_access_edges(statement, string_hints):
                 self._insert_edge(
                     conn,
                     file_id=file_id,
@@ -2366,6 +2370,8 @@ class SQLiteIndexer:
                 WHEN 'calls_procedure' THEN 0
                 WHEN 'reads_table' THEN 1
                 WHEN 'writes_table' THEN 2
+                WHEN 'reads_dynamic_table' THEN 3
+                WHEN 'writes_dynamic_table' THEN 4
                 ELSE 3
               END,
               target_name
@@ -2429,7 +2435,7 @@ class SQLiteIndexer:
                 """
                 SELECT DISTINCT target_name, edge_type
                 FROM edges
-                WHERE procedure_id = ? AND edge_type IN ('reads_table', 'writes_table')
+                WHERE procedure_id = ? AND edge_type IN ('reads_table', 'writes_table', 'reads_dynamic_table', 'writes_dynamic_table')
                 ORDER BY target_name
                 LIMIT ?
                 """,
@@ -3007,14 +3013,17 @@ def _extract_sql_preview(statements: list[CodeStatement]) -> str | None:
     return None
 
 
-def _extract_sql_access_edges(statement: CodeStatement) -> list[dict[str, str]]:
+def _extract_sql_access_edges(
+    statement: CodeStatement,
+    string_hints: dict[str, str],
+) -> list[dict[str, str]]:
     if statement.kind != "action" or statement.name not in {"通用SQL执行", "查询SQL语句开始"}:
         return []
     if len(statement.groups) < 2:
         return []
 
-    sql_text = statement.groups[1].strip()
-    if not sql_text or sql_text.startswith("@"):
+    sql_text = _resolve_sql_text(statement.groups[1].strip(), string_hints)
+    if not sql_text:
         return []
 
     normalized = _normalize_sql(sql_text)
@@ -3025,16 +3034,16 @@ def _extract_sql_access_edges(statement: CodeStatement) -> list[dict[str, str]]:
     seen: set[tuple[str, str]] = set()
 
     def add(edge_type: str, table_name: str, operation: str) -> None:
-        normalized_table = _normalize_table_name(table_name)
-        if not normalized_table:
+        normalized_table, normalized_edge_type = _normalize_table_reference(table_name, edge_type)
+        if not normalized_table or not normalized_edge_type:
             return
-        key = (edge_type, normalized_table)
+        key = (normalized_edge_type, normalized_table)
         if key in seen:
             return
         seen.add(key)
         accesses.append(
             {
-                "edge_type": edge_type,
+                "edge_type": normalized_edge_type,
                 "target_name": normalized_table,
                 "operation": operation,
                 "sql_source": _truncate_text(normalized, 160),
@@ -3084,6 +3093,26 @@ def _normalize_sql(sql_text: str) -> str:
     return normalized
 
 
+def _resolve_sql_text(raw_group: str, string_hints: dict[str, str]) -> str | None:
+    candidate = raw_group.strip()
+    if not candidate:
+        return None
+    if candidate.startswith("@"):
+        return string_hints.get(candidate)
+    return candidate
+
+
+def _normalize_table_reference(name: str, edge_type: str) -> tuple[str | None, str | None]:
+    normalized_table = _normalize_table_name(name)
+    if normalized_table:
+        return normalized_table, edge_type
+    dynamic_table = _normalize_dynamic_table_name(name)
+    if dynamic_table:
+        dynamic_edge = "reads_dynamic_table" if edge_type == "reads_table" else "writes_dynamic_table"
+        return dynamic_table, dynamic_edge
+    return None, None
+
+
 def _normalize_table_name(name: str) -> str | None:
     candidate = name.strip().strip(",;")
     if not candidate:
@@ -3098,6 +3127,189 @@ def _normalize_table_name(name: str) -> str | None:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", candidate):
         return None
     return candidate
+
+
+def _normalize_dynamic_table_name(name: str) -> str | None:
+    candidate = name.strip().strip(",;")
+    if not candidate.startswith("@"):
+        return None
+    if not re.fullmatch(r"@[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?", candidate):
+        return None
+    return candidate
+
+
+def _update_string_hints(string_hints: dict[str, str], statement: CodeStatement) -> None:
+    updates = _extract_string_hint_updates(statement, string_hints)
+    for var_name, value in updates.items():
+        if value is None:
+            string_hints.pop(var_name, None)
+        else:
+            string_hints[var_name] = value
+
+
+def _extract_string_hint_updates(statement: CodeStatement, string_hints: dict[str, str]) -> dict[str, str | None]:
+    if not statement.writes:
+        return {}
+
+    tracked_writes = [var_name for var_name in statement.writes if _is_tracked_string_var(var_name)]
+    if not tracked_writes:
+        return {}
+
+    raw = statement.raw.strip()
+    updates: dict[str, str | None] = {}
+
+    assignment_match = ASSIGN_RE.match(raw)
+    if assignment_match:
+        lhs = assignment_match.group("lhs")
+        rhs = raw.split("=", 1)[1].rstrip(";").strip()
+        resolved = _resolve_string_expression(rhs, string_hints)
+        updates[lhs] = resolved
+        return updates
+
+    call_match = CALL_EXPR_RE.match(raw)
+    if call_match:
+        func = call_match.group("func")
+        args = _split_call_args(call_match.group("args"))
+        if func in {"hs_strcpy", "strcpy"} and len(args) >= 2:
+            dest = args[0].strip()
+            if _is_tracked_string_var(dest):
+                updates[dest] = _resolve_string_expression(args[1], string_hints)
+            return updates
+
+        if func in {"sprintf", "snprintf", "hs_snprintf"}:
+            dest_index = 0
+            format_index = 1 if func == "sprintf" else 2
+            if len(args) <= format_index:
+                return updates
+            dest = args[dest_index].strip()
+            if not _is_tracked_string_var(dest):
+                return updates
+            rendered = _render_format_call(
+                format_expr=args[format_index],
+                value_exprs=args[format_index + 1 :],
+                string_hints=string_hints,
+            )
+            updates[dest] = rendered
+            return updates
+
+    for var_name in tracked_writes:
+        updates[var_name] = None
+    return updates
+
+
+def _is_tracked_string_var(var_name: str) -> bool:
+    lowered = var_name.lower()
+    return any(token in lowered for token in TRACKED_STRING_VAR_TOKENS)
+
+
+def _resolve_string_expression(expr: str, string_hints: dict[str, str]) -> str | None:
+    candidate = expr.strip()
+    quoted = _parse_double_quoted_string(candidate)
+    if quoted is not None:
+        return quoted
+    if candidate.startswith("@"):
+        return string_hints.get(candidate, candidate if _is_tracked_string_var(candidate) else None)
+    return None
+
+
+def _render_format_call(
+    *,
+    format_expr: str,
+    value_exprs: list[str],
+    string_hints: dict[str, str],
+) -> str | None:
+    format_template = _resolve_string_expression(format_expr, string_hints)
+    if format_template is None:
+        return None
+
+    rendered_parts: list[str] = []
+    value_index = 0
+    index = 0
+    while index < len(format_template):
+        if format_template[index] != "%":
+            rendered_parts.append(format_template[index])
+            index += 1
+            continue
+
+        if index + 1 < len(format_template) and format_template[index + 1] == "%":
+            rendered_parts.append("%")
+            index += 2
+            continue
+
+        match = re.match(r"%[-+#0-9.]*[A-Za-z]", format_template[index:])
+        if not match:
+            rendered_parts.append(format_template[index])
+            index += 1
+            continue
+
+        placeholder = match.group(0)
+        if value_index >= len(value_exprs):
+            rendered_parts.append(placeholder)
+        else:
+            rendered_parts.append(_render_format_value(value_exprs[value_index], string_hints))
+            value_index += 1
+        index += len(placeholder)
+
+    return "".join(rendered_parts)
+
+
+def _render_format_value(expr: str, string_hints: dict[str, str]) -> str:
+    resolved = _resolve_string_expression(expr, string_hints)
+    if resolved is not None:
+        return resolved
+    candidate = expr.strip()
+    if candidate.startswith("@"):
+        return candidate
+    return candidate
+
+
+def _parse_double_quoted_string(expr: str) -> str | None:
+    match = DOUBLE_QUOTED_STRING_RE.fullmatch(expr.strip())
+    if match is None:
+        return None
+    return bytes(match.group(1), "utf-8").decode("unicode_escape")
+
+
+def _split_call_args(raw_args: str) -> list[str]:
+    args: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_string = False
+    escape = False
+
+    for char in raw_args:
+        if in_string:
+            current.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            current.append(char)
+            continue
+        if char == "(":
+            depth += 1
+            current.append(char)
+            continue
+        if char == ")":
+            depth = max(depth - 1, 0)
+            current.append(char)
+            continue
+        if char == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+
+    tail = "".join(current).strip()
+    if tail:
+        args.append(tail)
+    return args
 
 
 def _build_semantic_chunks(
