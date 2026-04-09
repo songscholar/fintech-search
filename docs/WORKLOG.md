@@ -77,9 +77,27 @@
 - 支持按过程名、中文名、动作名、动作目标、变量名、语句原文进行基础检索
 - 增加索引层测试并通过
 
+### 阶段 7：FTS 检索与证据组装
+
+- 在 SQLite 中增加：
+  - `procedures_fts`
+  - `statements_fts`
+  - `actions_fts`
+  - `edges_fts`
+- `query-index` 升级为：
+  - FTS 召回
+  - SQL fallback
+  - Python 重排
+- 新增 `assemble-evidence`
+- 增加 `llm_context` 组装能力，使检索结果可以直接喂给问答模型
+- 补充索引层测试，覆盖：
+  - FTS 建库
+  - 混合检索
+  - 证据上下文组装
+
 ### 后续计划
 
-- 增加 SQLite FTS
 - 增加块级结构恢复
+- 增加向量索引
 - 增加更精确的表访问与关系抽取
-- 增加问答层使用的证据组装
+- 增加真正的问答入口

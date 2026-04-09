@@ -8,6 +8,12 @@
   "actions": 26225,
   "variable_refs": 214948,
   "edges": 61249,
+  "fts_counts": {
+    "procedures_fts": 2564,
+    "statements_fts": 159148,
+    "actions_fts": 26225,
+    "edges_fts": 61249
+  },
   "file_prefix_counts": {
     "LF": 1466,
     "LS": 704,

@@ -36,5 +36,11 @@
   "variable_ref_counts": {
     "read": 181264,
     "write": 33684
+  },
+  "fts_counts": {
+    "procedures_fts": 2564,
+    "statements_fts": 159148,
+    "actions_fts": 26225,
+    "edges_fts": 61249
   }
 }

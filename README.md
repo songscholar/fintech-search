@@ -5,7 +5,7 @@
 当前已经完成两层基础能力：
 
 1. 解析 XML 外壳 + `CDATA` DSL 代码体。
-2. 把解析结果写入 SQLite，并提供基础查询能力。
+2. 把解析结果写入 SQLite，并提供混合检索与证据组装能力。
 
 这还不是最终版问答系统，但已经具备了“理解仓库结构并沉淀索引”的第一版基础设施。
 
@@ -25,7 +25,9 @@
 - 抽取语句中的变量引用与简单写入变量
 - 提供 CLI 入口，可对单文件或目录进行解析并输出 JSON
 - 提供 SQLite 索引构建能力
-- 提供数据库摘要与简单关键词查询能力
+- 提供 SQLite FTS + SQL fallback 的混合检索能力
+- 提供 Python 层重排能力
+- 提供面向问答的证据组装能力，可直接生成 `llm_context`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 上完成一次全量扫描和索引验证
 
 ## 当前验证结果
@@ -59,11 +61,16 @@
 - `actions`: `26225`
 - `variable_refs`: `214948`
 - `edges`: `61249`
+- `procedures_fts`: `2564`
+- `statements_fts`: `159148`
+- `actions_fts`: `26225`
+- `edges_fts`: `61249`
 
 摘要文件：
 
 - `examples/uses_codes_index_summary.json`
 - `examples/uses_codes_db_summary.json`
+- `examples/uses_codes_evidence_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -78,6 +85,7 @@ examples/
   uses_codes_summary.json
   uses_codes_index_summary.json
   uses_codes_db_summary.json
+  uses_codes_evidence_example.json
 src/uses_indexer/
   __init__.py
   __main__.py
@@ -141,10 +149,29 @@ python3 -m uses_indexer query-index \
   --limit 10
 ```
 
+组装可直接给大模型使用的证据上下文：
+
+```bash
+python3 -m uses_indexer assemble-evidence \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --query "证券代码获取的逻辑在哪里" \
+  --limit 6 \
+  --context-window 2 \
+  --related-limit 3 \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_evidence_example.json
+```
+
+这个命令会返回：
+
+- 重排后的证据块
+- 每个证据块对应的代码片段
+- 相关调用、来路调用、表访问
+- 一段可直接交给 LLM 的 `llm_context`
+
 ## 下一步
 
 - 增加更稳定的块级 AST
 - 补齐事务块、异常块、SQL 块的配对关系
-- 增加 SQLite FTS
+- 增加向量索引
 - 增加更精细的表访问与过程关系
-- 增加混合检索层和面向问答的证据组装
+- 增加真正的问答入口和 MCP/API 封装

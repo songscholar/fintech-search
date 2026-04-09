@@ -108,6 +108,22 @@
 - `target_kind`
 - `detail_json`
 
+### `procedures_fts`
+
+过程级全文索引，主要用于过程名、中文名、路径检索。
+
+### `statements_fts`
+
+语句级全文索引，主要用于动作原文、条件、目标对象、过程上下文检索。
+
+### `actions_fts`
+
+动作级全文索引，主要用于动作名和动作目标检索。
+
+### `edges_fts`
+
+关系级全文索引，主要用于调用目标、表名、目标对象检索。
+
 ## 当前边类型
 
 - `calls_procedure`
@@ -118,16 +134,21 @@
 - `writes_variable`
 - `uses_target`
 
-## 当前限制
+## 当前检索方式
 
 - 还没有完整块级 AST
 - 还没有精确恢复 `if/while/transaction/exception` 的层级结构
 - `reads_table/writes_table` 目前基于动作名和目标形态做启发式推断
-- 查询仍然是普通 SQL 匹配，不是 FTS
+- 检索目前采用：
+  - FTS5 召回
+  - SQL `LIKE` fallback
+  - Python 重排
+  - 证据上下文组装
+- 还没有向量检索
 
 ## 后续扩展方向
 
 - 增加 `blocks` 表，恢复事务块、异常块、循环块、分支块
 - 增加 `symbols` 或 `procedural_targets` 表
-- 增加 `fts_statements` 或 `fts_actions`
+- 增加向量索引表或外部向量库映射
 - 增加更精确的 `db_access` 表和 SQL 抽取结果

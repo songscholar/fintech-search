@@ -37,6 +37,14 @@ def main() -> int:
     query_index_parser.add_argument("--limit", type=int, default=20, help="Maximum number of hits.")
     query_index_parser.add_argument("--output", help="Optional JSON output path.")
 
+    evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
+    evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
+    evidence_parser.add_argument("--query", required=True, help="Question or keyword to search for.")
+    evidence_parser.add_argument("--limit", type=int, default=6, help="Maximum number of evidence blocks.")
+    evidence_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
+    evidence_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    evidence_parser.add_argument("--output", help="Optional JSON output path.")
+
     args = parser.parse_args()
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
@@ -49,6 +57,14 @@ def main() -> int:
         data = indexer.build_index(args.path, args.db)
     elif args.command == "query-index":
         data = indexer.query_index(args.db, args.query, limit=args.limit)
+    elif args.command == "assemble-evidence":
+        data = indexer.assemble_evidence(
+            args.db,
+            args.query,
+            limit=args.limit,
+            context_window=args.context_window,
+            related_limit=args.related_limit,
+        )
     else:
         data = indexer.summarize_db(args.db)
 
