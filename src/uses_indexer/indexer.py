@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from collections import Counter, defaultdict
+from heapq import nlargest
 from pathlib import Path
 
+from .embeddings import LocalHashedEmbedder, dot_similarity
 from .models import CodeStatement, ParsedUnit
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
 
@@ -157,6 +160,15 @@ CREATE TABLE IF NOT EXISTS chunks (
   FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chunk_vectors (
+  chunk_id INTEGER PRIMARY KEY,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dimension INTEGER NOT NULL,
+  vector_json TEXT NOT NULL,
+  FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS procedures_fts USING fts5(
   name,
   chinese_name,
@@ -213,6 +225,7 @@ CREATE INDEX IF NOT EXISTS idx_variable_refs_name ON variable_refs(var_name);
 CREATE INDEX IF NOT EXISTS idx_edges_target_name ON edges(target_name);
 CREATE INDEX IF NOT EXISTS idx_edges_edge_type ON edges(edge_type);
 CREATE INDEX IF NOT EXISTS idx_chunks_procedure_seq ON chunks(procedure_id, seq);
+CREATE INDEX IF NOT EXISTS idx_chunk_vectors_provider ON chunk_vectors(provider, model);
 """
 
 READ_ACTIONS = {"获取记录", "获取字段", "遍历记录开始", "遍历记录池开始", "记录为空", "记录不为空"}
@@ -221,6 +234,7 @@ COMPONENT_ACTIONS = {"获取组件", "插入组件", "尾部插入组件", "遍�
 TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
 QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 CHUNK_SIGNIFICANT_LIMIT = 6
+VECTOR_SIMILARITY_THRESHOLD = 0.05
 CHINESE_QUERY_SPLIT_RE = re.compile(r"(?:在哪里|在哪儿|哪里|什么|如何|怎么|是否|能否|可以|请问|一下|的|了|在|是|和|与|及|或|并|把|将|从|到|为|对|按|里)")
 GENERIC_QUERY_TERMS = {
     "逻辑",
@@ -238,8 +252,14 @@ GENERIC_QUERY_TERMS = {
 
 
 class SQLiteIndexer:
-    def __init__(self, parser: UftDslParser | None = None) -> None:
+    def __init__(
+        self,
+        parser: UftDslParser | None = None,
+        embedder: LocalHashedEmbedder | None = None,
+    ) -> None:
         self.parser = parser or UftDslParser()
+        self.embedder = embedder or LocalHashedEmbedder()
+        self._vector_cache: dict[tuple[str, int, int], list[dict[str, object]]] = {}
 
     def build_index(self, source_root: str | Path, db_path: str | Path) -> dict[str, object]:
         root = Path(source_root)
@@ -265,12 +285,18 @@ class SQLiteIndexer:
         variable_ref_counter: Counter[str] = Counter()
         action_counter: Counter[str] = Counter()
         chunk_counter: Counter[str] = Counter()
+        vector_counter: Counter[str] = Counter()
+        embedder_info = self.embedder.info
 
         with conn:
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(len(files))))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "4"))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "5"))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", embedder_info.provider))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", embedder_info.model))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(embedder_info.dimension)))
 
             for path in files:
                 unit = self.parser.parse_path(path)
@@ -282,13 +308,15 @@ class SQLiteIndexer:
                 for statement in unit.statements:
                     statement_counter[statement.kind] += 1
 
-                local_edges, local_var_refs, local_actions, local_chunks = self._insert_statements(conn, file_id, procedure_id, unit)
+                local_edges, local_var_refs, local_actions, local_chunks, local_vectors = self._insert_statements(conn, file_id, procedure_id, unit)
                 edge_counter.update(local_edges)
                 variable_ref_counter.update(local_var_refs)
                 action_counter.update(local_actions)
                 chunk_counter.update(local_chunks)
+                vector_counter.update(local_vectors)
 
         conn.close()
+        self._vector_cache.clear()
 
         return {
             "source_root": str(root),
@@ -300,12 +328,18 @@ class SQLiteIndexer:
             "edge_counts": dict(edge_counter),
             "variable_ref_counts": dict(variable_ref_counter),
             "chunk_counts": dict(chunk_counter),
+            "vector_counts": dict(vector_counter),
             "fts_counts": {
                 "procedures_fts": len(files),
                 "statements_fts": sum(statement_counter.values()),
                 "actions_fts": sum(action_counter.values()),
                 "edges_fts": sum(edge_counter.values()),
                 "chunks_fts": sum(chunk_counter.values()),
+            },
+            "embedding": {
+                "provider": embedder_info.provider,
+                "model": embedder_info.model,
+                "dimension": embedder_info.dimension,
             },
         }
 
@@ -331,12 +365,18 @@ class SQLiteIndexer:
             "variable_refs": scalar("SELECT COUNT(*) FROM variable_refs"),
             "edges": scalar("SELECT COUNT(*) FROM edges"),
             "chunks": scalar("SELECT COUNT(*) FROM chunks"),
+            "chunk_vectors": scalar("SELECT COUNT(*) FROM chunk_vectors"),
             "fts_counts": {
                 "procedures_fts": scalar("SELECT COUNT(*) FROM procedures_fts"),
                 "statements_fts": scalar("SELECT COUNT(*) FROM statements_fts"),
                 "actions_fts": scalar("SELECT COUNT(*) FROM actions_fts"),
                 "edges_fts": scalar("SELECT COUNT(*) FROM edges_fts"),
                 "chunks_fts": scalar("SELECT COUNT(*) FROM chunks_fts"),
+            },
+            "embedding": {
+                "provider": self._metadata(conn, "embedding_provider"),
+                "model": self._metadata(conn, "embedding_model"),
+                "dimension": self._metadata(conn, "embedding_dimension"),
             },
             "file_prefix_counts": grouped("SELECT prefix, COUNT(*) FROM files GROUP BY prefix ORDER BY COUNT(*) DESC"),
             "statement_kind_counts": grouped("SELECT kind, COUNT(*) FROM statements GROUP BY kind ORDER BY COUNT(*) DESC"),
@@ -346,10 +386,16 @@ class SQLiteIndexer:
         conn.close()
         return summary
 
+    def _metadata(self, conn: sqlite3.Connection, key: str) -> str | None:
+        row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
+        if row is None:
+            return None
+        return str(row[0])
+
     def query_index(self, db_path: str | Path, query: str, limit: int = 20) -> dict[str, object]:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        candidates, fts_query = self._retrieve_candidates(conn, query, candidate_limit=max(limit * 6, 30))
+        candidates, fts_query = self._retrieve_candidates(conn, db_path=db_path, query=query, candidate_limit=max(limit * 6, 30))
         conn.close()
 
         hits = [
@@ -361,7 +407,7 @@ class SQLiteIndexer:
             "db_path": str(db_path),
             "query": query,
             "fts_query": fts_query,
-            "retrieval_strategy": "fts + sql fallback + python rerank",
+            "retrieval_strategy": "fts + vector + sql fallback + python rerank",
             "candidate_count": len(candidates),
             "hit_count": len(hits),
             "hits": hits,
@@ -377,7 +423,7 @@ class SQLiteIndexer:
     ) -> dict[str, object]:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        candidates, fts_query = self._retrieve_candidates(conn, query, candidate_limit=max(limit * 8, 40))
+        candidates, fts_query = self._retrieve_candidates(conn, db_path=db_path, query=query, candidate_limit=max(limit * 8, 40))
 
         evidence_blocks: list[dict[str, object]] = []
         seen_contexts: set[tuple[int, int, int]] = set()
@@ -444,7 +490,7 @@ class SQLiteIndexer:
             "db_path": str(db_path),
             "query": query,
             "fts_query": fts_query,
-            "retrieval_strategy": "fts + sql fallback + python rerank + evidence assembly",
+            "retrieval_strategy": "fts + vector + sql fallback + python rerank + evidence assembly",
             "candidate_count": len(candidates),
             "evidence_count": len(evidence_blocks),
             "evidence": evidence_blocks,
@@ -537,11 +583,12 @@ class SQLiteIndexer:
         file_id: int,
         procedure_id: int,
         unit: ParsedUnit,
-    ) -> tuple[Counter[str], Counter[str], Counter[str], Counter[str]]:
+    ) -> tuple[Counter[str], Counter[str], Counter[str], Counter[str], Counter[str]]:
         edge_counter: Counter[str] = Counter()
         variable_ref_counter: Counter[str] = Counter()
         action_counter: Counter[str] = Counter()
         chunk_counter: Counter[str] = Counter()
+        vector_counter: Counter[str] = Counter()
 
         for seq, statement in enumerate(unit.statements, start=1):
             cursor = conn.execute(
@@ -598,9 +645,11 @@ class SQLiteIndexer:
             )
             action_counter.update(inserted_actions)
 
-        chunk_counter.update(self._insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit))
+        local_chunks, local_vectors = self._insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit)
+        chunk_counter.update(local_chunks)
+        vector_counter.update(local_vectors)
 
-        return edge_counter, variable_ref_counter, action_counter, chunk_counter
+        return edge_counter, variable_ref_counter, action_counter, chunk_counter, vector_counter
 
     def _insert_chunks(
         self,
@@ -609,8 +658,10 @@ class SQLiteIndexer:
         file_id: int,
         procedure_id: int,
         unit: ParsedUnit,
-    ) -> Counter[str]:
+    ) -> tuple[Counter[str], Counter[str]]:
         counter: Counter[str] = Counter()
+        vector_counter: Counter[str] = Counter()
+        embedder_info = self.embedder.info
         for seq, chunk in enumerate(_build_semantic_chunks(unit.name, unit.statements), start=1):
             cursor = conn.execute(
                 """
@@ -652,6 +703,7 @@ class SQLiteIndexer:
                 ),
             )
             chunk_id = int(cursor.lastrowid)
+            vector = self.embedder.embed_texts([f"{chunk['summary_text']}\n{chunk['content']}"])[0]
             conn.execute(
                 """
                 INSERT INTO chunks_fts(rowid, chunk_type, procedure_name, file_path, summary_text, content)
@@ -666,9 +718,23 @@ class SQLiteIndexer:
                     chunk["content"],
                 ),
             )
+            conn.execute(
+                """
+                INSERT INTO chunk_vectors(chunk_id, provider, model, dimension, vector_json)
+                VALUES(?, ?, ?, ?, ?)
+                """,
+                (
+                    chunk_id,
+                    embedder_info.provider,
+                    embedder_info.model,
+                    embedder_info.dimension,
+                    _json(vector),
+                ),
+            )
             counter[str(chunk["chunk_type"])] += 1
+            vector_counter[embedder_info.provider] += 1
 
-        return counter
+        return counter, vector_counter
 
     def _insert_variable_refs(
         self,
@@ -869,6 +935,8 @@ class SQLiteIndexer:
     def _retrieve_candidates(
         self,
         conn: sqlite3.Connection,
+        *,
+        db_path: str | Path,
         query: str,
         candidate_limit: int,
     ) -> tuple[list[dict[str, object]], str | None]:
@@ -878,6 +946,9 @@ class SQLiteIndexer:
         if fts_query:
             for candidate in self._run_fts_queries(conn, raw_query=query, fts_query=fts_query, limit=candidate_limit):
                 _merge_candidate(candidates, candidate)
+
+        for candidate in self._run_vector_queries(conn, db_path=db_path, query=query, limit=candidate_limit):
+            _merge_candidate(candidates, candidate)
 
         for candidate in self._run_like_queries(conn, query=query, limit=candidate_limit):
             _merge_candidate(candidates, candidate)
@@ -890,6 +961,110 @@ class SQLiteIndexer:
             key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"])),
         )
         return ranked, fts_query
+
+    def _run_vector_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        db_path: str | Path,
+        query: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        query_vector = self.embedder.embed_texts([query])[0]
+        if not any(query_vector):
+            return []
+        overlap_hints = _vector_hint_tokens(query)
+
+        candidates = []
+        try:
+            vector_rows = self._load_chunk_vector_cache(conn, db_path)
+        except sqlite3.OperationalError:
+            return []
+
+        for row in vector_rows:
+            similarity = dot_similarity(query_vector, row["vector"])
+            if similarity <= VECTOR_SIMILARITY_THRESHOLD:
+                continue
+            search_text = f"{row['summary_text']} {row['content']}".lower()
+            if overlap_hints and not any(hint in search_text for hint in overlap_hints):
+                continue
+            candidate = {
+                "hit_type": "chunk",
+                "entity_id": int(row["chunk_id"]),
+                "procedure_id": int(row["procedure_id"]),
+                "file_id": int(row["file_id"]),
+                "statement_id": None,
+                "file_path": str(row["file_path"]),
+                "procedure_name": str(row["procedure_name"]),
+                "line_start": int(row["line_start"]),
+                "line_end": int(row["line_end"]),
+                "matched_text": str(row["summary_text"]),
+                "match_source": "chunk_vector",
+                "retrieval_source": "vector_chunk",
+                "base_score": 84.0,
+                "source_rank": similarity * 18.0,
+                "search_text": search_text,
+                "reasons": [f"vector_similarity={similarity:.3f}"],
+            }
+            candidates.append(candidate)
+
+        return nlargest(limit, candidates, key=lambda item: float(item["source_rank"]))
+
+    def _load_chunk_vector_cache(
+        self,
+        conn: sqlite3.Connection,
+        db_path: str | Path,
+    ) -> list[dict[str, object]]:
+        db_file = Path(db_path)
+        stat = os.stat(db_file)
+        cache_key = (str(db_file.resolve()), stat.st_mtime_ns, stat.st_size)
+        cached = self._vector_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        self._vector_cache = {
+            key: value
+            for key, value in self._vector_cache.items()
+            if key == cache_key
+        }
+
+        rows = conn.execute(
+            """
+            SELECT
+              cv.chunk_id AS chunk_id,
+              c.procedure_id AS procedure_id,
+              c.file_id AS file_id,
+              f.path AS file_path,
+              p.name AS procedure_name,
+              c.line_start AS line_start,
+              c.line_end AS line_end,
+              c.summary_text AS summary_text,
+              c.content AS content,
+              cv.vector_json AS vector_json
+            FROM chunk_vectors cv
+            JOIN chunks c ON c.id = cv.chunk_id
+            JOIN procedures p ON p.id = c.procedure_id
+            JOIN files f ON f.id = c.file_id
+            """
+        ).fetchall()
+
+        cached_rows = [
+            {
+                "chunk_id": int(row["chunk_id"]),
+                "procedure_id": int(row["procedure_id"]),
+                "file_id": int(row["file_id"]),
+                "file_path": str(row["file_path"]),
+                "procedure_name": str(row["procedure_name"]),
+                "line_start": int(row["line_start"]),
+                "line_end": int(row["line_end"]),
+                "summary_text": str(row["summary_text"]),
+                "content": str(row["content"]),
+                "vector": [float(value) for value in json.loads(row["vector_json"])],
+            }
+            for row in rows
+        ]
+        self._vector_cache[cache_key] = cached_rows
+        return cached_rows
 
     def _run_fts_queries(
         self,
@@ -1925,6 +2100,42 @@ def _tokenize_query(query: str) -> list[str]:
             tokens.append(lowered)
 
     return tokens
+
+
+def _vector_hint_tokens(query: str) -> list[str]:
+    hints: list[str] = []
+    seen: set[str] = set()
+
+    for raw_token in QUERY_TOKEN_RE.findall(query):
+        lowered = raw_token.lower()
+        if re.fullmatch(r"[\u4e00-\u9fff]+", raw_token):
+            fragments = [
+                fragment.strip()
+                for fragment in CHINESE_QUERY_SPLIT_RE.split(raw_token)
+                if len(fragment.strip()) >= 2 and fragment.strip() not in GENERIC_QUERY_TERMS
+            ]
+            for fragment in fragments or [raw_token]:
+                if len(fragment) >= 2:
+                    for size in (2, 3):
+                        if len(fragment) < size:
+                            continue
+                        for index in range(0, len(fragment) - size + 1):
+                            token = fragment[index : index + size]
+                            if token not in seen:
+                                seen.add(token)
+                                hints.append(token)
+            continue
+
+        if lowered not in seen and len(lowered) >= 3:
+            seen.add(lowered)
+            hints.append(lowered)
+        if "_" in lowered:
+            for part in lowered.split("_"):
+                if len(part) >= 3 and part not in seen:
+                    seen.add(part)
+                    hints.append(part)
+
+    return hints
 
 
 def _format_excerpt(statements: list[dict[str, object]]) -> str:

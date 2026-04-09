@@ -2,6 +2,7 @@
 
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
+from .embeddings import EmbeddingInfo, LocalHashedEmbedder
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
 from .llm import OpenAICompatibleConfig, OpenAICompatibleLlm
@@ -15,6 +16,8 @@ __all__ = [
     "CodexIntegrationInstaller",
     "CodebaseMcpServer",
     "CodebaseQA",
+    "EmbeddingInfo",
+    "LocalHashedEmbedder",
     "OpenAICompatibleConfig",
     "OpenAICompatibleLlm",
     "SQLiteIndexer",

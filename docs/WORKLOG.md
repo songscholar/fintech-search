@@ -184,6 +184,14 @@
   - `chunk` 命中加权
   - 多来源命中加权
 
+### 阶段 14：本地向量召回
+
+- 新增 `LocalHashedEmbedder`
+- 新增 `chunk_vectors`
+- 建库时会为每个 `chunk` 生成本地哈希向量
+- `query-index` 当前会把 `vector_chunk` 结果与 `FTS`、`LIKE` 一起混合重排
+- 当前目标是补足“不完全同词但语义接近”的召回
+
 ### 后续计划
 
 - 增加块级结构恢复

@@ -9,12 +9,18 @@
   "variable_refs": 214948,
   "edges": 61249,
   "chunks": 28748,
+  "chunk_vectors": 28748,
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
     "edges_fts": 61249,
     "chunks_fts": 28748
+  },
+  "embedding": {
+    "provider": "local-hash",
+    "model": "local-hash-256",
+    "dimension": "256"
   },
   "file_prefix_counts": {
     "LF": 1466,

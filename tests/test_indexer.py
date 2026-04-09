@@ -54,6 +54,7 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'calls_procedure'").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'reads_table'").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] >= 2
+    assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM procedures_fts").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM statements_fts").fetchone()[0] >= 5
     assert conn.execute("SELECT COUNT(*) FROM actions_fts").fetchone()[0] == 4
@@ -72,6 +73,15 @@ def test_query_index_uses_fts_and_rerank(tmp_path: Path) -> None:
     assert any(hit["hit_type"] == "chunk" for hit in result["hits"])
     assert any("token_overlap" in " ".join(hit["reasons"]) for hit in result["hits"])
     assert any("证券代码获取" in str(hit["matched_text"]) for hit in result["hits"])
+
+
+def test_query_index_includes_vector_retrieval_for_related_query(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "证券信息获取", limit=10)
+
+    assert result["hit_count"] >= 1
+    assert any(hit["retrieval_source"] == "vector_chunk" for hit in result["hits"])
 
 
 def test_assemble_evidence_returns_llm_ready_context(tmp_path: Path) -> None:

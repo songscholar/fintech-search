@@ -27,6 +27,7 @@
 - 提供 SQLite 索引构建能力
 - 提供 SQLite FTS + SQL fallback 的混合检索能力
 - 提供语义块 `chunk` 切分与 `chunks_fts` 检索能力
+- 提供本地哈希向量 `chunk_vectors` 与向量式召回能力
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
 - 提供一跳关系过程摘要扩展，使证据不只停留在命中过程本身
@@ -69,6 +70,7 @@
 - `variable_refs`: `214948`
 - `edges`: `61249`
 - `chunks`: 由建库时按过程语义块自动生成
+- `chunk_vectors`: 与 `chunks` 一一对应
 - `procedures_fts`: `2564`
 - `statements_fts`: `159148`
 - `actions_fts`: `26225`
@@ -113,6 +115,7 @@ skills/
 src/uses_indexer/
   api.py
   answering.py
+  embeddings.py
   __init__.py
   __main__.py
   cli.py
@@ -198,6 +201,7 @@ python3 -m uses_indexer assemble-evidence \
 
 - 重排后的证据块
 - 语义块命中及其摘要
+- 向量式召回命中
 - 每个证据块对应的代码片段
 - 相关调用、来路调用、表访问
 - 一跳关联过程的摘要
@@ -313,6 +317,14 @@ python3 ./scripts/run_mcp_server.py
 python3 ./scripts/run_mcp_server.py --db /absolute/path/to/your.db
 ```
 
+当前检索默认是混合式的：
+
+- `FTS`
+- `chunk` 块级召回
+- `vector_chunk` 本地哈希向量召回
+- SQL fallback
+- Python 重排
+
 把 repo-local plugin 和技能安装到本机 Codex：
 
 ```bash
@@ -359,7 +371,7 @@ python3 -m uses_indexer install-codex-integration --force
 
 - 增加更稳定的块级 AST
 - 补齐事务块、异常块、SQL 块的配对关系
-- 增加向量索引
+- 增加更强语义的 embedding / 向量索引
 - 增加更精细的表访问与过程关系
 - 增加更丰富的模型适配器
 - 增加更强的 MCP 能力和更细粒度的工具

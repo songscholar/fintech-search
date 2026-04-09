@@ -128,6 +128,18 @@
 - `content`
 - `summary_text`
 
+### `chunk_vectors`
+
+为每个语义块保存一份向量，用于本地向量式召回。
+
+主要字段：
+
+- `chunk_id`
+- `provider`
+- `model`
+- `dimension`
+- `vector_json`
+
 ### `procedures_fts`
 
 过程级全文索引，主要用于过程名、中文名、路径检索。
@@ -165,12 +177,13 @@
 - `reads_table/writes_table` 目前基于动作名和目标形态做启发式推断
 - 检索目前采用：
   - `chunks_fts` 块级召回
+  - `chunk_vectors` 向量召回
   - FTS5 召回
   - SQL `LIKE` fallback
   - Python 重排
   - 证据上下文组装
 - 证据组装会补一跳过程关系摘要
-- 还没有向量检索
+- 当前已有零依赖的本地向量检索
 
 ## 后续扩展方向
 
