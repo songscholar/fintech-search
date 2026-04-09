@@ -152,6 +152,43 @@
 - `dimension`
 - `vector_json`
 
+### `blocks`
+
+恢复出的稳定结构块，当前重点覆盖：
+
+- 事务块
+- SQL 查询块
+- SQL 执行语句
+- 失败处理块
+- 记录 / 记录池 / 组件循环块
+
+主要字段：
+
+- `block_type`
+- `anchor_name`
+- `line_start`
+- `line_end`
+- `statement_start_seq`
+- `statement_end_seq`
+- `summary_text`
+- `excerpt`
+- `action_names_json`
+- `target_names_json`
+- `table_names_json`
+- `variable_names_json`
+
+### `block_edges`
+
+块级关系摘要表，用于快速回答“这个事务块里改了哪些表、调了哪些过程”。
+
+主要字段：
+
+- `block_id`
+- `edge_type`
+- `target_name`
+- `target_kind`
+- `detail_json`
+
 ### `procedures_fts`
 
 过程级全文索引，主要用于过程名、中文名、路径检索。
@@ -172,6 +209,10 @@
 
 语义块级全文索引，主要用于比单条语句更稳定的上下文检索。
 
+### `blocks_fts`
+
+结构块级全文索引，主要用于事务、SQL、失败处理、循环这类结构问题检索。
+
 ## 当前边类型
 
 - `calls_procedure`
@@ -188,13 +229,15 @@
 - 还没有精确恢复 `if/while/transaction/exception` 的层级结构
 - `reads_table/writes_table` 目前基于动作名和目标形态做启发式推断
 - 检索目前采用：
-  - `chunks_fts` 块级召回
+- `chunks_fts` 块级召回
   - `chunk_vectors` 向量召回
   - 查询前会先做 embedding 空间兼容校验
+  - `blocks_fts` 结构块召回
   - FTS5 召回
   - SQL `LIKE` fallback
   - Python 重排
   - 证据上下文组装
+  - 覆盖当前证据的结构块补充
 - 证据组装会补一跳过程关系摘要
 - 当前已有零依赖的本地向量检索
 

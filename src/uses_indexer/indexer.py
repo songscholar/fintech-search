@@ -174,6 +174,40 @@ CREATE TABLE IF NOT EXISTS chunk_vectors (
   FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS blocks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_id INTEGER NOT NULL,
+  procedure_id INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  block_type TEXT NOT NULL,
+  anchor_name TEXT NOT NULL,
+  line_start INTEGER NOT NULL,
+  line_end INTEGER NOT NULL,
+  statement_start_seq INTEGER NOT NULL,
+  statement_end_seq INTEGER NOT NULL,
+  statement_count INTEGER NOT NULL,
+  anchor_statement_id INTEGER,
+  summary_text TEXT NOT NULL,
+  excerpt TEXT NOT NULL,
+  action_names_json TEXT NOT NULL DEFAULT '[]',
+  target_names_json TEXT NOT NULL DEFAULT '[]',
+  table_names_json TEXT NOT NULL DEFAULT '[]',
+  variable_names_json TEXT NOT NULL DEFAULT '[]',
+  FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE,
+  FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE,
+  FOREIGN KEY(anchor_statement_id) REFERENCES statements(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS block_edges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  block_id INTEGER NOT NULL,
+  edge_type TEXT NOT NULL,
+  target_name TEXT NOT NULL,
+  target_kind TEXT NOT NULL,
+  detail_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY(block_id) REFERENCES blocks(id) ON DELETE CASCADE
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS procedures_fts USING fts5(
   name,
   chinese_name,
@@ -219,6 +253,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
   tokenize='unicode61 remove_diacritics 0'
 );
 
+CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(
+  block_type,
+  anchor_name,
+  procedure_name,
+  file_path,
+  summary_text,
+  excerpt,
+  tokenize='unicode61 remove_diacritics 0'
+);
+
 CREATE INDEX IF NOT EXISTS idx_files_prefix ON files(prefix);
 CREATE INDEX IF NOT EXISTS idx_files_unit_kind ON files(unit_kind);
 CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);
@@ -231,6 +275,10 @@ CREATE INDEX IF NOT EXISTS idx_edges_target_name ON edges(target_name);
 CREATE INDEX IF NOT EXISTS idx_edges_edge_type ON edges(edge_type);
 CREATE INDEX IF NOT EXISTS idx_chunks_procedure_seq ON chunks(procedure_id, seq);
 CREATE INDEX IF NOT EXISTS idx_chunk_vectors_provider ON chunk_vectors(provider, model);
+CREATE INDEX IF NOT EXISTS idx_blocks_procedure_seq ON blocks(procedure_id, seq);
+CREATE INDEX IF NOT EXISTS idx_blocks_type ON blocks(block_type);
+CREATE INDEX IF NOT EXISTS idx_block_edges_block ON block_edges(block_id);
+CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 """
 
 READ_ACTIONS = {"获取记录", "获取字段", "遍历记录开始", "遍历记录池开始", "记录为空", "记录不为空"}
@@ -253,6 +301,19 @@ GENERIC_QUERY_TERMS = {
     "功能",
     "模块",
     "方法",
+}
+PAIRED_BLOCK_ACTIONS = {
+    "transaction": ("事务处理开始", "事务处理结束"),
+    "sql_query": ("查询SQL语句开始", "查询SQL语句结束"),
+    "record_loop": ("遍历记录开始", "遍历记录结束"),
+    "record_pool_loop": ("遍历记录池开始", "遍历记录池结束"),
+    "component_loop": ("遍历组件开始", "遍历组件结束"),
+}
+SINGLE_BLOCK_ACTIONS = {
+    "通用SQL执行": "sql_execute",
+}
+BRACE_ATTACHED_BLOCK_ACTIONS = {
+    "处理失败": "failure_handler",
 }
 
 
@@ -291,6 +352,8 @@ class SQLiteIndexer:
         action_counter: Counter[str] = Counter()
         chunk_counter: Counter[str] = Counter()
         vector_counter: Counter[str] = Counter()
+        block_counter: Counter[str] = Counter()
+        block_edge_counter: Counter[str] = Counter()
         initial_embedder_info = self.embedder.info
 
         with conn:
@@ -313,12 +376,14 @@ class SQLiteIndexer:
                 for statement in unit.statements:
                     statement_counter[statement.kind] += 1
 
-                local_edges, local_var_refs, local_actions, local_chunks, local_vectors = self._insert_statements(conn, file_id, procedure_id, unit)
+                local_edges, local_var_refs, local_actions, local_chunks, local_vectors, local_blocks, local_block_edges = self._insert_statements(conn, file_id, procedure_id, unit)
                 edge_counter.update(local_edges)
                 variable_ref_counter.update(local_var_refs)
                 action_counter.update(local_actions)
                 chunk_counter.update(local_chunks)
                 vector_counter.update(local_vectors)
+                block_counter.update(local_blocks)
+                block_edge_counter.update(local_block_edges)
 
             final_embedder_info = self.embedder.info
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", final_embedder_info.provider))
@@ -341,12 +406,15 @@ class SQLiteIndexer:
             "variable_ref_counts": dict(variable_ref_counter),
             "chunk_counts": dict(chunk_counter),
             "vector_counts": dict(vector_counter),
+            "block_counts": dict(block_counter),
+            "block_edge_counts": dict(block_edge_counter),
             "fts_counts": {
                 "procedures_fts": len(files),
                 "statements_fts": sum(statement_counter.values()),
                 "actions_fts": sum(action_counter.values()),
                 "edges_fts": sum(edge_counter.values()),
                 "chunks_fts": sum(chunk_counter.values()),
+                "blocks_fts": sum(block_counter.values()),
             },
             "embedding": {
                 "provider": final_embedder_info.provider,
@@ -378,12 +446,15 @@ class SQLiteIndexer:
             "edges": scalar("SELECT COUNT(*) FROM edges"),
             "chunks": scalar("SELECT COUNT(*) FROM chunks"),
             "chunk_vectors": scalar("SELECT COUNT(*) FROM chunk_vectors"),
+            "blocks": scalar("SELECT COUNT(*) FROM blocks"),
+            "block_edges": scalar("SELECT COUNT(*) FROM block_edges"),
             "fts_counts": {
                 "procedures_fts": scalar("SELECT COUNT(*) FROM procedures_fts"),
                 "statements_fts": scalar("SELECT COUNT(*) FROM statements_fts"),
                 "actions_fts": scalar("SELECT COUNT(*) FROM actions_fts"),
                 "edges_fts": scalar("SELECT COUNT(*) FROM edges_fts"),
                 "chunks_fts": scalar("SELECT COUNT(*) FROM chunks_fts"),
+                "blocks_fts": scalar("SELECT COUNT(*) FROM blocks_fts"),
             },
             "embedding": {
                 "provider": self._metadata(conn, "embedding_provider"),
@@ -394,6 +465,8 @@ class SQLiteIndexer:
             "statement_kind_counts": grouped("SELECT kind, COUNT(*) FROM statements GROUP BY kind ORDER BY COUNT(*) DESC"),
             "edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
             "chunk_type_counts": grouped("SELECT chunk_type, COUNT(*) FROM chunks GROUP BY chunk_type ORDER BY COUNT(*) DESC"),
+            "block_type_counts": grouped("SELECT block_type, COUNT(*) FROM blocks GROUP BY block_type ORDER BY COUNT(*) DESC"),
+            "block_edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM block_edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
         }
         conn.close()
         return summary
@@ -424,7 +497,7 @@ class SQLiteIndexer:
             "db_path": str(db_path),
             "query": query,
             "fts_query": fts_query,
-            "retrieval_strategy": "fts + vector(if compatible) + sql fallback + python rerank",
+            "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank",
             "vector_status": vector_status,
             "candidate_count": len(candidates),
             "hit_count": len(hits),
@@ -459,6 +532,8 @@ class SQLiteIndexer:
 
             if candidate["hit_type"] == "chunk":
                 context = self._fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
+            elif candidate["hit_type"] == "block":
+                context = self._fetch_block_context(conn, block_id=int(candidate["entity_id"]))
             else:
                 context = self._fetch_context_block(
                     conn,
@@ -490,10 +565,19 @@ class SQLiteIndexer:
                     "reasons": list(candidate["reasons"]),
                     "chunk_type": context.get("chunk_type"),
                     "chunk_summary": context.get("summary_text"),
+                    "block_type": context.get("block_type"),
+                    "block_summary": context.get("block_summary"),
                     "line_start": context["line_start"],
                     "line_end": context["line_end"],
                     "excerpt": context["excerpt"],
                     "context_statements": context["statements"],
+                    "recovered_blocks": self._fetch_covering_blocks(
+                        conn,
+                        procedure_id=procedure_id,
+                        line_start=int(context["line_start"]),
+                        line_end=int(context["line_end"]),
+                        limit=3,
+                    ),
                     "related_context": self._fetch_related_context(
                         conn,
                         procedure_id=procedure_id,
@@ -513,7 +597,7 @@ class SQLiteIndexer:
             "db_path": str(db_path),
             "query": query,
             "fts_query": fts_query,
-            "retrieval_strategy": "fts + vector(if compatible) + sql fallback + python rerank + evidence assembly",
+            "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank + evidence assembly",
             "vector_status": vector_status,
             "candidate_count": len(candidates),
             "evidence_count": len(evidence_blocks),
@@ -607,12 +691,15 @@ class SQLiteIndexer:
         file_id: int,
         procedure_id: int,
         unit: ParsedUnit,
-    ) -> tuple[Counter[str], Counter[str], Counter[str], Counter[str], Counter[str]]:
+    ) -> tuple[Counter[str], Counter[str], Counter[str], Counter[str], Counter[str], Counter[str], Counter[str]]:
         edge_counter: Counter[str] = Counter()
         variable_ref_counter: Counter[str] = Counter()
         action_counter: Counter[str] = Counter()
         chunk_counter: Counter[str] = Counter()
         vector_counter: Counter[str] = Counter()
+        block_counter: Counter[str] = Counter()
+        block_edge_counter: Counter[str] = Counter()
+        statement_ids_by_seq: dict[int, int] = {}
 
         for seq, statement in enumerate(unit.statements, start=1):
             cursor = conn.execute(
@@ -639,6 +726,7 @@ class SQLiteIndexer:
                 ),
             )
             statement_id = int(cursor.lastrowid)
+            statement_ids_by_seq[seq] = statement_id
 
             conn.execute(
                 """
@@ -672,8 +760,17 @@ class SQLiteIndexer:
         local_chunks, local_vectors = self._insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit)
         chunk_counter.update(local_chunks)
         vector_counter.update(local_vectors)
+        local_blocks, local_block_edges = self._insert_blocks(
+            conn,
+            file_id=file_id,
+            procedure_id=procedure_id,
+            unit=unit,
+            statement_ids_by_seq=statement_ids_by_seq,
+        )
+        block_counter.update(local_blocks)
+        block_edge_counter.update(local_block_edges)
 
-        return edge_counter, variable_ref_counter, action_counter, chunk_counter, vector_counter
+        return edge_counter, variable_ref_counter, action_counter, chunk_counter, vector_counter, block_counter, block_edge_counter
 
     def _insert_chunks(
         self,
@@ -765,6 +862,188 @@ class SQLiteIndexer:
             vector_counter[embedder_info.provider] += 1
 
         return counter, vector_counter
+
+    def _insert_blocks(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        file_id: int,
+        procedure_id: int,
+        unit: ParsedUnit,
+        statement_ids_by_seq: dict[int, int],
+    ) -> tuple[Counter[str], Counter[str]]:
+        block_counter: Counter[str] = Counter()
+        block_edge_counter: Counter[str] = Counter()
+        recovered_blocks = _recover_blocks(unit.statements)
+
+        for seq, block in enumerate(recovered_blocks, start=1):
+            statements = unit.statements[block["statement_start_seq"] - 1 : block["statement_end_seq"]]
+            statement_rows = [
+                {
+                    "statement_id": statement_ids_by_seq.get(block["statement_start_seq"] + offset),
+                    "seq": block["statement_start_seq"] + offset,
+                    "kind": statement.kind,
+                    "line_start": statement.line_start,
+                    "line_end": statement.line_end,
+                    "raw": statement.raw,
+                }
+                for offset, statement in enumerate(statements)
+            ]
+            action_names, target_names, variable_names = _collect_block_entities(statements)
+            summary_text = _summarize_block(
+                procedure_name=unit.name,
+                block_type=str(block["block_type"]),
+                anchor_name=str(block["anchor_name"]),
+                statements=statements,
+                action_names=action_names,
+                target_names=target_names,
+            )
+            excerpt = _format_excerpt(statement_rows)
+            table_names = self._fetch_block_table_names(
+                conn,
+                procedure_id=procedure_id,
+                statement_start_seq=int(block["statement_start_seq"]),
+                statement_end_seq=int(block["statement_end_seq"]),
+            )
+
+            cursor = conn.execute(
+                """
+                INSERT INTO blocks(
+                  file_id,
+                  procedure_id,
+                  seq,
+                  block_type,
+                  anchor_name,
+                  line_start,
+                  line_end,
+                  statement_start_seq,
+                  statement_end_seq,
+                  statement_count,
+                  anchor_statement_id,
+                  summary_text,
+                  excerpt,
+                  action_names_json,
+                  target_names_json,
+                  table_names_json,
+                  variable_names_json
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    file_id,
+                    procedure_id,
+                    seq,
+                    block["block_type"],
+                    block["anchor_name"],
+                    block["line_start"],
+                    block["line_end"],
+                    block["statement_start_seq"],
+                    block["statement_end_seq"],
+                    len(statements),
+                    statement_ids_by_seq.get(int(block["anchor_seq"])),
+                    summary_text,
+                    excerpt,
+                    _json(action_names),
+                    _json(target_names),
+                    _json(table_names),
+                    _json(variable_names),
+                ),
+            )
+            block_id = int(cursor.lastrowid)
+            conn.execute(
+                """
+                INSERT INTO blocks_fts(rowid, block_type, anchor_name, procedure_name, file_path, summary_text, excerpt)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    block_id,
+                    block["block_type"],
+                    block["anchor_name"],
+                    unit.name,
+                    unit.path,
+                    summary_text,
+                    excerpt,
+                ),
+            )
+            block_counter[str(block["block_type"])] += 1
+
+            for edge in self._fetch_block_edges(
+                conn,
+                procedure_id=procedure_id,
+                statement_start_seq=int(block["statement_start_seq"]),
+                statement_end_seq=int(block["statement_end_seq"]),
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO block_edges(block_id, edge_type, target_name, target_kind, detail_json)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    (
+                        block_id,
+                        edge["edge_type"],
+                        edge["target_name"],
+                        edge["target_kind"],
+                        _json(edge["detail"]),
+                    ),
+                )
+                block_edge_counter[str(edge["edge_type"])] += 1
+
+        return block_counter, block_edge_counter
+
+    def _fetch_block_table_names(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_id: int,
+        statement_start_seq: int,
+        statement_end_seq: int,
+    ) -> list[str]:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT e.target_name
+            FROM edges e
+            JOIN statements s ON s.id = e.statement_id
+            WHERE e.procedure_id = ?
+              AND s.seq BETWEEN ? AND ?
+              AND e.edge_type IN ('reads_table', 'writes_table')
+            ORDER BY e.target_name
+            """,
+            (procedure_id, statement_start_seq, statement_end_seq),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
+    def _fetch_block_edges(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_id: int,
+        statement_start_seq: int,
+        statement_end_seq: int,
+    ) -> list[dict[str, object]]:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT
+              e.edge_type AS edge_type,
+              e.target_name AS target_name,
+              e.target_kind AS target_kind,
+              e.detail_json AS detail_json
+            FROM edges e
+            JOIN statements s ON s.id = e.statement_id
+            WHERE e.procedure_id = ?
+              AND s.seq BETWEEN ? AND ?
+            ORDER BY e.edge_type, e.target_name
+            """,
+            (procedure_id, statement_start_seq, statement_end_seq),
+        ).fetchall()
+        return [
+            {
+                "edge_type": str(row[0]),
+                "target_name": str(row[1]),
+                "target_kind": str(row[2]),
+                "detail": json.loads(row[3]),
+            }
+            for row in rows
+        ]
 
     def _insert_variable_refs(
         self,
@@ -1191,6 +1470,33 @@ class SQLiteIndexer:
             (
                 """
                 SELECT
+                  'block' AS hit_type,
+                  113.0 AS base_score,
+                  'fts_block' AS retrieval_source,
+                  b.id AS entity_id,
+                  b.procedure_id AS procedure_id,
+                  b.file_id AS file_id,
+                  b.anchor_statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  b.line_start AS line_start,
+                  b.line_end AS line_end,
+                  COALESCE(NULLIF(b.summary_text, ''), b.block_type) AS matched_text,
+                  'block_summary' AS match_source,
+                  -bm25(blocks_fts, 2.0, 1.0, 1.0, 1.0, 6.0, 4.0) AS source_rank,
+                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM blocks_fts
+                JOIN blocks b ON b.id = blocks_fts.rowid
+                JOIN procedures p ON p.id = b.procedure_id
+                JOIN files f ON f.id = b.file_id
+                WHERE blocks_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
                   'chunk' AS hit_type,
                   111.0 AS base_score,
                   'fts_chunk' AS retrieval_source,
@@ -1352,6 +1658,32 @@ class SQLiteIndexer:
     ) -> list[dict[str, object]]:
         like = f"%{query}%"
         queries = [
+            (
+                """
+                SELECT
+                  'block' AS hit_type,
+                  79.0 AS base_score,
+                  'like_block' AS retrieval_source,
+                  b.id AS entity_id,
+                  b.procedure_id AS procedure_id,
+                  b.file_id AS file_id,
+                  b.anchor_statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  b.line_start AS line_start,
+                  b.line_end AS line_end,
+                  COALESCE(NULLIF(b.summary_text, ''), b.block_type) AS matched_text,
+                  'block_summary' AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM blocks b
+                JOIN procedures p ON p.id = b.procedure_id
+                JOIN files f ON f.id = b.file_id
+                WHERE COALESCE(b.summary_text, '') LIKE ? OR COALESCE(b.excerpt, '') LIKE ? OR COALESCE(b.anchor_name, '') LIKE ?
+                LIMIT ?
+                """,
+                (like, like, like, limit),
+            ),
             (
                 """
                 SELECT
@@ -1725,6 +2057,140 @@ class SQLiteIndexer:
             "excerpt": _format_excerpt(statements),
         }
 
+    def _fetch_block_context(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        block_id: int,
+    ) -> dict[str, object]:
+        block_row = conn.execute(
+            """
+            SELECT
+              procedure_id,
+              block_type,
+              summary_text,
+              line_start,
+              line_end,
+              statement_start_seq,
+              statement_end_seq
+            FROM blocks
+            WHERE id = ?
+            """,
+            (block_id,),
+        ).fetchone()
+        if block_row is None:
+            raise ValueError(f"Block does not exist: {block_id}")
+
+        rows = conn.execute(
+            """
+            SELECT id, seq, kind, line_start, line_end, raw
+            FROM statements
+            WHERE procedure_id = ? AND seq BETWEEN ? AND ?
+            ORDER BY seq
+            """,
+            (
+                int(block_row["procedure_id"]),
+                int(block_row["statement_start_seq"]),
+                int(block_row["statement_end_seq"]),
+            ),
+        ).fetchall()
+
+        statements = [
+            {
+                "statement_id": int(row["id"]),
+                "seq": int(row["seq"]),
+                "kind": str(row["kind"]),
+                "line_start": int(row["line_start"]),
+                "line_end": int(row["line_end"]),
+                "raw": str(row["raw"]),
+            }
+            for row in rows
+        ]
+        return {
+            "block_type": str(block_row["block_type"]),
+            "block_summary": str(block_row["summary_text"]),
+            "line_start": int(block_row["line_start"]),
+            "line_end": int(block_row["line_end"]),
+            "statements": statements,
+            "excerpt": _format_excerpt(statements),
+        }
+
+    def _fetch_covering_blocks(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_id: int,
+        line_start: int,
+        line_end: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        rows = conn.execute(
+            """
+            SELECT
+              id,
+              block_type,
+              anchor_name,
+              line_start,
+              line_end,
+              summary_text
+            FROM blocks
+            WHERE procedure_id = ?
+              AND line_start <= ?
+              AND line_end >= ?
+            ORDER BY (line_end - line_start) ASC, line_start ASC
+            LIMIT ?
+            """,
+            (procedure_id, line_end, line_start, limit),
+        ).fetchall()
+
+        blocks = []
+        for row in rows:
+            block_id = int(row["id"])
+            blocks.append(
+                {
+                    "block_type": str(row["block_type"]),
+                    "anchor_name": str(row["anchor_name"]),
+                    "line_start": int(row["line_start"]),
+                    "line_end": int(row["line_end"]),
+                    "summary_text": str(row["summary_text"]),
+                    "relations": self._fetch_block_relation_summary(conn, block_id=block_id, limit=4),
+                }
+            )
+        return blocks
+
+    def _fetch_block_relation_summary(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        block_id: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        rows = conn.execute(
+            """
+            SELECT edge_type, target_name, target_kind
+            FROM block_edges
+            WHERE block_id = ?
+            ORDER BY
+              CASE edge_type
+                WHEN 'calls_procedure' THEN 0
+                WHEN 'reads_table' THEN 1
+                WHEN 'writes_table' THEN 2
+                ELSE 3
+              END,
+              target_name
+            LIMIT ?
+            """,
+            (block_id, limit),
+        ).fetchall()
+        return [
+            {
+                "edge_type": str(row["edge_type"]),
+                "target_name": str(row["target_name"]),
+                "target_kind": str(row["target_kind"]),
+            }
+            for row in rows
+        ]
+
     def _fetch_related_context(
         self,
         conn: sqlite3.Connection,
@@ -1889,6 +2355,21 @@ class SQLiteIndexer:
                 lines.append(f"Chunk type: {block['chunk_type']}")
             if block.get("chunk_summary"):
                 lines.append(f"Chunk summary: {block['chunk_summary']}")
+            if block.get("block_type"):
+                lines.append(f"Recovered block type: {block['block_type']}")
+            if block.get("block_summary"):
+                lines.append(f"Recovered block summary: {block['block_summary']}")
+            if block.get("recovered_blocks"):
+                for item in block["recovered_blocks"]:
+                    relation_desc = ", ".join(
+                        f"{rel['edge_type']}:{rel['target_name']}"
+                        for rel in item["relations"]
+                    )
+                    suffix = f" | {relation_desc}" if relation_desc else ""
+                    lines.append(
+                        f"Covering block: {item['block_type']} [{item['line_start']}-{item['line_end']}] "
+                        f"{item['summary_text']}{suffix}".strip()
+                    )
             if related["outgoing_calls"]:
                 lines.append(f"Related calls: {', '.join(related['outgoing_calls'])}")
             if related["incoming_callers"]:
@@ -1910,6 +2391,198 @@ class SQLiteIndexer:
                     )
 
         return "\n".join(lines)
+
+
+def _recover_blocks(statements: list[CodeStatement]) -> list[dict[str, object]]:
+    if not statements:
+        return []
+
+    brace_pairs = _brace_pairs(statements)
+    blocks: list[dict[str, object]] = []
+    paired_stacks: dict[str, list[int]] = {block_type: [] for block_type in PAIRED_BLOCK_ACTIONS}
+
+    for seq, statement in enumerate(statements, start=1):
+        if statement.kind != "action" or not statement.name:
+            continue
+
+        for block_type, (start_name, end_name) in PAIRED_BLOCK_ACTIONS.items():
+            if statement.name == start_name:
+                paired_stacks[block_type].append(seq)
+                break
+            if statement.name == end_name and paired_stacks[block_type]:
+                start_seq = paired_stacks[block_type].pop()
+                blocks.append(
+                    _make_recovered_block(
+                        statements=statements,
+                        block_type=block_type,
+                        anchor_name=start_name,
+                        anchor_seq=start_seq,
+                        statement_start_seq=start_seq,
+                        statement_end_seq=seq,
+                    )
+                )
+                break
+
+        single_block_type = SINGLE_BLOCK_ACTIONS.get(statement.name)
+        if single_block_type is not None:
+            blocks.append(
+                _make_recovered_block(
+                    statements=statements,
+                    block_type=single_block_type,
+                    anchor_name=statement.name,
+                    anchor_seq=seq,
+                    statement_start_seq=seq,
+                    statement_end_seq=seq,
+                )
+            )
+
+        brace_block_type = BRACE_ATTACHED_BLOCK_ACTIONS.get(statement.name)
+        if brace_block_type is not None:
+            end_seq = _find_brace_attached_end(statements, start_seq=seq, brace_pairs=brace_pairs)
+            blocks.append(
+                _make_recovered_block(
+                    statements=statements,
+                    block_type=brace_block_type,
+                    anchor_name=statement.name,
+                    anchor_seq=seq,
+                    statement_start_seq=seq,
+                    statement_end_seq=end_seq,
+                )
+            )
+
+    blocks.sort(key=lambda item: (int(item["statement_start_seq"]), int(item["statement_end_seq"]), str(item["block_type"])))
+    deduped: list[dict[str, object]] = []
+    seen: set[tuple[object, ...]] = set()
+    for block in blocks:
+        key = (
+            block["block_type"],
+            block["statement_start_seq"],
+            block["statement_end_seq"],
+            block["anchor_name"],
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(block)
+    return deduped
+
+
+def _brace_pairs(statements: list[CodeStatement]) -> dict[int, int]:
+    stack: list[int] = []
+    pairs: dict[int, int] = {}
+    for seq, statement in enumerate(statements, start=1):
+        if statement.kind != "brace":
+            continue
+        if statement.name == "{":
+            stack.append(seq)
+        elif statement.name == "}" and stack:
+            pairs[stack.pop()] = seq
+    return pairs
+
+
+def _find_brace_attached_end(
+    statements: list[CodeStatement],
+    *,
+    start_seq: int,
+    brace_pairs: dict[int, int],
+) -> int:
+    for seq in range(start_seq + 1, len(statements) + 1):
+        statement = statements[seq - 1]
+        if statement.kind == "comment":
+            continue
+        if statement.kind == "action" and statement.name in {"EXCEPTION", "WHEN_OTHERS"}:
+            continue
+        if statement.kind == "brace" and statement.name == "{":
+            return brace_pairs.get(seq, seq)
+        return seq
+    return start_seq
+
+
+def _make_recovered_block(
+    *,
+    statements: list[CodeStatement],
+    block_type: str,
+    anchor_name: str,
+    anchor_seq: int,
+    statement_start_seq: int,
+    statement_end_seq: int,
+) -> dict[str, object]:
+    block_statements = statements[statement_start_seq - 1 : statement_end_seq]
+    line_start = min(statement.line_start for statement in block_statements)
+    line_end = max(statement.line_end for statement in block_statements)
+    return {
+        "block_type": block_type,
+        "anchor_name": anchor_name,
+        "anchor_seq": anchor_seq,
+        "statement_start_seq": statement_start_seq,
+        "statement_end_seq": statement_end_seq,
+        "line_start": line_start,
+        "line_end": line_end,
+    }
+
+
+def _collect_block_entities(statements: list[CodeStatement]) -> tuple[list[str], list[str], list[str]]:
+    action_names = sorted({statement.name for statement in statements if statement.name})
+    target_names: set[str] = set()
+    variable_names: set[str] = set()
+
+    for statement in statements:
+        target_name, _ = _derive_target(statement)
+        if target_name:
+            target_names.add(target_name)
+        variable_names.update(statement.reads)
+        variable_names.update(statement.writes)
+
+    return action_names, sorted(target_names), sorted(variable_names)
+
+
+def _summarize_block(
+    *,
+    procedure_name: str,
+    block_type: str,
+    anchor_name: str,
+    statements: list[CodeStatement],
+    action_names: list[str],
+    target_names: list[str],
+) -> str:
+    sql_preview = _extract_sql_preview(statements)
+    action_preview = ", ".join(action_names[:4])
+    target_preview = ", ".join(target_names[:3])
+    statement_count = len(statements)
+
+    if block_type == "transaction":
+        summary = f"{procedure_name} 的事务块，包含 {statement_count} 条语句"
+    elif block_type == "sql_query":
+        summary = f"{procedure_name} 的 SQL 查询块"
+    elif block_type == "sql_execute":
+        summary = f"{procedure_name} 的 SQL 执行语句"
+    elif block_type == "failure_handler":
+        summary = f"{procedure_name} 的失败处理块"
+    elif block_type.endswith("_loop"):
+        summary = f"{procedure_name} 的 {anchor_name} 代码块"
+    else:
+        summary = f"{procedure_name} 的 {anchor_name} 代码块"
+
+    parts = [summary]
+    if sql_preview:
+        parts.append(f"SQL={sql_preview}")
+    if action_preview:
+        parts.append(f"actions={action_preview}")
+    if target_preview:
+        parts.append(f"targets={target_preview}")
+    return " | ".join(parts)
+
+
+def _extract_sql_preview(statements: list[CodeStatement]) -> str | None:
+    for statement in statements:
+        if statement.kind != "action" or statement.name not in {"查询SQL语句开始", "通用SQL执行"}:
+            continue
+        if len(statement.groups) < 2:
+            continue
+        sql_text = " ".join(statement.groups[1].split())
+        if sql_text:
+            return _truncate_text(sql_text, 120)
+    return None
 
 
 def _build_semantic_chunks(
@@ -2289,3 +2962,9 @@ def _maybe_int(value: object) -> int | None:
 
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3].rstrip() + "..."

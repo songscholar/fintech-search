@@ -48,12 +48,31 @@
   "vector_counts": {
     "local-hash": 28748
   },
+  "block_counts": {
+    "transaction": 494,
+    "record_pool_loop": 41,
+    "component_loop": 68,
+    "sql_execute": 1081,
+    "failure_handler": 1479,
+    "record_loop": 348,
+    "sql_query": 173
+  },
+  "block_edge_counts": {
+    "uses_action": 14407,
+    "writes_table": 556,
+    "calls_procedure": 1381,
+    "reads_table": 981,
+    "uses_component": 127,
+    "uses_target": 4604,
+    "writes_variable": 8326
+  },
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
     "edges_fts": 61249,
-    "chunks_fts": 28748
+    "chunks_fts": 28748,
+    "blocks_fts": 3684
   },
   "embedding": {
     "provider": "local-hash",

@@ -14,7 +14,18 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <outputParameters id="row_count" uuid="u2"/>
   <code><![CDATA[
   [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
+  [事务处理开始]
+  [通用SQL执行][select * from uses_fund_real where fund_account = @fund_account][count = @sql_row_count]
+  [事务处理结束]
   [获取记录][uses_fund_real(idx_x)][fund_account = @fund_account]
+  [处理失败]
+  {
+    [EXCEPTION]
+    [WHEN_OTHERS]
+    {
+      [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]
+    }
+  }
   @row_count = 1;
   ]]></code>
 </business:Function>
@@ -69,16 +80,19 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM procedures").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM params").fetchone()[0] == 4
-    assert conn.execute("SELECT COUNT(*) FROM actions").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM actions").fetchone()[0] >= 4
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'calls_procedure'").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'reads_table'").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] >= 2
+    assert conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0] >= 3
+    assert conn.execute("SELECT COUNT(*) FROM block_edges").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM procedures_fts").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM statements_fts").fetchone()[0] >= 5
-    assert conn.execute("SELECT COUNT(*) FROM actions_fts").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM actions_fts").fetchone()[0] >= 4
     assert conn.execute("SELECT COUNT(*) FROM edges_fts").fetchone()[0] >= 4
     assert conn.execute("SELECT COUNT(*) FROM chunks_fts").fetchone()[0] >= 2
+    assert conn.execute("SELECT COUNT(*) FROM blocks_fts").fetchone()[0] >= 3
     conn.close()
 
 
@@ -101,6 +115,15 @@ def test_query_index_includes_vector_retrieval_for_related_query(tmp_path: Path)
 
     assert result["hit_count"] >= 1
     assert any(hit["retrieval_source"] == "vector_chunk" for hit in result["hits"])
+
+
+def test_query_index_includes_block_hits_for_failure_and_sql_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "查询交易资金表失败", limit=10)
+
+    assert result["hit_count"] >= 1
+    assert any(hit["hit_type"] == "block" for hit in result["hits"])
 
 
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
@@ -142,4 +165,6 @@ def test_assemble_evidence_returns_llm_ready_context(tmp_path: Path) -> None:
     assert "AF_系统参数公用_证券代码获取" in af_sample_block["excerpt"]
     assert "LS_FLOW" in af_sample_block["related_context"]["incoming_callers"]
     assert af_sample_block["chunk_type"] in {None, "call_flow", "call_block", "action_block", "control_block"}
+    assert any(item["block_type"] in {"transaction", "sql_execute", "failure_handler"} for item in af_sample_block["recovered_blocks"])
     assert "Related procedure" in result["llm_context"]
+    assert "Covering block:" in result["llm_context"]

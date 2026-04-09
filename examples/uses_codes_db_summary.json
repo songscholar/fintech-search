@@ -10,12 +10,15 @@
   "edges": 61249,
   "chunks": 28748,
   "chunk_vectors": 28748,
+  "blocks": 3684,
+  "block_edges": 30382,
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
     "edges_fts": 61249,
-    "chunks_fts": 28748
+    "chunks_fts": 28748,
+    "blocks_fts": 3684
   },
   "embedding": {
     "provider": "local-hash",
@@ -55,5 +58,23 @@
     "call_block": 1991,
     "assignment_block": 701,
     "raw_block": 67
+  },
+  "block_type_counts": {
+    "failure_handler": 1479,
+    "sql_execute": 1081,
+    "transaction": 494,
+    "record_loop": 348,
+    "sql_query": 173,
+    "component_loop": 68,
+    "record_pool_loop": 41
+  },
+  "block_edge_type_counts": {
+    "uses_action": 14407,
+    "writes_variable": 8326,
+    "uses_target": 4604,
+    "calls_procedure": 1381,
+    "reads_table": 981,
+    "writes_table": 556,
+    "uses_component": 127
   }
 }

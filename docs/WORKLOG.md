@@ -209,11 +209,34 @@
   - 环境变量切换到外部 embedding
   - 外部 embedding 分批请求
   - 向量空间不匹配时的安全降级
-  - 查询 embedding 请求失败时的安全回退
+- 查询 embedding 请求失败时的安全回退
+
+### 阶段 16：深层结构块恢复
+
+- 新增 `blocks`
+- 新增 `block_edges`
+- 新增 `blocks_fts`
+- 当前已恢复的结构块包括：
+  - `transaction`
+  - `sql_query`
+  - `sql_execute`
+  - `failure_handler`
+  - `record_loop`
+  - `record_pool_loop`
+  - `component_loop`
+- 结构块恢复基于已解析的扁平语句流，不额外引入第二套解析器
+- `query-index` 增加块级命中
+- `assemble-evidence` 会补充覆盖当前证据的恢复块
+- `llm_context` 会显式携带恢复块摘要和块级关系
+- 补充测试，覆盖：
+  - 块表建库
+  - 块级全文索引
+  - 失败处理块召回
+  - 证据中的覆盖块摘要
 
 ### 后续计划
 
-- 增加块级结构恢复
+- 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精确的表访问与关系抽取
 - 增加更丰富的模型适配器

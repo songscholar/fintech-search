@@ -21,6 +21,8 @@
 - 提供本地哈希向量与向量式召回
 - 提供 OpenAI-compatible embedding 接口接入
 - 提供索引端与查询端的向量空间兼容校验
+- 提供事务块 / SQL 块 / 失败处理块 / 循环块恢复
+- 提供块级关系摘要
 - 提供本地 HTTP API
 - 提供最终回答层
 - 提供 stdio MCP server
@@ -109,11 +111,14 @@
 - `edges`
 - `chunks`
 - `chunk_vectors`
+- `blocks`
+- `block_edges`
 - `procedures_fts`
 - `statements_fts`
 - `actions_fts`
 - `edges_fts`
 - `chunks_fts`
+- `blocks_fts`
 
 其中：
 
@@ -123,6 +128,8 @@
 - `edges` 保存过程调用、表访问、变量写入等关系
 - `chunks` 把过程按语义块切开，降低单语句检索过碎的问题
 - `chunk_vectors` 为每个语义块保存一份向量，默认使用本地哈希向量，也可以切到外部 embedding
+- `blocks` 把事务、SQL、失败处理、循环这类更稳定的业务结构恢复成可检索对象
+- `block_edges` 把块内部的过程调用、表访问、动作目标聚合成块级关系摘要
 
 当前已经落下的重点关系：
 
@@ -148,6 +155,7 @@
 `query-index` 当前会按下面的顺序工作：
 
 1. 用 `FTS5` 查：
+   - 结构块
    - 语义块
    - 过程
    - 动作
@@ -166,6 +174,7 @@
    - 关系边目标
 4. 在 Python 里按命中源、词覆盖率、精确匹配、过程名命中做重排
 5. 对块命中优先返回块级上下文，并补一跳关系过程摘要
+6. 对证据所在范围补充覆盖它的恢复块，让 LLM 知道当前语句属于哪个事务 / SQL / 失败路径
 
 `assemble-evidence` 会在重排结果之上继续做：
 

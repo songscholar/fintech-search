@@ -30,6 +30,8 @@
 - 提供本地哈希向量 `chunk_vectors` 与向量式召回能力
 - 提供 OpenAI-compatible embedding 接口接入能力，可替换本地哈希向量
 - 提供向量空间兼容校验，避免“用 A 模型建库、用 B 模型查询”导致错误召回
+- 提供结构块恢复：事务块、SQL 块、失败处理块、记录循环块
+- 提供块级关系摘要，使证据能带上“在哪个事务/SQL/失败路径里”
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
 - 提供一跳关系过程摘要扩展，使证据不只停留在命中过程本身
@@ -73,11 +75,14 @@
 - `edges`: `61249`
 - `chunks`: 由建库时按过程语义块自动生成
 - `chunk_vectors`: 与 `chunks` 一一对应
+- `blocks`: 由建库时按事务 / SQL / 失败处理 / 循环等稳定结构恢复生成
+- `block_edges`: 与 `blocks` 对应的块级关系摘要
 - `procedures_fts`: `2564`
 - `statements_fts`: `159148`
 - `actions_fts`: `26225`
 - `edges_fts`: `61249`
 - `chunks_fts`: 与 `chunks` 一一对应
+- `blocks_fts`: 与 `blocks` 一一对应
 
 摘要文件：
 
@@ -224,6 +229,7 @@ python3 -m uses_indexer assemble-evidence \
 - 语义块命中及其摘要
 - 向量式召回命中
 - 向量兼容状态 `vector_status`
+- 覆盖当前证据的事务块 / SQL 块 / 失败处理块摘要
 - 每个证据块对应的代码片段
 - 相关调用、来路调用、表访问
 - 一跳关联过程的摘要
