@@ -32,6 +32,8 @@
 - 提供向量空间兼容校验，避免“用 A 模型建库、用 B 模型查询”导致错误召回
 - 提供结构块恢复：事务块、SQL 块、失败处理块、记录循环块
 - 提供异常与控制流恢复：`EXCEPTION`、`WHEN_OTHERS`、`goto svr_end`、退出标签
+- 提供 SQL 表访问抽取：从 `select/update/delete/insert/merge` 中恢复真实表名
+- 提供两跳调用链扩展与重排
 - 提供块级关系摘要，使证据能带上“在哪个事务/SQL/失败路径里”
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
@@ -94,6 +96,8 @@
 - `examples/uses_codes_answer_example.json`
 - `examples/uses_codes_failure_flow_example.json`
 - `examples/uses_codes_exit_flow_example.json`
+- `examples/uses_codes_sql_table_example.json`
+- `examples/uses_codes_call_chain_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -134,6 +138,8 @@ examples/
   uses_codes_answer_example.json
   uses_codes_failure_flow_example.json
   uses_codes_exit_flow_example.json
+  uses_codes_sql_table_example.json
+  uses_codes_call_chain_example.json
 plugins/
   uses-codebase-plugin/
     .codex-plugin/plugin.json

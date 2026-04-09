@@ -318,6 +318,13 @@ BRACE_ATTACHED_BLOCK_ACTIONS = {
     "WHEN_OTHERS": "when_others_handler",
 }
 EXIT_LABEL_NAMES = {"svr_end"}
+SQL_FROM_JOIN_RE = re.compile(r"\b(?:from|join)\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
+SQL_UPDATE_RE = re.compile(r"\bupdate\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
+SQL_INSERT_RE = re.compile(r"\binsert\s+into\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
+SQL_DELETE_RE = re.compile(r"\bdelete\s+from\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
+SQL_MERGE_RE = re.compile(r"\bmerge\s+into\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
+SQL_STRING_RE = re.compile(r"'(?:''|[^'])*'")
+SQL_SKIP_TABLES = {"dual"}
 
 
 class SQLiteIndexer:
@@ -1184,6 +1191,26 @@ class SQLiteIndexer:
                 )
                 edge_counter[edge_type] += 1
 
+            for sql_edge in _extract_sql_access_edges(statement):
+                self._insert_edge(
+                    conn,
+                    file_id=file_id,
+                    procedure_id=procedure_id,
+                    statement_id=statement_id,
+                    procedure_name=unit.name,
+                    file_path=unit.path,
+                    edge_type=str(sql_edge["edge_type"]),
+                    source_name=unit.name,
+                    target_name=str(sql_edge["target_name"]),
+                    target_kind="table",
+                    detail={
+                        "action_name": statement.name,
+                        "sql_operation": sql_edge["operation"],
+                        "sql_source": sql_edge["sql_source"],
+                    },
+                )
+                edge_counter[str(sql_edge["edge_type"])] += 1
+
         if statement.kind == "assignment" and statement.writes:
             for target in statement.writes:
                 self._insert_edge(
@@ -1328,6 +1355,7 @@ class SQLiteIndexer:
             ),
             key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"])),
         )
+        ranked = self._apply_call_chain_rerank(conn, ranked, seed_limit=min(candidate_limit, 12))
         return ranked, fts_query, vector_status
 
     def _run_vector_queries(
@@ -1977,6 +2005,118 @@ class SQLiteIndexer:
         candidate["reasons"] = reasons
         return candidate
 
+    def _apply_call_chain_rerank(
+        self,
+        conn: sqlite3.Connection,
+        ranked: list[dict[str, object]],
+        *,
+        seed_limit: int,
+    ) -> list[dict[str, object]]:
+        if not ranked:
+            return ranked
+
+        seed_names = {
+            str(item["procedure_name"])
+            for item in ranked[:seed_limit]
+            if item.get("procedure_name")
+        }
+        if not seed_names:
+            return ranked
+
+        neighbor_cache: dict[str, tuple[set[str], set[str]]] = {}
+        reranked: list[dict[str, object]] = []
+        for candidate in ranked:
+            procedure_name = str(candidate.get("procedure_name") or "")
+            if not procedure_name:
+                reranked.append(candidate)
+                continue
+
+            one_hop, two_hop = neighbor_cache.get(procedure_name, (set(), set()))
+            if not one_hop and not two_hop:
+                one_hop, two_hop = self._procedure_call_neighbors(conn, procedure_name=procedure_name)
+                neighbor_cache[procedure_name] = (one_hop, two_hop)
+
+            one_overlap = sorted((one_hop - {procedure_name}) & seed_names)
+            two_overlap = sorted((two_hop - one_hop - {procedure_name}) & seed_names)
+            if one_overlap or two_overlap:
+                bonus = len(one_overlap) * 3.0 + len(two_overlap) * 1.5
+                candidate["score"] = round(float(candidate["score"]) + bonus, 6)
+                reasons = list(candidate.get("reasons", []))
+                if one_overlap:
+                    reasons.append(f"call_chain_one_hop={','.join(one_overlap[:3])}")
+                if two_overlap:
+                    reasons.append(f"call_chain_two_hop={','.join(two_overlap[:3])}")
+                candidate["reasons"] = reasons
+
+            reranked.append(candidate)
+
+        return sorted(
+            reranked,
+            key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"])),
+        )
+
+    def _procedure_call_neighbors(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_name: str,
+    ) -> tuple[set[str], set[str]]:
+        aliases = self._procedure_aliases(conn, procedure_name=procedure_name)
+
+        outgoing = {
+            self._resolve_procedure_name(conn, str(row[0]))
+            for row in conn.execute(
+                """
+                SELECT DISTINCT target_name
+                FROM edges
+                WHERE source_name = ? AND edge_type = 'calls_procedure'
+                """,
+                (procedure_name,),
+            ).fetchall()
+        }
+        incoming = {
+            str(row[0])
+            for row in conn.execute(
+                f"""
+                SELECT DISTINCT source_name
+                FROM edges
+                WHERE target_name IN ({",".join("?" for _ in aliases)}) AND edge_type = 'calls_procedure'
+                """,
+                aliases,
+            ).fetchall()
+        }
+
+        one_hop = outgoing | incoming
+        two_hop: set[str] = set()
+        frontier = list(one_hop)
+        for neighbor_name in frontier:
+            second_outgoing = {
+                self._resolve_procedure_name(conn, str(row[0]))
+                for row in conn.execute(
+                    """
+                    SELECT DISTINCT target_name
+                    FROM edges
+                    WHERE source_name = ? AND edge_type = 'calls_procedure'
+                    """,
+                    (neighbor_name,),
+                ).fetchall()
+            }
+            second_incoming = {
+                str(row[0])
+                for row in conn.execute(
+                    f"""
+                    SELECT DISTINCT source_name
+                    FROM edges
+                    WHERE target_name IN ({",".join("?" for _ in self._procedure_aliases(conn, procedure_name=neighbor_name))}) AND edge_type = 'calls_procedure'
+                    """,
+                    self._procedure_aliases(conn, procedure_name=neighbor_name),
+                ).fetchall()
+            }
+            two_hop.update(second_outgoing)
+            two_hop.update(second_incoming)
+
+        return one_hop, two_hop
+
     def _fetch_context_block(
         self,
         conn: sqlite3.Connection,
@@ -2250,8 +2390,9 @@ class SQLiteIndexer:
         procedure_name: str,
         related_limit: int,
     ) -> dict[str, object]:
+        aliases = self._procedure_aliases(conn, procedure_id=procedure_id, procedure_name=procedure_name)
         outgoing_calls = [
-            str(row["target_name"])
+            self._resolve_procedure_name(conn, str(row["target_name"]))
             for row in conn.execute(
                 """
                 SELECT DISTINCT target_name
@@ -2263,18 +2404,19 @@ class SQLiteIndexer:
                 (procedure_id, related_limit),
             ).fetchall()
         ]
+        outgoing_calls = _dedupe_strings(outgoing_calls)
 
         incoming_callers = [
             str(row["source_name"])
             for row in conn.execute(
-                """
+                f"""
                 SELECT DISTINCT source_name
                 FROM edges
-                WHERE edge_type = 'calls_procedure' AND target_name = ?
+                WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in aliases)})
                 ORDER BY source_name
                 LIMIT ?
                 """,
-                (procedure_name, related_limit),
+                (*aliases, related_limit),
             ).fetchall()
         ]
 
@@ -2327,6 +2469,19 @@ class SQLiteIndexer:
             ).fetchall()
         ]
 
+        two_hop_outgoing = self._fetch_call_chain_paths(
+            conn,
+            procedure_name=procedure_name,
+            direction="outgoing",
+            limit=related_limit,
+        )
+        two_hop_incoming = self._fetch_call_chain_paths(
+            conn,
+            procedure_name=procedure_name,
+            direction="incoming",
+            limit=related_limit,
+        )
+
         related_procedures = self._fetch_related_procedure_summaries(
             conn,
             outgoing_calls=outgoing_calls,
@@ -2340,8 +2495,141 @@ class SQLiteIndexer:
             "related_tables": related_tables,
             "related_actions": related_actions,
             "control_flow": control_flow,
+            "two_hop_outgoing": two_hop_outgoing,
+            "two_hop_incoming": two_hop_incoming,
             "related_procedures": related_procedures,
         }
+
+    def _fetch_call_chain_paths(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_name: str,
+        direction: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        chains: list[dict[str, object]] = []
+        seen: set[tuple[str, str]] = set()
+
+        if direction == "outgoing":
+            raw_via_rows = conn.execute(
+                """
+                SELECT DISTINCT target_name
+                FROM edges
+                WHERE source_name = ? AND edge_type = 'calls_procedure'
+                ORDER BY target_name
+                """,
+                (procedure_name,),
+            ).fetchall()
+            via_names = [self._resolve_procedure_name(conn, str(row["target_name"])) for row in raw_via_rows]
+            for via_name in via_names:
+                for row in conn.execute(
+                    """
+                    SELECT DISTINCT target_name
+                    FROM edges
+                    WHERE source_name = ? AND edge_type = 'calls_procedure'
+                    ORDER BY target_name
+                    LIMIT ?
+                    """,
+                    (via_name, limit),
+                ).fetchall():
+                    end_name = self._resolve_procedure_name(conn, str(row["target_name"]))
+                    if end_name == procedure_name:
+                        continue
+                    key = (via_name, end_name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    chain = self._lookup_procedure_summary(conn, end_name)
+                    if chain is None:
+                        continue
+                    chain["via_name"] = via_name
+                    chain["direction"] = direction
+                    chains.append(chain)
+                    if len(chains) >= limit:
+                        return chains
+        else:
+            alias_names = self._procedure_aliases(conn, procedure_name=procedure_name)
+            raw_via_rows = conn.execute(
+                f"""
+                SELECT DISTINCT source_name
+                FROM edges
+                WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in alias_names)})
+                ORDER BY source_name
+                """,
+                tuple(alias_names),
+            ).fetchall()
+            via_names = [str(row["source_name"]) for row in raw_via_rows]
+            for via_name in via_names:
+                via_aliases = self._procedure_aliases(conn, procedure_name=via_name)
+                caller_rows = conn.execute(
+                    f"""
+                    SELECT DISTINCT source_name
+                    FROM edges
+                    WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in via_aliases)})
+                    ORDER BY source_name
+                    LIMIT ?
+                    """,
+                    (*via_aliases, limit),
+                ).fetchall()
+                for row in caller_rows:
+                    end_name = str(row["source_name"])
+                    if end_name == procedure_name:
+                        continue
+                    key = (via_name, end_name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    chain = self._lookup_procedure_summary(conn, end_name)
+                    if chain is None:
+                        continue
+                    chain["via_name"] = via_name
+                    chain["direction"] = direction
+                    chains.append(chain)
+                    if len(chains) >= limit:
+                        return chains
+
+        return chains
+
+    def _procedure_aliases(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_id: int | None = None,
+        procedure_name: str | None = None,
+    ) -> tuple[str, ...]:
+        if procedure_id is not None:
+            row = conn.execute(
+                "SELECT name, chinese_name FROM procedures WHERE id = ?",
+                (procedure_id,),
+            ).fetchone()
+        elif procedure_name is not None:
+            row = conn.execute(
+                """
+                SELECT name, chinese_name
+                FROM procedures
+                WHERE name = ? OR chinese_name = ?
+                ORDER BY CASE WHEN name = ? THEN 0 ELSE 1 END
+                LIMIT 1
+                """,
+                (procedure_name, procedure_name, procedure_name),
+            ).fetchone()
+        else:
+            row = None
+
+        if row is None:
+            return tuple(name for name in [procedure_name] if name)
+
+        aliases = [str(row["name"])]
+        if row["chinese_name"]:
+            aliases.append(str(row["chinese_name"]))
+        return tuple(dict.fromkeys(item for item in aliases if item))
+
+    def _resolve_procedure_name(self, conn: sqlite3.Connection, raw_name: str) -> str:
+        aliases = self._procedure_aliases(conn, procedure_name=raw_name)
+        if aliases:
+            return aliases[0]
+        return raw_name
 
     def _fetch_related_procedure_summaries(
         self,
@@ -2356,45 +2644,54 @@ class SQLiteIndexer:
 
         for relation_type, names in (("calls", outgoing_calls), ("called_by", incoming_callers)):
             for procedure_name in names[:related_limit]:
-                row = conn.execute(
-                    """
-                    SELECT
-                      p.name AS procedure_name,
-                      f.path AS file_path,
-                      c.line_start AS line_start,
-                      c.line_end AS line_end,
-                      c.chunk_type AS chunk_type,
-                      c.summary_text AS summary_text
-                    FROM procedures p
-                    JOIN files f ON f.id = p.file_id
-                    LEFT JOIN chunks c ON c.procedure_id = p.id
-                    WHERE p.name = ?
-                    ORDER BY c.seq
-                    LIMIT 1
-                    """,
-                    (procedure_name,),
-                ).fetchone()
-                if row is None:
+                info = self._lookup_procedure_summary(conn, procedure_name)
+                if info is None:
                     continue
-                key = (relation_type, str(row["procedure_name"]))
+                key = (relation_type, str(info["procedure_name"]))
                 if key in seen:
                     continue
                 seen.add(key)
-                related.append(
-                    {
-                        "relation_type": relation_type,
-                        "procedure_name": str(row["procedure_name"]),
-                        "file_path": str(row["file_path"]),
-                        "line_start": _maybe_int(row["line_start"]),
-                        "line_end": _maybe_int(row["line_end"]),
-                        "chunk_type": str(row["chunk_type"]) if row["chunk_type"] is not None else None,
-                        "summary_text": str(row["summary_text"]) if row["summary_text"] is not None else None,
-                    }
-                )
+                related.append({"relation_type": relation_type, **info})
                 if len(related) >= related_limit:
                     return related
 
         return related
+
+    def _lookup_procedure_summary(
+        self,
+        conn: sqlite3.Connection,
+        procedure_name: str,
+    ) -> dict[str, object] | None:
+        row = conn.execute(
+            """
+            SELECT
+              p.name AS procedure_name,
+              p.chinese_name AS chinese_name,
+              f.path AS file_path,
+              c.line_start AS line_start,
+              c.line_end AS line_end,
+              c.chunk_type AS chunk_type,
+              c.summary_text AS summary_text
+            FROM procedures p
+            JOIN files f ON f.id = p.file_id
+            LEFT JOIN chunks c ON c.procedure_id = p.id
+            WHERE p.name = ? OR p.chinese_name = ?
+            ORDER BY CASE WHEN p.name = ? THEN 0 ELSE 1 END, c.seq
+            LIMIT 1
+            """,
+            (procedure_name, procedure_name, procedure_name),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "procedure_name": str(row["procedure_name"]),
+            "chinese_name": str(row["chinese_name"]) if row["chinese_name"] is not None else None,
+            "file_path": str(row["file_path"]),
+            "line_start": _maybe_int(row["line_start"]),
+            "line_end": _maybe_int(row["line_end"]),
+            "chunk_type": str(row["chunk_type"]) if row["chunk_type"] is not None else None,
+            "summary_text": str(row["summary_text"]) if row["summary_text"] is not None else None,
+        }
 
     def _build_llm_context(self, query: str, evidence_blocks: list[dict[str, object]]) -> str:
         lines = [
@@ -2458,6 +2755,18 @@ class SQLiteIndexer:
                     for item in related["control_flow"]
                 )
                 lines.append(f"Control flow: {flow_desc}")
+            if related["two_hop_outgoing"]:
+                outgoing_desc = ", ".join(
+                    f"{item['via_name']} -> {item['procedure_name']}"
+                    for item in related["two_hop_outgoing"]
+                )
+                lines.append(f"Two-hop outgoing chain: {outgoing_desc}")
+            if related["two_hop_incoming"]:
+                incoming_desc = ", ".join(
+                    f"{item['procedure_name']} -> {item['via_name']}"
+                    for item in related["two_hop_incoming"]
+                )
+                lines.append(f"Two-hop incoming chain: {incoming_desc}")
             if related["related_procedures"]:
                 for item in related["related_procedures"]:
                     summary_text = item["summary_text"] or ""
@@ -2696,6 +3005,99 @@ def _extract_sql_preview(statements: list[CodeStatement]) -> str | None:
         if sql_text:
             return _truncate_text(sql_text, 120)
     return None
+
+
+def _extract_sql_access_edges(statement: CodeStatement) -> list[dict[str, str]]:
+    if statement.kind != "action" or statement.name not in {"通用SQL执行", "查询SQL语句开始"}:
+        return []
+    if len(statement.groups) < 2:
+        return []
+
+    sql_text = statement.groups[1].strip()
+    if not sql_text or sql_text.startswith("@"):
+        return []
+
+    normalized = _normalize_sql(sql_text)
+    if not normalized:
+        return []
+
+    accesses: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(edge_type: str, table_name: str, operation: str) -> None:
+        normalized_table = _normalize_table_name(table_name)
+        if not normalized_table:
+            return
+        key = (edge_type, normalized_table)
+        if key in seen:
+            return
+        seen.add(key)
+        accesses.append(
+            {
+                "edge_type": edge_type,
+                "target_name": normalized_table,
+                "operation": operation,
+                "sql_source": _truncate_text(normalized, 160),
+            }
+        )
+
+    lower = normalized.lower()
+    if lower.startswith("select "):
+        for table_name in SQL_FROM_JOIN_RE.findall(normalized):
+            add("reads_table", table_name, "select")
+        return accesses
+
+    if lower.startswith("update "):
+        for table_name in SQL_UPDATE_RE.findall(normalized):
+            add("writes_table", table_name, "update")
+        for table_name in SQL_FROM_JOIN_RE.findall(normalized):
+            add("reads_table", table_name, "update_context")
+        return accesses
+
+    if lower.startswith("insert "):
+        for table_name in SQL_INSERT_RE.findall(normalized):
+            add("writes_table", table_name, "insert")
+        for table_name in SQL_FROM_JOIN_RE.findall(normalized):
+            add("reads_table", table_name, "insert_select")
+        return accesses
+
+    if lower.startswith("delete "):
+        for table_name in SQL_DELETE_RE.findall(normalized):
+            add("writes_table", table_name, "delete")
+        for table_name in SQL_FROM_JOIN_RE.findall(normalized):
+            add("reads_table", table_name, "delete_context")
+        return accesses
+
+    if lower.startswith("merge "):
+        for table_name in SQL_MERGE_RE.findall(normalized):
+            add("writes_table", table_name, "merge")
+        for table_name in SQL_FROM_JOIN_RE.findall(normalized):
+            add("reads_table", table_name, "merge_context")
+        return accesses
+
+    return accesses
+
+
+def _normalize_sql(sql_text: str) -> str:
+    without_strings = SQL_STRING_RE.sub(" ", sql_text)
+    normalized = " ".join(without_strings.replace("\n", " ").replace("\t", " ").split())
+    return normalized
+
+
+def _normalize_table_name(name: str) -> str | None:
+    candidate = name.strip().strip(",;")
+    if not candidate:
+        return None
+    if candidate.startswith("@") or "%" in candidate:
+        return None
+    if "." in candidate:
+        candidate = candidate.split(".")[-1]
+    lower = candidate.lower()
+    if lower in SQL_SKIP_TABLES:
+        return None
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", candidate):
+        return None
+    return candidate
 
 
 def _build_semantic_chunks(
@@ -3081,3 +3483,7 @@ def _truncate_text(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
     return value[: limit - 3].rstrip() + "..."
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))

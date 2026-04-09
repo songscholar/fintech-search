@@ -236,6 +236,14 @@
 - `jumps_to_exit`
 - `defines_label`
 
+其中 `reads_table / writes_table` 现在不仅来自 DSL 动作目标，也会从这类 SQL 语句中抽取：
+
+- `select ... from ... join ...`
+- `update ...`
+- `insert into ...`
+- `delete from ...`
+- `merge into ...`
+
 ## 当前检索方式
 
 - 还没有完整块级 AST

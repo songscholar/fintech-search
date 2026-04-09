@@ -27,9 +27,9 @@
   "edge_counts": {
     "uses_action": 18140,
     "uses_target": 8360,
-    "writes_table": 849,
+    "writes_table": 1199,
     "writes_variable": 23824,
-    "reads_table": 1704,
+    "reads_table": 2632,
     "calls_procedure": 8085,
     "uses_component": 287,
     "defines_label": 39,
@@ -67,9 +67,9 @@
   },
   "block_edge_counts": {
     "uses_action": 16994,
-    "writes_table": 556,
+    "writes_table": 1302,
     "calls_procedure": 1381,
-    "reads_table": 981,
+    "reads_table": 2145,
     "uses_component": 127,
     "uses_target": 5523,
     "writes_variable": 8333,
@@ -81,7 +81,7 @@
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 61332,
+    "edges_fts": 62610,
     "chunks_fts": 28748,
     "blocks_fts": 4825
   },

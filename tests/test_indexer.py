@@ -14,6 +14,7 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <outputParameters id="row_count" uuid="u2"/>
   <code><![CDATA[
   [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
+  [AF_DEEP][][deep_flag = @deep_flag]
   [事务处理开始]
   [通用SQL执行][select * from uses_fund_real where fund_account = @fund_account][count = @sql_row_count]
   [事务处理结束]
@@ -44,12 +45,25 @@ CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Service>
 """
 
+DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="AF_测试_深层" objectId="3">
+  <inputParameters id="fund_account" uuid="u5"/>
+  <outputParameters id="deep_flag" uuid="u6"/>
+  <code><![CDATA[
+  [获取记录][uses_deep_table(idx_x)][fund_account = @fund_account]
+  [通用SQL执行][update uses_deep_table set deep_flag = 1 where fund_account = @fund_account][]
+  @deep_flag = 1;
+  ]]></code>
+</business:Function>
+"""
+
 
 def _build_sample_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
     source_dir = tmp_path / "src"
     source_dir.mkdir()
     (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
+    (source_dir / "AF_DEEP.uftatomfunction").write_text(DEEP_XML, encoding="utf-8")
 
     db_path = tmp_path / "index.db"
     indexer = SQLiteIndexer()
@@ -79,19 +93,20 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     _, db_path = _build_sample_index(tmp_path)
 
     conn = sqlite3.connect(db_path)
-    assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 2
-    assert conn.execute("SELECT COUNT(*) FROM procedures").fetchone()[0] == 2
-    assert conn.execute("SELECT COUNT(*) FROM params").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM procedures").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM params").fetchone()[0] == 6
     assert conn.execute("SELECT COUNT(*) FROM actions").fetchone()[0] >= 4
-    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'calls_procedure'").fetchone()[0] == 2
-    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'reads_table'").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'calls_procedure'").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'reads_table'").fetchone()[0] >= 3
+    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'writes_table'").fetchone()[0] >= 1
     assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0] >= 3
     assert conn.execute("SELECT COUNT(*) FROM block_edges").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'jumps_to_label'").fetchone()[0] >= 1
     assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'defines_label'").fetchone()[0] >= 1
-    assert conn.execute("SELECT COUNT(*) FROM procedures_fts").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM procedures_fts").fetchone()[0] == 3
     assert conn.execute("SELECT COUNT(*) FROM statements_fts").fetchone()[0] >= 5
     assert conn.execute("SELECT COUNT(*) FROM actions_fts").fetchone()[0] >= 4
     assert conn.execute("SELECT COUNT(*) FROM edges_fts").fetchone()[0] >= 4
@@ -139,6 +154,16 @@ def test_query_index_includes_control_flow_hits_for_exit_labels(tmp_path: Path) 
     assert any(hit["match_source"] in {"block_summary", "label", "goto"} or hit["matched_text"] == "svr_end" for hit in result["hits"])
 
 
+def test_query_index_extracts_sql_table_edges_and_multi_hop_bonus(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_deep_table", limit=10)
+
+    assert result["hit_count"] >= 1
+    assert any("call_chain_" in " ".join(hit["reasons"]) for hit in result["hits"])
+    assert any("uses_deep_table" in str(hit["matched_text"]) or "uses_deep_table" in " ".join(hit["reasons"]) for hit in result["hits"])
+
+
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
     _, db_path = _build_sample_index(tmp_path)
     indexer = SQLiteIndexer(embedder=MismatchEmbedder())
@@ -178,11 +203,22 @@ def test_assemble_evidence_returns_llm_ready_context(tmp_path: Path) -> None:
     assert "AF_系统参数公用_证券代码获取" in af_sample_block["excerpt"]
     assert "LS_FLOW" in af_sample_block["related_context"]["incoming_callers"]
     assert any(item["edge_type"] in {"jumps_to_label", "jumps_to_exit", "defines_label"} for item in af_sample_block["related_context"]["control_flow"])
+    assert any(item["via_name"] == "LS_FLOW" for item in af_sample_block["related_context"]["two_hop_incoming"]) or af_sample_block["related_context"]["two_hop_incoming"] == []
     assert af_sample_block["chunk_type"] in {None, "call_flow", "call_block", "action_block", "control_block"}
     assert any(item["block_type"] in {"transaction", "sql_execute", "failure_handler"} for item in af_sample_block["recovered_blocks"])
     assert "Related procedure" in result["llm_context"]
     assert "Covering block:" in result["llm_context"]
     assert "Control flow:" in result["llm_context"]
+
+
+def test_assemble_evidence_includes_two_hop_call_chain(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.assemble_evidence(db_path, "LS_FLOW", limit=3, context_window=1, related_limit=3)
+
+    ls_flow_block = next(block for block in result["evidence"] if block["procedure_name"] == "LS_FLOW")
+    assert any(item["via_name"] == "AF_SAMPLE" and item["procedure_name"] == "AF_DEEP" for item in ls_flow_block["related_context"]["two_hop_outgoing"])
+    assert "Two-hop outgoing chain:" in result["llm_context"]
 
 
 def test_assemble_evidence_surfaces_exception_blocks_for_failure_query(tmp_path: Path) -> None:

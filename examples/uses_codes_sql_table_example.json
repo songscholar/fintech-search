@@ -1,0 +1,1844 @@
+{
+  "db_path": "examples/uses_codes_index.db",
+  "query": "uses_fund_real 在哪里被读取或更新",
+  "fts_query": "uses_fund_real* OR 被读取* OR 更新*",
+  "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank + evidence assembly",
+  "vector_status": {
+    "enabled": true,
+    "reason": "enabled",
+    "index_provider": "local-hash",
+    "index_model": "local-hash-256",
+    "index_dimension": 256,
+    "query_provider": "local-hash",
+    "query_model": "local-hash-256",
+    "query_dimension": 256
+  },
+  "candidate_count": 234,
+  "evidence_count": 4,
+  "evidence": [
+    {
+      "rank": 1,
+      "score": 172.285,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD.uftatomfunction",
+      "matched_text": "AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @fund_enable_level_real, @frozen_balance, @uses_fund_real.enable_balance, @curr_time, @branch_no, @serial_no | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/3",
+        "multi_source_match=2",
+        "call_chain_two_hop=AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE,LF_CUSTOMHTSCSES_HTOFUND_FUNDCORRECT"
+      ],
+      "chunk_type": "call_flow",
+      "chunk_summary": "AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @fund_enable_level_real, @frozen_balance, @uses_fund_real.enable_balance, @curr_time, @branch_no, @serial_no | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 40,
+      "line_end": 57,
+      "excerpt": "L40:       [AF_交易资金公用(证券)_交易资金详细信息更新][fund_enable_level = @fund_enable_level_real,\n                                                     business_frozen_balance = -@frozen_balance][]\nL43:       [修改记录][uses_fund_real][enable_balance = @uses_fund_real.enable_balance + @frozen_balance]\nL45:       [获取时间][@curr_time]\nL47:       // 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nL48:       [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_REAL_JOUR, branch_no = @branch_no][serial_no = @serial_no]\nL50:       sprintf(@position_str, \"%08d%02d%05d%010d\", @init_date, @uses_fund_real.partition_no, @branch_no, @serial_no);\nL52:       [插入记录][uses_fund_real_jour][money_type = @uses_fund_real.money_type,\n                                          asset_prop = @uses_fund_real.asset_prop,\n                                          client_id = @uses_fund_real.client_id,\n                                          post_balance = @uses_fund_real.enable_balance,\n                                          occur_balance = @frozen_balance,\n                                          remark = @remark_t]",
+      "context_statements": [
+        {
+          "statement_id": 3042,
+          "seq": 28,
+          "kind": "call",
+          "line_start": 40,
+          "line_end": 41,
+          "raw": "      [AF_交易资金公用(证券)_交易资金详细信息更新][fund_enable_level = @fund_enable_level_real, \n                                                 business_frozen_balance = -@frozen_balance][]"
+        },
+        {
+          "statement_id": 3043,
+          "seq": 29,
+          "kind": "action",
+          "line_start": 43,
+          "line_end": 43,
+          "raw": "      [修改记录][uses_fund_real][enable_balance = @uses_fund_real.enable_balance + @frozen_balance]"
+        },
+        {
+          "statement_id": 3044,
+          "seq": 30,
+          "kind": "action",
+          "line_start": 45,
+          "line_end": 45,
+          "raw": "      [获取时间][@curr_time]"
+        },
+        {
+          "statement_id": 3045,
+          "seq": 31,
+          "kind": "comment",
+          "line_start": 47,
+          "line_end": 47,
+          "raw": "      // 内存多分片业务代码调整，serial_no按营业部计数+分片号设置"
+        },
+        {
+          "statement_id": 3046,
+          "seq": 32,
+          "kind": "call",
+          "line_start": 48,
+          "line_end": 48,
+          "raw": "      [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_REAL_JOUR, branch_no = @branch_no][serial_no = @serial_no]"
+        },
+        {
+          "statement_id": 3047,
+          "seq": 33,
+          "kind": "assignment",
+          "line_start": 50,
+          "line_end": 50,
+          "raw": "      sprintf(@position_str, \"%08d%02d%05d%010d\", @init_date, @uses_fund_real.partition_no, @branch_no, @serial_no);"
+        },
+        {
+          "statement_id": 3048,
+          "seq": 34,
+          "kind": "action",
+          "line_start": 52,
+          "line_end": 57,
+          "raw": "      [插入记录][uses_fund_real_jour][money_type = @uses_fund_real.money_type, \n                                      asset_prop = @uses_fund_real.asset_prop, \n                                      client_id = @uses_fund_real.client_id, \n                                      post_balance = @uses_fund_real.enable_balance, \n                                      occur_balance = @frozen_balance, \n                                      remark = @remark_t]"
+        }
+      ],
+      "recovered_blocks": [],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_FUNDSEPUB_FUNDDETAIL_UPDATE",
+          "AF_系统参数公用_系统参数获取",
+          "AF_SESARGPUB_BRANCH_SERIALNO_GET"
+        ],
+        "incoming_callers": [
+          "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL"
+        ],
+        "related_tables": [
+          {
+            "name": "uses_fund_real",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "uses_fund_real",
+            "edge_type": "writes_table"
+          },
+          {
+            "name": "uses_fund_real_jour",
+            "edge_type": "writes_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "修改记录",
+          "插入记录"
+        ],
+        "control_flow": [],
+        "two_hop_outgoing": [
+          {
+            "procedure_name": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079",
+            "via_name": "AF_FUNDSEPUB_FUNDDETAIL_UPDATE",
+            "direction": "outgoing"
+          }
+        ],
+        "two_hop_incoming": [
+          {
+            "procedure_name": "LF_INNERSESSETT_FUNDREAL_ALL_FROZEN",
+            "chinese_name": "LF_内部远程调用(证券清算)_客户资金全部交易冻结",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_FUNDREAL_ALL_FROZEN.uftfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "call_flow",
+            "summary_text": "LF_INNERSESSETT_FUNDREAL_ALL_FROZEN | call_flow | actions: 继续执行, AF_系统参数公用_交易参数获取 | targets: AF_系统参数公用_交易参数获取 | vars: @init_date_t, @usps_exch_arg, @usps_exch_arg.init_date | notes: begin 为适配UF2.0的字段默认值，只要下面代码用到了日期类型的字段，且本函数入参没有的日期类型字段，则初始化为0; end   为适配UF2.0的字段默认值，只要下面代码用到了日期类型的字段，且本函数入参没有的日期类型字段，则初始化为0",
+            "via_name": "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL",
+            "direction": "incoming"
+          }
+        ],
+        "related_procedures": [
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_FUNDDETAIL_UPDATE",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息更新",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUNDDETAIL_UPDATE.uftatomfunction",
+            "line_start": 2,
+            "line_end": 3,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUNDDETAIL_UPDATE | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && \n      fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance"
+          },
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_SESARGPUB_BRANCH_SERIALNO_GET",
+            "chinese_name": "AF_证券交易参数公用_子系统营业部流水号获取",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_BRANCH_SERIALNO_GET.uftatomfunction",
+            "line_start": 2,
+            "line_end": 2,
+            "chunk_type": "control_block",
+            "summary_text": "AF_SESARGPUB_BRANCH_SERIALNO_GET | control_block | conditions: @branch_no == 0 | vars: @branch_no"
+          },
+          {
+            "relation_type": "called_by",
+            "procedure_name": "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL",
+            "chinese_name": "LF_内部远程调用(证券清算)_交易资金冻结明细冻结解冻处理",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL.uftfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "call_flow",
+            "summary_text": "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL | call_flow | actions: 获取日期, 事务处理开始, 获取冲销流水号, AF_账户公用(证券)_资产账户获取 | targets: @curr_date, @cancel_serialno, AF_账户公用(证券)_资产账户获取 | vars: @curr_date, @cancel_serialno, @uses_fund_account"
+          }
+        ]
+      }
+    },
+    {
+      "rank": 2,
+      "score": 169.5,
+      "hit_type": "block",
+      "retrieval_source": "fts_block",
+      "match_source": "block_summary",
+      "procedure_name": "LF_SESINITDEAL_HKSETTLELEVEL_DEAL",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/initdeal/sesinitdeal/LF_SESINITDEAL_HKSETTLELEVEL_DEAL.uftfunction",
+      "matched_text": "LF_SESINITDEAL_HKSETTLELEVEL_DEAL 的事务块，包含 38 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, else | targets=@result_packer, @result_unpacker, AF_交易资金公用(证券)_交易资金详细信息流水插入",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/3",
+        "call_chain_two_hop=AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD,AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE"
+      ],
+      "chunk_type": null,
+      "chunk_summary": null,
+      "block_type": "transaction",
+      "block_summary": "LF_SESINITDEAL_HKSETTLELEVEL_DEAL 的事务块，包含 38 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, else | targets=@result_packer, @result_unpacker, AF_交易资金公用(证券)_交易资金详细信息流水插入",
+      "line_start": 76,
+      "line_end": 144,
+      "excerpt": "L76:   [事务处理开始]\nL77:   // 将净可用大于0的账号清理，记录冻结流水\nL78:   [结果集转换][@result_packer][@result_unpacker]\nL79:   [结果集不为空][@result_unpacker]\nL80:   {\nL81:     [手工解包开始][business_frozen_balance = @business_frozen_balance, business_unfrozen_balance = @business_unfrozen_balance, trade_date = @trade_date][@result_unpacker]\nL82:     {\nL83:       @detail_enable_balance = @business_unfrozen_balance - @business_frozen_balance;\nL84:       <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB,\n                                                        fund_enable_level = CNST_ENABLE_TN_DELIVERY_FUND, init_date = @trade_date]\nL86:       [修改记录][uses_fund_detail][business_frozen_balance = 0.00, business_unfrozen_balance = 0.00]\nL87:       // 25级别记录0流水，日终进行交易回冲\nL88:       [AF_交易资金公用(证券)_交易资金详细信息流水插入][business_flag = 0, uses_fund_detail = @uses_fund_detail,\n                                    fund_account = @fund_account,client_id = @client_id, business_frozen_balance = @detail_enable_balance,\n                                    business_unfrozen_balance = 0.00, settle_flag = '0', occur_balance_x = @detail_enable_balance,\n                                    fund_enable_level = CNST_ENABLE_TN_DELIVERY_FUND, money_type = CNST_MONEYTYPE_RMB, real_action = '1']\nL92:     }\nL93:     [手工解包结束]\nL94:   }\nL96:   // 对20级别增加可用\nL97:   <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB,\n                                                    fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND, init_date = @init_date]\nL99:   [记录为空][uses_fund_detail]\nL100:   {\nL101:     hs_snprintf(@position_str, sizeof(@position_str), \"%.*s%s%.*s%s%010d%010d\", max(0, 18 - length(@fund_account)), @fill_zero_str, @fund_account,\n                                                                                    max(0, 3 - length(CNST_MONEYTYPE_RMB)), @fill_zero_str, CNST_MONEYTYPE_RMB, CNST_ENABLE_T1_DELIVERY_FUND, @init_date);\nL103:     [插入记录][uses_fund_detail][fund_account = @fund_account,\n                                  client_id = @client_id,\n                                  money_type = CNST_MONEYTYPE_RMB,\n                                  fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND,\n                                  init_date = @init_date,\n                                  partition_no = @partition_no,\n                                  business_frozen_balance = 0.00,\n                                  business_unfrozen_balance = @enable_balance_t,\n                                  position_str = @position_str]\nL112:   }\nL113:   else\nL114:   {\nL115:     [修改记录][uses_fund_detail][business_unfrozen_balance = @uses_fund_detail.business_unfrozen_balance + @enable_balance_t]\nL116:   }\nL117:   // 20级别记录0流水，日终进行交易回冲\nL118:   [AF_交易资金公用(证券)_交易资金详细信息流水插入][business_flag = 0, uses_fund_detail = @uses_fund_detail,\n                                fund_account = @fund_account,client_id = @client_id, business_frozen_balance = 0.00,\n                                business_unfrozen_balance = @enable_balance_t, settle_flag = '0',\n                                fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND, money_type = CNST_MONEYTYPE_RMB, real_action = '1']\nL123:   // 更新fundreal表\nL124:   [AF_交易资金公用(证券)_资金可用余额计算获取][uses_fund_account = @uses_fund_account,\n                                   money_type = CNST_MONEYTYPE_RMB,\n                                   fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND][enable_balance = @enable_balance]\nL128:   <Z>[获取记录][uses_fund_real(idx_uft_secu_fund_real)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB]\nL129:   [记录为空][uses_fund_real]\nL130:   {\nL131:     [业务报错返回][ERR_FUND_FUNDREAL_NOTEXISTS][交易资金表记录不存在][@fund_account,CNST_MONEYTYPE_RMB]\nL132:   }\nL134:   [修改记录][uses_fund_real][enable_balance = @enable_balance]\nL136:   [AF_交易资金公用(证券)_新交易资金流水插入][fund_account = @fund_account,\n                                    client_id = @client_id,\n                                    enable_balance = @enable_balance,\n                                    branch_no = @branch_no,\n                                    occur_balance = @enable_balance_t,\n                                    real_action = '1',\n                                    business_flag = 0,\n                                    remark = @remark][]\nL144:   [事务处理结束]",
+      "context_statements": [
+        {
+          "statement_id": 39988,
+          "seq": 54,
+          "kind": "action",
+          "line_start": 76,
+          "line_end": 76,
+          "raw": "  [事务处理开始]"
+        },
+        {
+          "statement_id": 39989,
+          "seq": 55,
+          "kind": "comment",
+          "line_start": 77,
+          "line_end": 77,
+          "raw": "  // 将净可用大于0的账号清理，记录冻结流水"
+        },
+        {
+          "statement_id": 39990,
+          "seq": 56,
+          "kind": "action",
+          "line_start": 78,
+          "line_end": 78,
+          "raw": "  [结果集转换][@result_packer][@result_unpacker]"
+        },
+        {
+          "statement_id": 39991,
+          "seq": 57,
+          "kind": "action",
+          "line_start": 79,
+          "line_end": 79,
+          "raw": "  [结果集不为空][@result_unpacker]"
+        },
+        {
+          "statement_id": 39992,
+          "seq": 58,
+          "kind": "brace",
+          "line_start": 80,
+          "line_end": 80,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 39993,
+          "seq": 59,
+          "kind": "action",
+          "line_start": 81,
+          "line_end": 81,
+          "raw": "    [手工解包开始][business_frozen_balance = @business_frozen_balance, business_unfrozen_balance = @business_unfrozen_balance, trade_date = @trade_date][@result_unpacker]"
+        },
+        {
+          "statement_id": 39994,
+          "seq": 60,
+          "kind": "brace",
+          "line_start": 82,
+          "line_end": 82,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 39995,
+          "seq": 61,
+          "kind": "assignment",
+          "line_start": 83,
+          "line_end": 83,
+          "raw": "      @detail_enable_balance = @business_unfrozen_balance - @business_frozen_balance;"
+        },
+        {
+          "statement_id": 39996,
+          "seq": 62,
+          "kind": "action",
+          "line_start": 84,
+          "line_end": 85,
+          "raw": "      <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB, \n                                                    fund_enable_level = CNST_ENABLE_TN_DELIVERY_FUND, init_date = @trade_date]"
+        },
+        {
+          "statement_id": 39997,
+          "seq": 63,
+          "kind": "action",
+          "line_start": 86,
+          "line_end": 86,
+          "raw": "      [修改记录][uses_fund_detail][business_frozen_balance = 0.00, business_unfrozen_balance = 0.00]"
+        },
+        {
+          "statement_id": 39998,
+          "seq": 64,
+          "kind": "comment",
+          "line_start": 87,
+          "line_end": 87,
+          "raw": "      // 25级别记录0流水，日终进行交易回冲"
+        },
+        {
+          "statement_id": 39999,
+          "seq": 65,
+          "kind": "call",
+          "line_start": 88,
+          "line_end": 91,
+          "raw": "      [AF_交易资金公用(证券)_交易资金详细信息流水插入][business_flag = 0, uses_fund_detail = @uses_fund_detail,\n                                fund_account = @fund_account,client_id = @client_id, business_frozen_balance = @detail_enable_balance,\n                                business_unfrozen_balance = 0.00, settle_flag = '0', occur_balance_x = @detail_enable_balance, \n                                fund_enable_level = CNST_ENABLE_TN_DELIVERY_FUND, money_type = CNST_MONEYTYPE_RMB, real_action = '1']"
+        },
+        {
+          "statement_id": 40000,
+          "seq": 66,
+          "kind": "brace",
+          "line_start": 92,
+          "line_end": 92,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 40001,
+          "seq": 67,
+          "kind": "action",
+          "line_start": 93,
+          "line_end": 93,
+          "raw": "    [手工解包结束]"
+        },
+        {
+          "statement_id": 40002,
+          "seq": 68,
+          "kind": "brace",
+          "line_start": 94,
+          "line_end": 94,
+          "raw": "  }"
+        },
+        {
+          "statement_id": 40003,
+          "seq": 69,
+          "kind": "comment",
+          "line_start": 96,
+          "line_end": 96,
+          "raw": "  // 对20级别增加可用"
+        },
+        {
+          "statement_id": 40004,
+          "seq": 70,
+          "kind": "action",
+          "line_start": 97,
+          "line_end": 98,
+          "raw": "  <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB, \n                                                fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND, init_date = @init_date]"
+        },
+        {
+          "statement_id": 40005,
+          "seq": 71,
+          "kind": "action",
+          "line_start": 99,
+          "line_end": 99,
+          "raw": "  [记录为空][uses_fund_detail]"
+        },
+        {
+          "statement_id": 40006,
+          "seq": 72,
+          "kind": "brace",
+          "line_start": 100,
+          "line_end": 100,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 40007,
+          "seq": 73,
+          "kind": "assignment",
+          "line_start": 101,
+          "line_end": 102,
+          "raw": "    hs_snprintf(@position_str, sizeof(@position_str), \"%.*s%s%.*s%s%010d%010d\", max(0, 18 - length(@fund_account)), @fill_zero_str, @fund_account,\n                                                                                max(0, 3 - length(CNST_MONEYTYPE_RMB)), @fill_zero_str, CNST_MONEYTYPE_RMB, CNST_ENABLE_T1_DELIVERY_FUND, @init_date);"
+        },
+        {
+          "statement_id": 40008,
+          "seq": 74,
+          "kind": "action",
+          "line_start": 103,
+          "line_end": 111,
+          "raw": "    [插入记录][uses_fund_detail][fund_account = @fund_account,\n                              client_id = @client_id,\n                              money_type = CNST_MONEYTYPE_RMB,\n                              fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND,\n                              init_date = @init_date,\n                              partition_no = @partition_no,\n                              business_frozen_balance = 0.00,\n                              business_unfrozen_balance = @enable_balance_t,\n                              position_str = @position_str]"
+        },
+        {
+          "statement_id": 40009,
+          "seq": 75,
+          "kind": "brace",
+          "line_start": 112,
+          "line_end": 112,
+          "raw": "  }"
+        },
+        {
+          "statement_id": 40010,
+          "seq": 76,
+          "kind": "control",
+          "line_start": 113,
+          "line_end": 113,
+          "raw": "  else"
+        },
+        {
+          "statement_id": 40011,
+          "seq": 77,
+          "kind": "brace",
+          "line_start": 114,
+          "line_end": 114,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 40012,
+          "seq": 78,
+          "kind": "action",
+          "line_start": 115,
+          "line_end": 115,
+          "raw": "    [修改记录][uses_fund_detail][business_unfrozen_balance = @uses_fund_detail.business_unfrozen_balance + @enable_balance_t]"
+        },
+        {
+          "statement_id": 40013,
+          "seq": 79,
+          "kind": "brace",
+          "line_start": 116,
+          "line_end": 116,
+          "raw": "  }"
+        },
+        {
+          "statement_id": 40014,
+          "seq": 80,
+          "kind": "comment",
+          "line_start": 117,
+          "line_end": 117,
+          "raw": "  // 20级别记录0流水，日终进行交易回冲"
+        },
+        {
+          "statement_id": 40015,
+          "seq": 81,
+          "kind": "call",
+          "line_start": 118,
+          "line_end": 121,
+          "raw": "  [AF_交易资金公用(证券)_交易资金详细信息流水插入][business_flag = 0, uses_fund_detail = @uses_fund_detail,\n                            fund_account = @fund_account,client_id = @client_id, business_frozen_balance = 0.00,\n                            business_unfrozen_balance = @enable_balance_t, settle_flag = '0', \n                            fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND, money_type = CNST_MONEYTYPE_RMB, real_action = '1']"
+        },
+        {
+          "statement_id": 40016,
+          "seq": 82,
+          "kind": "comment",
+          "line_start": 123,
+          "line_end": 123,
+          "raw": "  // 更新fundreal表"
+        },
+        {
+          "statement_id": 40017,
+          "seq": 83,
+          "kind": "call",
+          "line_start": 124,
+          "line_end": 126,
+          "raw": "  [AF_交易资金公用(证券)_资金可用余额计算获取][uses_fund_account = @uses_fund_account, \n                               money_type = CNST_MONEYTYPE_RMB,\n                               fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND][enable_balance = @enable_balance]"
+        },
+        {
+          "statement_id": 40018,
+          "seq": 84,
+          "kind": "action",
+          "line_start": 128,
+          "line_end": 128,
+          "raw": "  <Z>[获取记录][uses_fund_real(idx_uft_secu_fund_real)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB]"
+        },
+        {
+          "statement_id": 40019,
+          "seq": 85,
+          "kind": "action",
+          "line_start": 129,
+          "line_end": 129,
+          "raw": "  [记录为空][uses_fund_real]"
+        },
+        {
+          "statement_id": 40020,
+          "seq": 86,
+          "kind": "brace",
+          "line_start": 130,
+          "line_end": 130,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 40021,
+          "seq": 87,
+          "kind": "action",
+          "line_start": 131,
+          "line_end": 131,
+          "raw": "    [业务报错返回][ERR_FUND_FUNDREAL_NOTEXISTS][交易资金表记录不存在][@fund_account,CNST_MONEYTYPE_RMB]"
+        },
+        {
+          "statement_id": 40022,
+          "seq": 88,
+          "kind": "brace",
+          "line_start": 132,
+          "line_end": 132,
+          "raw": "  }"
+        },
+        {
+          "statement_id": 40023,
+          "seq": 89,
+          "kind": "action",
+          "line_start": 134,
+          "line_end": 134,
+          "raw": "  [修改记录][uses_fund_real][enable_balance = @enable_balance]"
+        },
+        {
+          "statement_id": 40024,
+          "seq": 90,
+          "kind": "call",
+          "line_start": 136,
+          "line_end": 143,
+          "raw": "  [AF_交易资金公用(证券)_新交易资金流水插入][fund_account = @fund_account,\n                                client_id = @client_id,\n                                enable_balance = @enable_balance,\n                                branch_no = @branch_no,\n                                occur_balance = @enable_balance_t,\n                                real_action = '1',\n                                business_flag = 0,\n                                remark = @remark][]"
+        },
+        {
+          "statement_id": 40025,
+          "seq": 91,
+          "kind": "action",
+          "line_start": 144,
+          "line_end": 144,
+          "raw": "  [事务处理结束]"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "transaction",
+          "anchor_name": "事务处理开始",
+          "line_start": 76,
+          "line_end": 144,
+          "summary_text": "LF_SESINITDEAL_HKSETTLELEVEL_DEAL 的事务块，包含 38 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, else | targets=@result_packer, @result_unpacker, AF_交易资金公用(证券)_交易资金详细信息流水插入",
+          "relations": [
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_新交易资金流水插入",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_资金可用余额计算获取",
+              "target_kind": "procedure"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+          "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+          "AF_FUNDSEPUB_FUND_REAL_GET"
+        ],
+        "incoming_callers": [
+          "LF_SESINITDEAL_HKSETTLELEVEL_DEAL"
+        ],
+        "related_tables": [
+          {
+            "name": "upbs_init_date_model",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "uses_fund_detail",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "uses_fund_detail",
+            "edge_type": "writes_table"
+          }
+        ],
+        "related_actions": [
+          "EXCEPTION",
+          "WHEN_OTHERS",
+          "clob字段解包"
+        ],
+        "control_flow": [],
+        "two_hop_outgoing": [
+          {
+            "procedure_name": "AF_SESARGPUB_BRANCH_SERIALNO_GET",
+            "chinese_name": "AF_证券交易参数公用_子系统营业部流水号获取",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_BRANCH_SERIALNO_GET.uftatomfunction",
+            "line_start": 2,
+            "line_end": 2,
+            "chunk_type": "control_block",
+            "summary_text": "AF_SESARGPUB_BRANCH_SERIALNO_GET | control_block | conditions: @branch_no == 0 | vars: @branch_no",
+            "via_name": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+            "direction": "outgoing"
+          },
+          {
+            "procedure_name": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079",
+            "via_name": "LF_SESINITDEAL_HKSETTLELEVEL_DEAL",
+            "direction": "outgoing"
+          },
+          {
+            "procedure_name": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_新交易资金流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 11,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT | control_block | conditions: hs_isnull_c(@finance_type) == 0 | vars: @finance_type | notes: finance_type为空保护; @occur_balance = @enable_balance - @old_enable_balance;",
+            "via_name": "LF_SESINITDEAL_HKSETTLELEVEL_DEAL",
+            "direction": "outgoing"
+          }
+        ],
+        "two_hop_incoming": [],
+        "related_procedures": [
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079"
+          },
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_新交易资金流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 11,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT | control_block | conditions: hs_isnull_c(@finance_type) == 0 | vars: @finance_type | notes: finance_type为空保护; @occur_balance = @enable_balance - @old_enable_balance;"
+          },
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_FUND_REAL_GET",
+            "chinese_name": "AF_交易资金公用(证券)_资金可用余额计算获取",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_REAL_GET.uftatomfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "action_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_REAL_GET | action_block | actions: 遍历记录开始 | targets: uses_fund_detail | vars: @net_balance, @lower_net_balance, @upper_net_balance, @uses_fund_account.fund_account, @money_type | notes: 计算小于等于传入层级的资金"
+          }
+        ]
+      }
+    },
+    {
+      "rank": 3,
+      "score": 169.083,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD.uftatomfunction",
+      "matched_text": "AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @enable_balance_t, @uses_fund_real.enable_balance, @remark_t, @remark, @fund_enable_level_real, @curr_time | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/3",
+        "call_chain_two_hop=AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE,LF_CUSTOMHTSCSES_HTOFUND_FUNDCORRECT"
+      ],
+      "chunk_type": "call_flow",
+      "chunk_summary": "AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @enable_balance_t, @uses_fund_real.enable_balance, @remark_t, @remark, @fund_enable_level_real, @curr_time | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 60,
+      "line_end": 72,
+      "excerpt": "L60:     @enable_balance_t = @uses_fund_real.enable_balance;\nL62:     hs_snprintf(@remark_t, 2001, \"%s|冻结全部可用金额,enable_balance=%f\", @remark, -@enable_balance_t);\nL64:     [AF_交易资金公用(证券)_交易资金详细信息更新][fund_enable_level = @fund_enable_level_real,\n                                                   business_frozen_balance = @enable_balance_t][]\nL67:     [修改记录][uses_fund_real][enable_balance = @uses_fund_real.enable_balance - @enable_balance_t]\nL69:     [获取时间][@curr_time]\nL71:     // 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nL72:     [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_REAL_JOUR, branch_no = @branch_no][serial_no = @serial_no]",
+      "context_statements": [
+        {
+          "statement_id": 3050,
+          "seq": 36,
+          "kind": "assignment",
+          "line_start": 60,
+          "line_end": 60,
+          "raw": "    @enable_balance_t = @uses_fund_real.enable_balance;"
+        },
+        {
+          "statement_id": 3051,
+          "seq": 37,
+          "kind": "assignment",
+          "line_start": 62,
+          "line_end": 62,
+          "raw": "    hs_snprintf(@remark_t, 2001, \"%s|冻结全部可用金额,enable_balance=%f\", @remark, -@enable_balance_t);"
+        },
+        {
+          "statement_id": 3052,
+          "seq": 38,
+          "kind": "call",
+          "line_start": 64,
+          "line_end": 65,
+          "raw": "    [AF_交易资金公用(证券)_交易资金详细信息更新][fund_enable_level = @fund_enable_level_real, \n                                               business_frozen_balance = @enable_balance_t][]"
+        },
+        {
+          "statement_id": 3053,
+          "seq": 39,
+          "kind": "action",
+          "line_start": 67,
+          "line_end": 67,
+          "raw": "    [修改记录][uses_fund_real][enable_balance = @uses_fund_real.enable_balance - @enable_balance_t]"
+        },
+        {
+          "statement_id": 3054,
+          "seq": 40,
+          "kind": "action",
+          "line_start": 69,
+          "line_end": 69,
+          "raw": "    [获取时间][@curr_time]"
+        },
+        {
+          "statement_id": 3055,
+          "seq": 41,
+          "kind": "comment",
+          "line_start": 71,
+          "line_end": 71,
+          "raw": "    // 内存多分片业务代码调整，serial_no按营业部计数+分片号设置"
+        },
+        {
+          "statement_id": 3056,
+          "seq": 42,
+          "kind": "call",
+          "line_start": 72,
+          "line_end": 72,
+          "raw": "    [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_REAL_JOUR, branch_no = @branch_no][serial_no = @serial_no]"
+        }
+      ],
+      "recovered_blocks": [],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_FUNDSEPUB_FUNDDETAIL_UPDATE",
+          "AF_系统参数公用_系统参数获取",
+          "AF_SESARGPUB_BRANCH_SERIALNO_GET"
+        ],
+        "incoming_callers": [
+          "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL"
+        ],
+        "related_tables": [
+          {
+            "name": "uses_fund_real",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "uses_fund_real",
+            "edge_type": "writes_table"
+          },
+          {
+            "name": "uses_fund_real_jour",
+            "edge_type": "writes_table"
+          }
+        ],
+        "related_actions": [
+          "业务报错返回",
+          "修改记录",
+          "插入记录"
+        ],
+        "control_flow": [],
+        "two_hop_outgoing": [
+          {
+            "procedure_name": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079",
+            "via_name": "AF_FUNDSEPUB_FUNDDETAIL_UPDATE",
+            "direction": "outgoing"
+          }
+        ],
+        "two_hop_incoming": [
+          {
+            "procedure_name": "LF_INNERSESSETT_FUNDREAL_ALL_FROZEN",
+            "chinese_name": "LF_内部远程调用(证券清算)_客户资金全部交易冻结",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_FUNDREAL_ALL_FROZEN.uftfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "call_flow",
+            "summary_text": "LF_INNERSESSETT_FUNDREAL_ALL_FROZEN | call_flow | actions: 继续执行, AF_系统参数公用_交易参数获取 | targets: AF_系统参数公用_交易参数获取 | vars: @init_date_t, @usps_exch_arg, @usps_exch_arg.init_date | notes: begin 为适配UF2.0的字段默认值，只要下面代码用到了日期类型的字段，且本函数入参没有的日期类型字段，则初始化为0; end   为适配UF2.0的字段默认值，只要下面代码用到了日期类型的字段，且本函数入参没有的日期类型字段，则初始化为0",
+            "via_name": "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL",
+            "direction": "incoming"
+          }
+        ],
+        "related_procedures": [
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_FUNDDETAIL_UPDATE",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息更新",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUNDDETAIL_UPDATE.uftatomfunction",
+            "line_start": 2,
+            "line_end": 3,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUNDDETAIL_UPDATE | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && \n      fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance"
+          },
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_SESARGPUB_BRANCH_SERIALNO_GET",
+            "chinese_name": "AF_证券交易参数公用_子系统营业部流水号获取",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_BRANCH_SERIALNO_GET.uftatomfunction",
+            "line_start": 2,
+            "line_end": 2,
+            "chunk_type": "control_block",
+            "summary_text": "AF_SESARGPUB_BRANCH_SERIALNO_GET | control_block | conditions: @branch_no == 0 | vars: @branch_no"
+          },
+          {
+            "relation_type": "called_by",
+            "procedure_name": "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL",
+            "chinese_name": "LF_内部远程调用(证券清算)_交易资金冻结明细冻结解冻处理",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL.uftfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "call_flow",
+            "summary_text": "LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL | call_flow | actions: 获取日期, 事务处理开始, 获取冲销流水号, AF_账户公用(证券)_资产账户获取 | targets: @curr_date, @cancel_serialno, AF_账户公用(证券)_资产账户获取 | vars: @curr_date, @cancel_serialno, @uses_fund_account"
+          }
+        ]
+      }
+    },
+    {
+      "rank": 5,
+      "score": 168.0,
+      "hit_type": "block",
+      "retrieval_source": "fts_block",
+      "match_source": "block_summary",
+      "procedure_name": "LF_DATASESSETTLEINIT_BKINTENER_DEAL",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_DATASESSETTLEINIT_BKINTENER_DEAL.uftfunction",
+      "matched_text": "LF_DATASESSETTLEINIT_BKINTENER_DEAL 的事务块，包含 112 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, AF_证券交易参数公用_子系统营业部流水号获取 | targets=@curr_date, @curr_time, @unpack_sett",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/3",
+        "call_chain_two_hop=AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD,AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE"
+      ],
+      "chunk_type": null,
+      "chunk_summary": null,
+      "block_type": "transaction",
+      "block_summary": "LF_DATASESSETTLEINIT_BKINTENER_DEAL 的事务块，包含 112 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, AF_证券交易参数公用_子系统营业部流水号获取 | targets=@curr_date, @curr_time, @unpack_sett",
+      "line_start": 9,
+      "line_end": 191,
+      "excerpt": "L9:   [事务处理开始]\nL11:   [clob字段解包][@unpack_sett][@settle_clob][pi_settle_clob]\nL13:   [手工解包开始][fund_account = @fund_account, money_type = @money_type, occur_balance = @occur_balance,\n                  rate_kind = @rate_kind, begin_balance = @begin_balance, integral_balance = @integral_balance,\n                  fine_integral = @fine_integral, interest = @interest_t, interest_tax = @interest_tax,\n                  integral_update = @integral_update, integral_flag = @integral_flag, real_status = @real_status,\n                  remark = @remark, business_flag = @business_flag, real_action = @real_action,\n                  exchange_type = @exchange_type][@unpack_sett]\nL19:   {\nL20:     // 20251225 zengyp mod 初始化赋值，避免多条记录时重复更新 修改单:T202512255203\nL21:     @business_frozen_balance = 0.0;\nL22:     @business_unfrozen_balance = 0.0;\nL24:     <Z>[获取记录][uses_fund_account(idx_uses_fund_account)][fund_account = @fund_account]\nL25:     [记录为空][uses_fund_account]\nL26:     {\nL27:       continue;\nL28:     }\nL29:     else\nL30:     {\nL31:       [获取字段][uses_fund_account][client_id = @client_id]\nL32:     }\nL34:     <Z>[获取记录][uses_fund_real(idx_uft_secu_fund_real)][fund_account = @uses_fund_account.fund_account,\n                                                            money_type = @money_type]\nL36:     [记录为空][uses_fund_real]\nL37:     {\nL38:       [业务报错返回][ERR_FUND_FUNDREAL_NOTEXISTS][交易资金表记录不存在][@fund_account, @money_type]\nL39:     }\nL41:     if (fabs(@occur_balance) > CNST_DOUBLE_ZERO)\nL42:     {\nL43:       if ('0' == @oper_flag)\nL44:       {\nL45:         //oper_flag = 0的时候，\nL46:         //occur_balance > 0表示结息，更新business_unfrozen_balance；\nL47:         //occur_balance < 0表示罚息，更新business_frozen_balance\nL48:         @occur_balance_t = @occur_balance;\nL49:         @current_balance = @occur_balance_t;\nL50:         @cash_balance = @occur_balance_t;\nL52:         if (@occur_balance_t < -1 * CNST_DOUBLE_ZERO)\nL53:         {\nL54:           @business_frozen_balance = fabs(@occur_balance_t);\nL55:         }\nL56:         else if (@occur_balance_t > CNST_DOUBLE_ZERO)\nL57:         {\nL58:           @business_unfrozen_balance = @occur_balance_t;\nL59:         }\nL60:       }\nL61:       else if ('2' == @oper_flag)\nL62:       {\nL63:         //oper_flag为2，就是批量利息，occur_balance记入interest\nL64:         @fine_interest = 0.0;\nL65:         @interest = @occur_balance;\nL67:         [LF_内部远程调用(证券清算)_簿记利息汇总处理][][occur_balance_t = @occur_balance_t,\n                                                  current_balance = @current_balance,\n                                                  cash_balance = @cash_balance,\n                                                  business_frozen_balance = @business_frozen_balance,\n                                                  business_unfrozen_balance = @business_unfrozen_balance]\nL72:       }\nL73:       else if ('1' == @oper_flag)\nL74:       {\nL75:         //oper_flag为1，就是批量罚息，occur_balance记入fine_interest\nL76:         @interest = 0.0;\nL77:         @fine_interest = @occur_balance;\nL79:         [LF_内部远程调用(证券清算)_簿记利息汇总处理][][occur_balance_t = @occur_balance_t,\n                                                  current_balance = @current_balance,\n                                                  cash_balance = @cash_balance,\n                                                  business_frozen_balance = @business_frozen_balance,\n                                                  business_unfrozen_balance = @business_unfrozen_balance]\nL84:       }\nL86:       // 20251216 zengyp mod 转存管2063、2064不更新资金 修改单:T202512164841\nL87:       if (fabs(@occur_balance_t) > CNST_DOUBLE_ZERO && (@business_flag != CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT && @business_flag != CNST_BUSIFLAG_TRANSFER_DEPOSIT_IN))\nL88:       {\nL89:         @old_enable_balance = @uses_fund_real.enable_balance;\nL91:         <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @uses_fund_account.fund_account,\n                                                            money_type = @money_type,\n                                                            fund_enable_level = @fund_enable_level,\n                                                            init_date = @init_date_t]\nL96:         [记录为空][uses_fund_detail]\nL97:         {\nL98:           // 20251108 yuemt mod 补充定位串 任务单: T202507287360-V2\nL99:           hs_snprintf(@position_str, sizeof(@position_str), \"%.*s%s%.*s%s%010d%010d\", max(0, 18 - length(@fund_account)), @fill_zero_str, @fund_account,\n                                                                                          max(0, 3 - length(@money_type)), @fill_zero_str, @money_type,\n                                                                                          @fund_enable_level, @init_date_t);\nL102:           [插入记录][uses_fund_detail][client_id = @client_id,\n                                         init_date = @init_date_t]\nL104:         }\nL105:         else\nL106:         {\nL107:           [修改记录][uses_fund_detail][business_frozen_balance = @uses_fund_detail.business_frozen_balance + @business_frozen_balance,\n                                         business_unfrozen_balance = @uses_fund_detail.business_unfrozen_balance + @business_unfrozen_balance]\nL109:         }\nL111:         [AF_交易资金公用(证券)_交易资金详细信息流水插入][fund_account = @uses_fund_account.fund_account,\n                                                   client_id = @uses_fund_account.client_id]\nL114:         [AF_交易资金公用(证券)_资金可用余额计算获取][uses_fund_account = @uses_fund_account,\n                                                money_type = @money_type,\n                                                fund_enable_level = @fund_enable_level_check][enable_balance = @enable_balance]\nL118:         [修改记录][uses_fund_real][enable_balance = @enable_balance,\n                                     real_buy_balance = @uses_fund_real.real_buy_balance + @real_buy_balance,\n                                     real_sell_balance = @uses_fund_real.real_sell_balance + @real_sell_balance,\n                                     entrust_buy_balance = @uses_fund_real.entrust_buy_balance + @entrust_buy_balance,\n                                     current_balance = @uses_fund_real.current_balance + @current_balance,\n                                     frozen_balance = @uses_fund_real.frozen_balance + @frozen_balance,\n                                     unfrozen_balance = @uses_fund_real.unfrozen_balance + @unfrozen_balance,\n                                     correct_balance = @uses_fund_real.correct_balance + @correct_balance,\n                                     cash_balance = @uses_fund_real.cash_balance + @cash_balance,\n                                     check_balance = @uses_fund_real.check_balance + @check_balance,\n                                     uncome_buy_balance = @uses_fund_real.uncome_buy_balance + @uncome_buy_balance,\n                                     uncome_sell_balance = @uses_fund_real.uncome_sell_balance + @uncome_sell_balance,\n                                     uncome_correct_balance = @uses_fund_real.uncome_correct_balance + @uncome_correct_balance,\n                                     foregift_balance = @uses_fund_real.foregift_balance + @foregift_balance,\n                                     mortgage_balance = @uses_fund_real.mortgage_balance + @mortgage_balance]\nL134:         [AF_交易资金公用(证券)_新交易资金流水插入][fund_account = @uses_fund_account.fund_account,\n                                               client_id = @uses_fund_account.client_id,\n                                               enable_balance = @uses_fund_real.enable_balance,\n                                               branch_no = @uses_fund_account.branch_no,\n                                               occur_balance = @occur_balance_t,\n                                               remark = @remark][]\nL140:       }\nL141:     }\nL143:     // 20260112 zengyp mod 批量结息归本/批量罚息归本 不记fund_change_info，日终由簿记处理回库2.0和ftc 修改单:T202601103120\nL144:     if ('1' == @oper_flag || '2' == @oper_flag)\nL145:     {\nL146:       continue;\nL147:     }\nL149:     [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_CHANGE_INFO,\n                                            branch_no = @uses_fund_account.branch_no][serial_no = @serial_no1]\nL152:     [获取时间][@curr_time]\nL153:     [获取日期][@curr_date]\nL155:     if (fabs(@current_balance) > CNST_DOUBLE_ZERO)\nL156:     {\nL157:       @frozen_kind = '0';\nL158:     }\nL159:     else\nL160:     {\nL161:       @frozen_kind = '1';\nL162:     }\nL164:     @post_balance_t = @uses_fund_real.current_balance;\nL166:     // 转存管特殊处理\nL167:     if (@business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT || @business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_IN)\nL168:     {\nL169:       @frozen_kind = '0';\nL170:       @join_date = 0;\nL172:       // 20251225 zengyp mod 落表uses_fund_changeinfo的current_balance、post_balance不使用簿记传入，内存自己处理  修改单:T202512255203\nL173:       @current_balance = @uses_fund_real.current_balance;\nL174:       @cash_balance = 0.00;\nL175:       if (@business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT)\nL176:       {\nL177:         @current_balance = @current_balance * -1;\nL178:         @post_balance_t = 0.00;\nL179:       }\nL181:     }\nL183:     // 20250925 yangxz 添加position_str 定位串 fund_account(18)+money_type(3)+serial_no(10)\nL184:     hs_snprintf(@position_str, sizeof(@position_str), \"%0*d%s%0*d%s%010d\", 19 - length(@fund_account), 0, @fund_account, 4 - length(@money_type), 0, @money_type, @serial_no1);\nL185:     [插入记录][uses_fund_changeinfo][serial_no = @serial_no1,\n                                       post_balance = @post_balance_t,\n                                       interest = @interest_t]\nL188:   }\nL189:   [手工解包结束]\nL191:   [事务处理结束]",
+      "context_statements": [
+        {
+          "statement_id": 44163,
+          "seq": 7,
+          "kind": "action",
+          "line_start": 9,
+          "line_end": 9,
+          "raw": "  [事务处理开始]"
+        },
+        {
+          "statement_id": 44164,
+          "seq": 8,
+          "kind": "action",
+          "line_start": 11,
+          "line_end": 11,
+          "raw": "  [clob字段解包][@unpack_sett][@settle_clob][pi_settle_clob]"
+        },
+        {
+          "statement_id": 44165,
+          "seq": 9,
+          "kind": "action",
+          "line_start": 13,
+          "line_end": 18,
+          "raw": "  [手工解包开始][fund_account = @fund_account, money_type = @money_type, occur_balance = @occur_balance,\n              rate_kind = @rate_kind, begin_balance = @begin_balance, integral_balance = @integral_balance,\n              fine_integral = @fine_integral, interest = @interest_t, interest_tax = @interest_tax,\n              integral_update = @integral_update, integral_flag = @integral_flag, real_status = @real_status,\n              remark = @remark, business_flag = @business_flag, real_action = @real_action,\n              exchange_type = @exchange_type][@unpack_sett]"
+        },
+        {
+          "statement_id": 44166,
+          "seq": 10,
+          "kind": "brace",
+          "line_start": 19,
+          "line_end": 19,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 44167,
+          "seq": 11,
+          "kind": "comment",
+          "line_start": 20,
+          "line_end": 20,
+          "raw": "    // 20251225 zengyp mod 初始化赋值，避免多条记录时重复更新 修改单:T202512255203"
+        },
+        {
+          "statement_id": 44168,
+          "seq": 12,
+          "kind": "assignment",
+          "line_start": 21,
+          "line_end": 21,
+          "raw": "    @business_frozen_balance = 0.0;"
+        },
+        {
+          "statement_id": 44169,
+          "seq": 13,
+          "kind": "assignment",
+          "line_start": 22,
+          "line_end": 22,
+          "raw": "    @business_unfrozen_balance = 0.0;"
+        },
+        {
+          "statement_id": 44170,
+          "seq": 14,
+          "kind": "action",
+          "line_start": 24,
+          "line_end": 24,
+          "raw": "    <Z>[获取记录][uses_fund_account(idx_uses_fund_account)][fund_account = @fund_account]"
+        },
+        {
+          "statement_id": 44171,
+          "seq": 15,
+          "kind": "action",
+          "line_start": 25,
+          "line_end": 25,
+          "raw": "    [记录为空][uses_fund_account]"
+        },
+        {
+          "statement_id": 44172,
+          "seq": 16,
+          "kind": "brace",
+          "line_start": 26,
+          "line_end": 26,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44173,
+          "seq": 17,
+          "kind": "control",
+          "line_start": 27,
+          "line_end": 27,
+          "raw": "      continue;"
+        },
+        {
+          "statement_id": 44174,
+          "seq": 18,
+          "kind": "brace",
+          "line_start": 28,
+          "line_end": 28,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44175,
+          "seq": 19,
+          "kind": "control",
+          "line_start": 29,
+          "line_end": 29,
+          "raw": "    else"
+        },
+        {
+          "statement_id": 44176,
+          "seq": 20,
+          "kind": "brace",
+          "line_start": 30,
+          "line_end": 30,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44177,
+          "seq": 21,
+          "kind": "action",
+          "line_start": 31,
+          "line_end": 31,
+          "raw": "      [获取字段][uses_fund_account][client_id = @client_id]"
+        },
+        {
+          "statement_id": 44178,
+          "seq": 22,
+          "kind": "brace",
+          "line_start": 32,
+          "line_end": 32,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44179,
+          "seq": 23,
+          "kind": "action",
+          "line_start": 34,
+          "line_end": 35,
+          "raw": "    <Z>[获取记录][uses_fund_real(idx_uft_secu_fund_real)][fund_account = @uses_fund_account.fund_account,\n                                                        money_type = @money_type]"
+        },
+        {
+          "statement_id": 44180,
+          "seq": 24,
+          "kind": "action",
+          "line_start": 36,
+          "line_end": 36,
+          "raw": "    [记录为空][uses_fund_real]"
+        },
+        {
+          "statement_id": 44181,
+          "seq": 25,
+          "kind": "brace",
+          "line_start": 37,
+          "line_end": 37,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44182,
+          "seq": 26,
+          "kind": "action",
+          "line_start": 38,
+          "line_end": 38,
+          "raw": "      [业务报错返回][ERR_FUND_FUNDREAL_NOTEXISTS][交易资金表记录不存在][@fund_account, @money_type]"
+        },
+        {
+          "statement_id": 44183,
+          "seq": 27,
+          "kind": "brace",
+          "line_start": 39,
+          "line_end": 39,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44184,
+          "seq": 28,
+          "kind": "control",
+          "line_start": 41,
+          "line_end": 41,
+          "raw": "    if (fabs(@occur_balance) > CNST_DOUBLE_ZERO)"
+        },
+        {
+          "statement_id": 44185,
+          "seq": 29,
+          "kind": "brace",
+          "line_start": 42,
+          "line_end": 42,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44186,
+          "seq": 30,
+          "kind": "control",
+          "line_start": 43,
+          "line_end": 43,
+          "raw": "      if ('0' == @oper_flag)"
+        },
+        {
+          "statement_id": 44187,
+          "seq": 31,
+          "kind": "brace",
+          "line_start": 44,
+          "line_end": 44,
+          "raw": "      {"
+        },
+        {
+          "statement_id": 44188,
+          "seq": 32,
+          "kind": "comment",
+          "line_start": 45,
+          "line_end": 45,
+          "raw": "        //oper_flag = 0的时候， "
+        },
+        {
+          "statement_id": 44189,
+          "seq": 33,
+          "kind": "comment",
+          "line_start": 46,
+          "line_end": 46,
+          "raw": "        //occur_balance > 0表示结息，更新business_unfrozen_balance；"
+        },
+        {
+          "statement_id": 44190,
+          "seq": 34,
+          "kind": "comment",
+          "line_start": 47,
+          "line_end": 47,
+          "raw": "        //occur_balance < 0表示罚息，更新business_frozen_balance"
+        },
+        {
+          "statement_id": 44191,
+          "seq": 35,
+          "kind": "assignment",
+          "line_start": 48,
+          "line_end": 48,
+          "raw": "        @occur_balance_t = @occur_balance;"
+        },
+        {
+          "statement_id": 44192,
+          "seq": 36,
+          "kind": "assignment",
+          "line_start": 49,
+          "line_end": 49,
+          "raw": "        @current_balance = @occur_balance_t;"
+        },
+        {
+          "statement_id": 44193,
+          "seq": 37,
+          "kind": "assignment",
+          "line_start": 50,
+          "line_end": 50,
+          "raw": "        @cash_balance = @occur_balance_t;"
+        },
+        {
+          "statement_id": 44194,
+          "seq": 38,
+          "kind": "control",
+          "line_start": 52,
+          "line_end": 52,
+          "raw": "        if (@occur_balance_t < -1 * CNST_DOUBLE_ZERO)"
+        },
+        {
+          "statement_id": 44195,
+          "seq": 39,
+          "kind": "brace",
+          "line_start": 53,
+          "line_end": 53,
+          "raw": "        {"
+        },
+        {
+          "statement_id": 44196,
+          "seq": 40,
+          "kind": "assignment",
+          "line_start": 54,
+          "line_end": 54,
+          "raw": "          @business_frozen_balance = fabs(@occur_balance_t);"
+        },
+        {
+          "statement_id": 44197,
+          "seq": 41,
+          "kind": "brace",
+          "line_start": 55,
+          "line_end": 55,
+          "raw": "        }"
+        },
+        {
+          "statement_id": 44198,
+          "seq": 42,
+          "kind": "control",
+          "line_start": 56,
+          "line_end": 56,
+          "raw": "        else if (@occur_balance_t > CNST_DOUBLE_ZERO)"
+        },
+        {
+          "statement_id": 44199,
+          "seq": 43,
+          "kind": "brace",
+          "line_start": 57,
+          "line_end": 57,
+          "raw": "        {"
+        },
+        {
+          "statement_id": 44200,
+          "seq": 44,
+          "kind": "assignment",
+          "line_start": 58,
+          "line_end": 58,
+          "raw": "          @business_unfrozen_balance = @occur_balance_t;"
+        },
+        {
+          "statement_id": 44201,
+          "seq": 45,
+          "kind": "brace",
+          "line_start": 59,
+          "line_end": 59,
+          "raw": "        }"
+        },
+        {
+          "statement_id": 44202,
+          "seq": 46,
+          "kind": "brace",
+          "line_start": 60,
+          "line_end": 60,
+          "raw": "      }"
+        },
+        {
+          "statement_id": 44203,
+          "seq": 47,
+          "kind": "control",
+          "line_start": 61,
+          "line_end": 61,
+          "raw": "      else if ('2' == @oper_flag)"
+        },
+        {
+          "statement_id": 44204,
+          "seq": 48,
+          "kind": "brace",
+          "line_start": 62,
+          "line_end": 62,
+          "raw": "      {"
+        },
+        {
+          "statement_id": 44205,
+          "seq": 49,
+          "kind": "comment",
+          "line_start": 63,
+          "line_end": 63,
+          "raw": "        //oper_flag为2，就是批量利息，occur_balance记入interest"
+        },
+        {
+          "statement_id": 44206,
+          "seq": 50,
+          "kind": "assignment",
+          "line_start": 64,
+          "line_end": 64,
+          "raw": "        @fine_interest = 0.0;"
+        },
+        {
+          "statement_id": 44207,
+          "seq": 51,
+          "kind": "assignment",
+          "line_start": 65,
+          "line_end": 65,
+          "raw": "        @interest = @occur_balance;"
+        },
+        {
+          "statement_id": 44208,
+          "seq": 52,
+          "kind": "call",
+          "line_start": 67,
+          "line_end": 71,
+          "raw": "        [LF_内部远程调用(证券清算)_簿记利息汇总处理][][occur_balance_t = @occur_balance_t,\n                                              current_balance = @current_balance,\n                                              cash_balance = @cash_balance,\n                                              business_frozen_balance = @business_frozen_balance,\n                                              business_unfrozen_balance = @business_unfrozen_balance]"
+        },
+        {
+          "statement_id": 44209,
+          "seq": 53,
+          "kind": "brace",
+          "line_start": 72,
+          "line_end": 72,
+          "raw": "      }"
+        },
+        {
+          "statement_id": 44210,
+          "seq": 54,
+          "kind": "control",
+          "line_start": 73,
+          "line_end": 73,
+          "raw": "      else if ('1' == @oper_flag)"
+        },
+        {
+          "statement_id": 44211,
+          "seq": 55,
+          "kind": "brace",
+          "line_start": 74,
+          "line_end": 74,
+          "raw": "      {"
+        },
+        {
+          "statement_id": 44212,
+          "seq": 56,
+          "kind": "comment",
+          "line_start": 75,
+          "line_end": 75,
+          "raw": "        //oper_flag为1，就是批量罚息，occur_balance记入fine_interest"
+        },
+        {
+          "statement_id": 44213,
+          "seq": 57,
+          "kind": "assignment",
+          "line_start": 76,
+          "line_end": 76,
+          "raw": "        @interest = 0.0;"
+        },
+        {
+          "statement_id": 44214,
+          "seq": 58,
+          "kind": "assignment",
+          "line_start": 77,
+          "line_end": 77,
+          "raw": "        @fine_interest = @occur_balance;"
+        },
+        {
+          "statement_id": 44215,
+          "seq": 59,
+          "kind": "call",
+          "line_start": 79,
+          "line_end": 83,
+          "raw": "        [LF_内部远程调用(证券清算)_簿记利息汇总处理][][occur_balance_t = @occur_balance_t,\n                                              current_balance = @current_balance,\n                                              cash_balance = @cash_balance,\n                                              business_frozen_balance = @business_frozen_balance,\n                                              business_unfrozen_balance = @business_unfrozen_balance]"
+        },
+        {
+          "statement_id": 44216,
+          "seq": 60,
+          "kind": "brace",
+          "line_start": 84,
+          "line_end": 84,
+          "raw": "      }"
+        },
+        {
+          "statement_id": 44217,
+          "seq": 61,
+          "kind": "comment",
+          "line_start": 86,
+          "line_end": 86,
+          "raw": "      // 20251216 zengyp mod 转存管2063、2064不更新资金 修改单:T202512164841"
+        },
+        {
+          "statement_id": 44218,
+          "seq": 62,
+          "kind": "control",
+          "line_start": 87,
+          "line_end": 87,
+          "raw": "      if (fabs(@occur_balance_t) > CNST_DOUBLE_ZERO && (@business_flag != CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT && @business_flag != CNST_BUSIFLAG_TRANSFER_DEPOSIT_IN))"
+        },
+        {
+          "statement_id": 44219,
+          "seq": 63,
+          "kind": "brace",
+          "line_start": 88,
+          "line_end": 88,
+          "raw": "      {"
+        },
+        {
+          "statement_id": 44220,
+          "seq": 64,
+          "kind": "assignment",
+          "line_start": 89,
+          "line_end": 89,
+          "raw": "        @old_enable_balance = @uses_fund_real.enable_balance;"
+        },
+        {
+          "statement_id": 44221,
+          "seq": 65,
+          "kind": "action",
+          "line_start": 91,
+          "line_end": 94,
+          "raw": "        <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @uses_fund_account.fund_account, \n                                                        money_type = @money_type, \n                                                        fund_enable_level = @fund_enable_level, \n                                                        init_date = @init_date_t]"
+        },
+        {
+          "statement_id": 44222,
+          "seq": 66,
+          "kind": "action",
+          "line_start": 96,
+          "line_end": 96,
+          "raw": "        [记录为空][uses_fund_detail]"
+        },
+        {
+          "statement_id": 44223,
+          "seq": 67,
+          "kind": "brace",
+          "line_start": 97,
+          "line_end": 97,
+          "raw": "        {"
+        },
+        {
+          "statement_id": 44224,
+          "seq": 68,
+          "kind": "comment",
+          "line_start": 98,
+          "line_end": 98,
+          "raw": "          // 20251108 yuemt mod 补充定位串 任务单: T202507287360-V2"
+        },
+        {
+          "statement_id": 44225,
+          "seq": 69,
+          "kind": "assignment",
+          "line_start": 99,
+          "line_end": 101,
+          "raw": "          hs_snprintf(@position_str, sizeof(@position_str), \"%.*s%s%.*s%s%010d%010d\", max(0, 18 - length(@fund_account)), @fill_zero_str, @fund_account, \n                                                                                      max(0, 3 - length(@money_type)), @fill_zero_str, @money_type, \n                                                                                      @fund_enable_level, @init_date_t);"
+        },
+        {
+          "statement_id": 44226,
+          "seq": 70,
+          "kind": "action",
+          "line_start": 102,
+          "line_end": 103,
+          "raw": "          [插入记录][uses_fund_detail][client_id = @client_id,\n                                     init_date = @init_date_t]"
+        },
+        {
+          "statement_id": 44227,
+          "seq": 71,
+          "kind": "brace",
+          "line_start": 104,
+          "line_end": 104,
+          "raw": "        }"
+        },
+        {
+          "statement_id": 44228,
+          "seq": 72,
+          "kind": "control",
+          "line_start": 105,
+          "line_end": 105,
+          "raw": "        else"
+        },
+        {
+          "statement_id": 44229,
+          "seq": 73,
+          "kind": "brace",
+          "line_start": 106,
+          "line_end": 106,
+          "raw": "        {"
+        },
+        {
+          "statement_id": 44230,
+          "seq": 74,
+          "kind": "action",
+          "line_start": 107,
+          "line_end": 108,
+          "raw": "          [修改记录][uses_fund_detail][business_frozen_balance = @uses_fund_detail.business_frozen_balance + @business_frozen_balance,\n                                     business_unfrozen_balance = @uses_fund_detail.business_unfrozen_balance + @business_unfrozen_balance]"
+        },
+        {
+          "statement_id": 44231,
+          "seq": 75,
+          "kind": "brace",
+          "line_start": 109,
+          "line_end": 109,
+          "raw": "        }"
+        },
+        {
+          "statement_id": 44232,
+          "seq": 76,
+          "kind": "call",
+          "line_start": 111,
+          "line_end": 112,
+          "raw": "        [AF_交易资金公用(证券)_交易资金详细信息流水插入][fund_account = @uses_fund_account.fund_account,\n                                               client_id = @uses_fund_account.client_id]"
+        },
+        {
+          "statement_id": 44233,
+          "seq": 77,
+          "kind": "call",
+          "line_start": 114,
+          "line_end": 116,
+          "raw": "        [AF_交易资金公用(证券)_资金可用余额计算获取][uses_fund_account = @uses_fund_account, \n                                            money_type = @money_type,\n                                            fund_enable_level = @fund_enable_level_check][enable_balance = @enable_balance]"
+        },
+        {
+          "statement_id": 44234,
+          "seq": 78,
+          "kind": "action",
+          "line_start": 118,
+          "line_end": 132,
+          "raw": "        [修改记录][uses_fund_real][enable_balance = @enable_balance,\n                                 real_buy_balance = @uses_fund_real.real_buy_balance + @real_buy_balance,\n                                 real_sell_balance = @uses_fund_real.real_sell_balance + @real_sell_balance,\n                                 entrust_buy_balance = @uses_fund_real.entrust_buy_balance + @entrust_buy_balance,\n                                 current_balance = @uses_fund_real.current_balance + @current_balance,\n                                 frozen_balance = @uses_fund_real.frozen_balance + @frozen_balance,\n                                 unfrozen_balance = @uses_fund_real.unfrozen_balance + @unfrozen_balance,\n                                 correct_balance = @uses_fund_real.correct_balance + @correct_balance,\n                                 cash_balance = @uses_fund_real.cash_balance + @cash_balance,\n                                 check_balance = @uses_fund_real.check_balance + @check_balance,\n                                 uncome_buy_balance = @uses_fund_real.uncome_buy_balance + @uncome_buy_balance,\n                                 uncome_sell_balance = @uses_fund_real.uncome_sell_balance + @uncome_sell_balance,\n                                 uncome_correct_balance = @uses_fund_real.uncome_correct_balance + @uncome_correct_balance,\n                                 foregift_balance = @uses_fund_real.foregift_balance + @foregift_balance,\n                                 mortgage_balance = @uses_fund_real.mortgage_balance + @mortgage_balance]"
+        },
+        {
+          "statement_id": 44235,
+          "seq": 79,
+          "kind": "call",
+          "line_start": 134,
+          "line_end": 139,
+          "raw": "        [AF_交易资金公用(证券)_新交易资金流水插入][fund_account = @uses_fund_account.fund_account,\n                                           client_id = @uses_fund_account.client_id,\n                                           enable_balance = @uses_fund_real.enable_balance,\n                                           branch_no = @uses_fund_account.branch_no,\n                                           occur_balance = @occur_balance_t,\n                                           remark = @remark][]"
+        },
+        {
+          "statement_id": 44236,
+          "seq": 80,
+          "kind": "brace",
+          "line_start": 140,
+          "line_end": 140,
+          "raw": "      }"
+        },
+        {
+          "statement_id": 44237,
+          "seq": 81,
+          "kind": "brace",
+          "line_start": 141,
+          "line_end": 141,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44238,
+          "seq": 82,
+          "kind": "comment",
+          "line_start": 143,
+          "line_end": 143,
+          "raw": "    // 20260112 zengyp mod 批量结息归本/批量罚息归本 不记fund_change_info，日终由簿记处理回库2.0和ftc 修改单:T202601103120"
+        },
+        {
+          "statement_id": 44239,
+          "seq": 83,
+          "kind": "control",
+          "line_start": 144,
+          "line_end": 144,
+          "raw": "    if ('1' == @oper_flag || '2' == @oper_flag)"
+        },
+        {
+          "statement_id": 44240,
+          "seq": 84,
+          "kind": "brace",
+          "line_start": 145,
+          "line_end": 145,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44241,
+          "seq": 85,
+          "kind": "control",
+          "line_start": 146,
+          "line_end": 146,
+          "raw": "      continue;"
+        },
+        {
+          "statement_id": 44242,
+          "seq": 86,
+          "kind": "brace",
+          "line_start": 147,
+          "line_end": 147,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44243,
+          "seq": 87,
+          "kind": "call",
+          "line_start": 149,
+          "line_end": 150,
+          "raw": "    [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_CHANGE_INFO, \n                                        branch_no = @uses_fund_account.branch_no][serial_no = @serial_no1]"
+        },
+        {
+          "statement_id": 44244,
+          "seq": 88,
+          "kind": "action",
+          "line_start": 152,
+          "line_end": 152,
+          "raw": "    [获取时间][@curr_time]"
+        },
+        {
+          "statement_id": 44245,
+          "seq": 89,
+          "kind": "action",
+          "line_start": 153,
+          "line_end": 153,
+          "raw": "    [获取日期][@curr_date]"
+        },
+        {
+          "statement_id": 44246,
+          "seq": 90,
+          "kind": "control",
+          "line_start": 155,
+          "line_end": 155,
+          "raw": "    if (fabs(@current_balance) > CNST_DOUBLE_ZERO)"
+        },
+        {
+          "statement_id": 44247,
+          "seq": 91,
+          "kind": "brace",
+          "line_start": 156,
+          "line_end": 156,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44248,
+          "seq": 92,
+          "kind": "assignment",
+          "line_start": 157,
+          "line_end": 157,
+          "raw": "      @frozen_kind = '0';"
+        },
+        {
+          "statement_id": 44249,
+          "seq": 93,
+          "kind": "brace",
+          "line_start": 158,
+          "line_end": 158,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44250,
+          "seq": 94,
+          "kind": "control",
+          "line_start": 159,
+          "line_end": 159,
+          "raw": "    else"
+        },
+        {
+          "statement_id": 44251,
+          "seq": 95,
+          "kind": "brace",
+          "line_start": 160,
+          "line_end": 160,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44252,
+          "seq": 96,
+          "kind": "assignment",
+          "line_start": 161,
+          "line_end": 161,
+          "raw": "      @frozen_kind = '1';  "
+        },
+        {
+          "statement_id": 44253,
+          "seq": 97,
+          "kind": "brace",
+          "line_start": 162,
+          "line_end": 162,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44254,
+          "seq": 98,
+          "kind": "assignment",
+          "line_start": 164,
+          "line_end": 164,
+          "raw": "    @post_balance_t = @uses_fund_real.current_balance;"
+        },
+        {
+          "statement_id": 44255,
+          "seq": 99,
+          "kind": "comment",
+          "line_start": 166,
+          "line_end": 166,
+          "raw": "    // 转存管特殊处理"
+        },
+        {
+          "statement_id": 44256,
+          "seq": 100,
+          "kind": "control",
+          "line_start": 167,
+          "line_end": 167,
+          "raw": "    if (@business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT || @business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_IN)"
+        },
+        {
+          "statement_id": 44257,
+          "seq": 101,
+          "kind": "brace",
+          "line_start": 168,
+          "line_end": 168,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 44258,
+          "seq": 102,
+          "kind": "assignment",
+          "line_start": 169,
+          "line_end": 169,
+          "raw": "      @frozen_kind = '0';"
+        },
+        {
+          "statement_id": 44259,
+          "seq": 103,
+          "kind": "assignment",
+          "line_start": 170,
+          "line_end": 170,
+          "raw": "      @join_date = 0;"
+        },
+        {
+          "statement_id": 44260,
+          "seq": 104,
+          "kind": "comment",
+          "line_start": 172,
+          "line_end": 172,
+          "raw": "      // 20251225 zengyp mod 落表uses_fund_changeinfo的current_balance、post_balance不使用簿记传入，内存自己处理  修改单:T202512255203"
+        },
+        {
+          "statement_id": 44261,
+          "seq": 105,
+          "kind": "assignment",
+          "line_start": 173,
+          "line_end": 173,
+          "raw": "      @current_balance = @uses_fund_real.current_balance;"
+        },
+        {
+          "statement_id": 44262,
+          "seq": 106,
+          "kind": "assignment",
+          "line_start": 174,
+          "line_end": 174,
+          "raw": "      @cash_balance = 0.00;"
+        },
+        {
+          "statement_id": 44263,
+          "seq": 107,
+          "kind": "control",
+          "line_start": 175,
+          "line_end": 175,
+          "raw": "      if (@business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT)"
+        },
+        {
+          "statement_id": 44264,
+          "seq": 108,
+          "kind": "brace",
+          "line_start": 176,
+          "line_end": 176,
+          "raw": "      {"
+        },
+        {
+          "statement_id": 44265,
+          "seq": 109,
+          "kind": "assignment",
+          "line_start": 177,
+          "line_end": 177,
+          "raw": "        @current_balance = @current_balance * -1;"
+        },
+        {
+          "statement_id": 44266,
+          "seq": 110,
+          "kind": "assignment",
+          "line_start": 178,
+          "line_end": 178,
+          "raw": "        @post_balance_t = 0.00;"
+        },
+        {
+          "statement_id": 44267,
+          "seq": 111,
+          "kind": "brace",
+          "line_start": 179,
+          "line_end": 179,
+          "raw": "      }"
+        },
+        {
+          "statement_id": 44268,
+          "seq": 112,
+          "kind": "brace",
+          "line_start": 181,
+          "line_end": 181,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 44269,
+          "seq": 113,
+          "kind": "comment",
+          "line_start": 183,
+          "line_end": 183,
+          "raw": "    // 20250925 yangxz 添加position_str 定位串 fund_account(18)+money_type(3)+serial_no(10)"
+        },
+        {
+          "statement_id": 44270,
+          "seq": 114,
+          "kind": "assignment",
+          "line_start": 184,
+          "line_end": 184,
+          "raw": "    hs_snprintf(@position_str, sizeof(@position_str), \"%0*d%s%0*d%s%010d\", 19 - length(@fund_account), 0, @fund_account, 4 - length(@money_type), 0, @money_type, @serial_no1);"
+        },
+        {
+          "statement_id": 44271,
+          "seq": 115,
+          "kind": "action",
+          "line_start": 185,
+          "line_end": 187,
+          "raw": "    [插入记录][uses_fund_changeinfo][serial_no = @serial_no1,\n                                   post_balance = @post_balance_t,\n                                   interest = @interest_t]"
+        },
+        {
+          "statement_id": 44272,
+          "seq": 116,
+          "kind": "brace",
+          "line_start": 188,
+          "line_end": 188,
+          "raw": "  }"
+        },
+        {
+          "statement_id": 44273,
+          "seq": 117,
+          "kind": "action",
+          "line_start": 189,
+          "line_end": 189,
+          "raw": "  [手工解包结束]"
+        },
+        {
+          "statement_id": 44274,
+          "seq": 118,
+          "kind": "action",
+          "line_start": 191,
+          "line_end": 191,
+          "raw": "  [事务处理结束]"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "transaction",
+          "anchor_name": "事务处理开始",
+          "line_start": 9,
+          "line_end": 191,
+          "summary_text": "LF_DATASESSETTLEINIT_BKINTENER_DEAL 的事务块，包含 112 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, AF_证券交易参数公用_子系统营业部流水号获取 | targets=@curr_date, @curr_time, @unpack_sett",
+          "relations": [
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_新交易资金流水插入",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_交易资金公用(证券)_资金可用余额计算获取",
+              "target_kind": "procedure"
+            },
+            {
+              "edge_type": "calls_procedure",
+              "target_name": "AF_证券交易参数公用_子系统营业部流水号获取",
+              "target_kind": "procedure"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [
+          "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+          "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+          "AF_FUNDSEPUB_FUND_REAL_GET"
+        ],
+        "incoming_callers": [
+          "LS_DATASESSETTLEINIT_BKINTENER_DEAL"
+        ],
+        "related_tables": [
+          {
+            "name": "uses_fund_account",
+            "edge_type": "reads_table"
+          },
+          {
+            "name": "uses_fund_changeinfo",
+            "edge_type": "writes_table"
+          },
+          {
+            "name": "uses_fund_detail",
+            "edge_type": "reads_table"
+          }
+        ],
+        "related_actions": [
+          "clob字段解包",
+          "业务报错返回",
+          "事务处理开始"
+        ],
+        "control_flow": [],
+        "two_hop_outgoing": [
+          {
+            "procedure_name": "AF_SESARGPUB_BRANCH_SERIALNO_GET",
+            "chinese_name": "AF_证券交易参数公用_子系统营业部流水号获取",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_BRANCH_SERIALNO_GET.uftatomfunction",
+            "line_start": 2,
+            "line_end": 2,
+            "chunk_type": "control_block",
+            "summary_text": "AF_SESARGPUB_BRANCH_SERIALNO_GET | control_block | conditions: @branch_no == 0 | vars: @branch_no",
+            "via_name": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+            "direction": "outgoing"
+          }
+        ],
+        "two_hop_incoming": [],
+        "related_procedures": [
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_交易资金详细信息流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 5,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079"
+          },
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT",
+            "chinese_name": "AF_交易资金公用(证券)_新交易资金流水插入",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT.uftatomfunction",
+            "line_start": 2,
+            "line_end": 11,
+            "chunk_type": "control_block",
+            "summary_text": "AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT | control_block | conditions: hs_isnull_c(@finance_type) == 0 | vars: @finance_type | notes: finance_type为空保护; @occur_balance = @enable_balance - @old_enable_balance;"
+          },
+          {
+            "relation_type": "calls",
+            "procedure_name": "AF_FUNDSEPUB_FUND_REAL_GET",
+            "chinese_name": "AF_交易资金公用(证券)_资金可用余额计算获取",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FUND_REAL_GET.uftatomfunction",
+            "line_start": 2,
+            "line_end": 7,
+            "chunk_type": "action_block",
+            "summary_text": "AF_FUNDSEPUB_FUND_REAL_GET | action_block | actions: 遍历记录开始 | targets: uses_fund_detail | vars: @net_balance, @lower_net_balance, @upper_net_balance, @uses_fund_account.fund_account, @money_type | notes: 计算小于等于传入层级的资金"
+          }
+        ]
+      }
+    }
+  ],
+  "llm_context": "Question: uses_fund_real 在哪里被读取或更新\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD.uftatomfunction\nLines: 40-57\nMatched text: AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @fund_enable_level_real, @frozen_balance, @uses_fund_real.enable_balance, @curr_time, @branch_no, @serial_no | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=2/3, multi_source_match=2, call_chain_two_hop=AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE,LF_CUSTOMHTSCSES_HTOFUND_FUNDCORRECT\nSnippet:\nL40:       [AF_交易资金公用(证券)_交易资金详细信息更新][fund_enable_level = @fund_enable_level_real,\n                                                     business_frozen_balance = -@frozen_balance][]\nL43:       [修改记录][uses_fund_real][enable_balance = @uses_fund_real.enable_balance + @frozen_balance]\nL45:       [获取时间][@curr_time]\nL47:       // 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nL48:       [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_REAL_JOUR, branch_no = @branch_no][serial_no = @serial_no]\nL50:       sprintf(@position_str, \"%08d%02d%05d%010d\", @init_date, @uses_fund_real.partition_no, @branch_no, @serial_no);\nL52:       [插入记录][uses_fund_real_jour][money_type = @uses_fund_real.money_type,\n                                          asset_prop = @uses_fund_real.asset_prop,\n                                          client_id = @uses_fund_real.client_id,\n                                          post_balance = @uses_fund_real.enable_balance,\n                                          occur_balance = @frozen_balance,\n                                          remark = @remark_t]\nChunk type: call_flow\nChunk summary: AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @fund_enable_level_real, @frozen_balance, @uses_fund_real.enable_balance, @curr_time, @branch_no, @serial_no | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nRelated calls: AF_FUNDSEPUB_FUNDDETAIL_UPDATE, AF_系统参数公用_系统参数获取, AF_SESARGPUB_BRANCH_SERIALNO_GET\nIncoming callers: LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL\nRelated tables: reads_table:uses_fund_real, writes_table:uses_fund_real, writes_table:uses_fund_real_jour\nRelated actions: 业务报错返回, 修改记录, 插入记录\nTwo-hop outgoing chain: AF_FUNDSEPUB_FUNDDETAIL_UPDATE -> AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT\nTwo-hop incoming chain: LF_INNERSESSETT_FUNDREAL_ALL_FROZEN -> LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL\nRelated procedure (calls): AF_FUNDSEPUB_FUNDDETAIL_UPDATE [2-3] AF_FUNDSEPUB_FUNDDETAIL_UPDATE | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && \n      fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance\nRelated procedure (calls): AF_SESARGPUB_BRANCH_SERIALNO_GET [2-2] AF_SESARGPUB_BRANCH_SERIALNO_GET | control_block | conditions: @branch_no == 0 | vars: @branch_no\nRelated procedure (called_by): LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL [2-7] LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL | call_flow | actions: 获取日期, 事务处理开始, 获取冲销流水号, AF_账户公用(证券)_资产账户获取 | targets: @curr_date, @cancel_serialno, AF_账户公用(证券)_资产账户获取 | vars: @curr_date, @cancel_serialno, @uses_fund_account\n\n[Evidence 2]\nProcedure: LF_SESINITDEAL_HKSETTLELEVEL_DEAL\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/initdeal/sesinitdeal/LF_SESINITDEAL_HKSETTLELEVEL_DEAL.uftfunction\nLines: 76-144\nMatched text: LF_SESINITDEAL_HKSETTLELEVEL_DEAL 的事务块，包含 38 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, else | targets=@result_packer, @result_unpacker, AF_交易资金公用(证券)_交易资金详细信息流水插入\nMatch source: block_summary\nRetrieval source: fts_block\nWhy relevant: fts_hit, token_overlap=2/3, call_chain_two_hop=AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD,AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE\nSnippet:\nL76:   [事务处理开始]\nL77:   // 将净可用大于0的账号清理，记录冻结流水\nL78:   [结果集转换][@result_packer][@result_unpacker]\nL79:   [结果集不为空][@result_unpacker]\nL80:   {\nL81:     [手工解包开始][business_frozen_balance = @business_frozen_balance, business_unfrozen_balance = @business_unfrozen_balance, trade_date = @trade_date][@result_unpacker]\nL82:     {\nL83:       @detail_enable_balance = @business_unfrozen_balance - @business_frozen_balance;\nL84:       <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB,\n                                                        fund_enable_level = CNST_ENABLE_TN_DELIVERY_FUND, init_date = @trade_date]\nL86:       [修改记录][uses_fund_detail][business_frozen_balance = 0.00, business_unfrozen_balance = 0.00]\nL87:       // 25级别记录0流水，日终进行交易回冲\nL88:       [AF_交易资金公用(证券)_交易资金详细信息流水插入][business_flag = 0, uses_fund_detail = @uses_fund_detail,\n                                    fund_account = @fund_account,client_id = @client_id, business_frozen_balance = @detail_enable_balance,\n                                    business_unfrozen_balance = 0.00, settle_flag = '0', occur_balance_x = @detail_enable_balance,\n                                    fund_enable_level = CNST_ENABLE_TN_DELIVERY_FUND, money_type = CNST_MONEYTYPE_RMB, real_action = '1']\nL92:     }\nL93:     [手工解包结束]\nL94:   }\nL96:   // 对20级别增加可用\nL97:   <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB,\n                                                    fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND, init_date = @init_date]\nL99:   [记录为空][uses_fund_detail]\nL100:   {\nL101:     hs_snprintf(@position_str, sizeof(@position_str), \"%.*s%s%.*s%s%010d%010d\", max(0, 18 - length(@fund_account)), @fill_zero_str, @fund_account,\n                                                                                    max(0, 3 - length(CNST_MONEYTYPE_RMB)), @fill_zero_str, CNST_MONEYTYPE_RMB, CNST_ENABLE_T1_DELIVERY_FUND, @init_date);\nL103:     [插入记录][uses_fund_detail][fund_account = @fund_account,\n                                  client_id = @client_id,\n                                  money_type = CNST_MONEYTYPE_RMB,\n                                  fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND,\n                                  init_date = @init_date,\n                                  partition_no = @partition_no,\n                                  business_frozen_balance = 0.00,\n                                  business_unfrozen_balance = @enable_balance_t,\n                                  position_str = @position_str]\nL112:   }\nL113:   else\nL114:   {\nL115:     [修改记录][uses_fund_detail][business_unfrozen_balance = @uses_fund_detail.business_unfrozen_balance + @enable_balance_t]\nL116:   }\nL117:   // 20级别记录0流水，日终进行交易回冲\nL118:   [AF_交易资金公用(证券)_交易资金详细信息流水插入][business_flag = 0, uses_fund_detail = @uses_fund_detail,\n                                fund_account = @fund_account,client_id = @client_id, business_frozen_balance = 0.00,\n                                business_unfrozen_balance = @enable_balance_t, settle_flag = '0',\n                                fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND, money_type = CNST_MONEYTYPE_RMB, real_action = '1']\nL123:   // 更新fundreal表\nL124:   [AF_交易资金公用(证券)_资金可用余额计算获取][uses_fund_account = @uses_fund_account,\n                                   money_type = CNST_MONEYTYPE_RMB,\n                                   fund_enable_level = CNST_ENABLE_T1_DELIVERY_FUND][enable_balance = @enable_balance]\nL128:   <Z>[获取记录][uses_fund_real(idx_uft_secu_fund_real)][fund_account = @fund_account, money_type = CNST_MONEYTYPE_RMB]\nL129:   [记录为空][uses_fund_real]\nL130:   {\nL131:     [业务报错返回][ERR_FUND_FUNDREAL_NOTEXISTS][交易资金表记录不存在][@fund_account,CNST_MONEYTYPE_RMB]\nL132:   }\nL134:   [修改记录][uses_fund_real][enable_balance = @enable_balance]\nL136:   [AF_交易资金公用(证券)_新交易资金流水插入][fund_account = @fund_account,\n                                    client_id = @client_id,\n                                    enable_balance = @enable_balance,\n                                    branch_no = @branch_no,\n                                    occur_balance = @enable_balance_t,\n                                    real_action = '1',\n                                    business_flag = 0,\n                                    remark = @remark][]\nL144:   [事务处理结束]\nRecovered block type: transaction\nRecovered block summary: LF_SESINITDEAL_HKSETTLELEVEL_DEAL 的事务块，包含 38 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, else | targets=@result_packer, @result_unpacker, AF_交易资金公用(证券)_交易资金详细信息流水插入\nCovering block: transaction [76-144] LF_SESINITDEAL_HKSETTLELEVEL_DEAL 的事务块，包含 38 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, else | targets=@result_packer, @result_unpacker, AF_交易资金公用(证券)_交易资金详细信息流水插入 | calls_procedure:AF_交易资金公用(证券)_交易资金详细信息流水插入, calls_procedure:AF_交易资金公用(证券)_交易资金详细信息流水插入, calls_procedure:AF_交易资金公用(证券)_新交易资金流水插入, calls_procedure:AF_交易资金公用(证券)_资金可用余额计算获取\nRelated calls: AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT, AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT, AF_FUNDSEPUB_FUND_REAL_GET\nIncoming callers: LF_SESINITDEAL_HKSETTLELEVEL_DEAL\nRelated tables: reads_table:upbs_init_date_model, reads_table:uses_fund_detail, writes_table:uses_fund_detail\nRelated actions: EXCEPTION, WHEN_OTHERS, clob字段解包\nTwo-hop outgoing chain: AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT -> AF_SESARGPUB_BRANCH_SERIALNO_GET, LF_SESINITDEAL_HKSETTLELEVEL_DEAL -> AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT, LF_SESINITDEAL_HKSETTLELEVEL_DEAL -> AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT\nRelated procedure (calls): AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT [2-5] AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079\nRelated procedure (calls): AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT [2-11] AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT | control_block | conditions: hs_isnull_c(@finance_type) == 0 | vars: @finance_type | notes: finance_type为空保护; @occur_balance = @enable_balance - @old_enable_balance;\nRelated procedure (calls): AF_FUNDSEPUB_FUND_REAL_GET [2-7] AF_FUNDSEPUB_FUND_REAL_GET | action_block | actions: 遍历记录开始 | targets: uses_fund_detail | vars: @net_balance, @lower_net_balance, @upper_net_balance, @uses_fund_account.fund_account, @money_type | notes: 计算小于等于传入层级的资金\n\n[Evidence 3]\nProcedure: AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD.uftatomfunction\nLines: 60-72\nMatched text: AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @enable_balance_t, @uses_fund_real.enable_balance, @remark_t, @remark, @fund_enable_level_real, @curr_time | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=2/3, call_chain_two_hop=AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE,LF_CUSTOMHTSCSES_HTOFUND_FUNDCORRECT\nSnippet:\nL60:     @enable_balance_t = @uses_fund_real.enable_balance;\nL62:     hs_snprintf(@remark_t, 2001, \"%s|冻结全部可用金额,enable_balance=%f\", @remark, -@enable_balance_t);\nL64:     [AF_交易资金公用(证券)_交易资金详细信息更新][fund_enable_level = @fund_enable_level_real,\n                                                   business_frozen_balance = @enable_balance_t][]\nL67:     [修改记录][uses_fund_real][enable_balance = @uses_fund_real.enable_balance - @enable_balance_t]\nL69:     [获取时间][@curr_time]\nL71:     // 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nL72:     [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_REAL_JOUR, branch_no = @branch_no][serial_no = @serial_no]\nChunk type: call_flow\nChunk summary: AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD | call_flow | actions: AF_交易资金公用(证券)_交易资金详细信息更新, 修改记录, 获取时间, AF_证券交易参数公用_子系统营业部流水号获取 | targets: AF_交易资金公用(证券)_交易资金详细信息更新, uses_fund_real, @curr_time, AF_证券交易参数公用_子系统营业部流水号获取 | vars: @enable_balance_t, @uses_fund_real.enable_balance, @remark_t, @remark, @fund_enable_level_real, @curr_time | notes: 内存多分片业务代码调整，serial_no按营业部计数+分片号设置\nRelated calls: AF_FUNDSEPUB_FUNDDETAIL_UPDATE, AF_系统参数公用_系统参数获取, AF_SESARGPUB_BRANCH_SERIALNO_GET\nIncoming callers: LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL\nRelated tables: reads_table:uses_fund_real, writes_table:uses_fund_real, writes_table:uses_fund_real_jour\nRelated actions: 业务报错返回, 修改记录, 插入记录\nTwo-hop outgoing chain: AF_FUNDSEPUB_FUNDDETAIL_UPDATE -> AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT\nTwo-hop incoming chain: LF_INNERSESSETT_FUNDREAL_ALL_FROZEN -> LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL\nRelated procedure (calls): AF_FUNDSEPUB_FUNDDETAIL_UPDATE [2-3] AF_FUNDSEPUB_FUNDDETAIL_UPDATE | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && \n      fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance\nRelated procedure (calls): AF_SESARGPUB_BRANCH_SERIALNO_GET [2-2] AF_SESARGPUB_BRANCH_SERIALNO_GET | control_block | conditions: @branch_no == 0 | vars: @branch_no\nRelated procedure (called_by): LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL [2-7] LF_INNERSESSETT_FUNDREAL_FROZEN_DEAL | call_flow | actions: 获取日期, 事务处理开始, 获取冲销流水号, AF_账户公用(证券)_资产账户获取 | targets: @curr_date, @cancel_serialno, AF_账户公用(证券)_资产账户获取 | vars: @curr_date, @cancel_serialno, @uses_fund_account\n\n[Evidence 5]\nProcedure: LF_DATASESSETTLEINIT_BKINTENER_DEAL\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_DATASESSETTLEINIT_BKINTENER_DEAL.uftfunction\nLines: 9-191\nMatched text: LF_DATASESSETTLEINIT_BKINTENER_DEAL 的事务块，包含 112 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, AF_证券交易参数公用_子系统营业部流水号获取 | targets=@curr_date, @curr_time, @unpack_sett\nMatch source: block_summary\nRetrieval source: fts_block\nWhy relevant: fts_hit, token_overlap=2/3, call_chain_two_hop=AF_FUNDSEPUB_FROZENDETAILFUNDREAL_UPD,AF_FUNDSEPUB_FUND_UPDATE,AF_SESBIDPUB_DSFFUNDREAL_UPDATE\nSnippet:\nL9:   [事务处理开始]\nL11:   [clob字段解包][@unpack_sett][@settle_clob][pi_settle_clob]\nL13:   [手工解包开始][fund_account = @fund_account, money_type = @money_type, occur_balance = @occur_balance,\n                  rate_kind = @rate_kind, begin_balance = @begin_balance, integral_balance = @integral_balance,\n                  fine_integral = @fine_integral, interest = @interest_t, interest_tax = @interest_tax,\n                  integral_update = @integral_update, integral_flag = @integral_flag, real_status = @real_status,\n                  remark = @remark, business_flag = @business_flag, real_action = @real_action,\n                  exchange_type = @exchange_type][@unpack_sett]\nL19:   {\nL20:     // 20251225 zengyp mod 初始化赋值，避免多条记录时重复更新 修改单:T202512255203\nL21:     @business_frozen_balance = 0.0;\nL22:     @business_unfrozen_balance = 0.0;\nL24:     <Z>[获取记录][uses_fund_account(idx_uses_fund_account)][fund_account = @fund_account]\nL25:     [记录为空][uses_fund_account]\nL26:     {\nL27:       continue;\nL28:     }\nL29:     else\nL30:     {\nL31:       [获取字段][uses_fund_account][client_id = @client_id]\nL32:     }\nL34:     <Z>[获取记录][uses_fund_real(idx_uft_secu_fund_real)][fund_account = @uses_fund_account.fund_account,\n                                                            money_type = @money_type]\nL36:     [记录为空][uses_fund_real]\nL37:     {\nL38:       [业务报错返回][ERR_FUND_FUNDREAL_NOTEXISTS][交易资金表记录不存在][@fund_account, @money_type]\nL39:     }\nL41:     if (fabs(@occur_balance) > CNST_DOUBLE_ZERO)\nL42:     {\nL43:       if ('0' == @oper_flag)\nL44:       {\nL45:         //oper_flag = 0的时候，\nL46:         //occur_balance > 0表示结息，更新business_unfrozen_balance；\nL47:         //occur_balance < 0表示罚息，更新business_frozen_balance\nL48:         @occur_balance_t = @occur_balance;\nL49:         @current_balance = @occur_balance_t;\nL50:         @cash_balance = @occur_balance_t;\nL52:         if (@occur_balance_t < -1 * CNST_DOUBLE_ZERO)\nL53:         {\nL54:           @business_frozen_balance = fabs(@occur_balance_t);\nL55:         }\nL56:         else if (@occur_balance_t > CNST_DOUBLE_ZERO)\nL57:         {\nL58:           @business_unfrozen_balance = @occur_balance_t;\nL59:         }\nL60:       }\nL61:       else if ('2' == @oper_flag)\nL62:       {\nL63:         //oper_flag为2，就是批量利息，occur_balance记入interest\nL64:         @fine_interest = 0.0;\nL65:         @interest = @occur_balance;\nL67:         [LF_内部远程调用(证券清算)_簿记利息汇总处理][][occur_balance_t = @occur_balance_t,\n                                                  current_balance = @current_balance,\n                                                  cash_balance = @cash_balance,\n                                                  business_frozen_balance = @business_frozen_balance,\n                                                  business_unfrozen_balance = @business_unfrozen_balance]\nL72:       }\nL73:       else if ('1' == @oper_flag)\nL74:       {\nL75:         //oper_flag为1，就是批量罚息，occur_balance记入fine_interest\nL76:         @interest = 0.0;\nL77:         @fine_interest = @occur_balance;\nL79:         [LF_内部远程调用(证券清算)_簿记利息汇总处理][][occur_balance_t = @occur_balance_t,\n                                                  current_balance = @current_balance,\n                                                  cash_balance = @cash_balance,\n                                                  business_frozen_balance = @business_frozen_balance,\n                                                  business_unfrozen_balance = @business_unfrozen_balance]\nL84:       }\nL86:       // 20251216 zengyp mod 转存管2063、2064不更新资金 修改单:T202512164841\nL87:       if (fabs(@occur_balance_t) > CNST_DOUBLE_ZERO && (@business_flag != CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT && @business_flag != CNST_BUSIFLAG_TRANSFER_DEPOSIT_IN))\nL88:       {\nL89:         @old_enable_balance = @uses_fund_real.enable_balance;\nL91:         <Z>[获取记录][uses_fund_detail(idx_fund_detail)][fund_account = @uses_fund_account.fund_account,\n                                                            money_type = @money_type,\n                                                            fund_enable_level = @fund_enable_level,\n                                                            init_date = @init_date_t]\nL96:         [记录为空][uses_fund_detail]\nL97:         {\nL98:           // 20251108 yuemt mod 补充定位串 任务单: T202507287360-V2\nL99:           hs_snprintf(@position_str, sizeof(@position_str), \"%.*s%s%.*s%s%010d%010d\", max(0, 18 - length(@fund_account)), @fill_zero_str, @fund_account,\n                                                                                          max(0, 3 - length(@money_type)), @fill_zero_str, @money_type,\n                                                                                          @fund_enable_level, @init_date_t);\nL102:           [插入记录][uses_fund_detail][client_id = @client_id,\n                                         init_date = @init_date_t]\nL104:         }\nL105:         else\nL106:         {\nL107:           [修改记录][uses_fund_detail][business_frozen_balance = @uses_fund_detail.business_frozen_balance + @business_frozen_balance,\n                                         business_unfrozen_balance = @uses_fund_detail.business_unfrozen_balance + @business_unfrozen_balance]\nL109:         }\nL111:         [AF_交易资金公用(证券)_交易资金详细信息流水插入][fund_account = @uses_fund_account.fund_account,\n                                                   client_id = @uses_fund_account.client_id]\nL114:         [AF_交易资金公用(证券)_资金可用余额计算获取][uses_fund_account = @uses_fund_account,\n                                                money_type = @money_type,\n                                                fund_enable_level = @fund_enable_level_check][enable_balance = @enable_balance]\nL118:         [修改记录][uses_fund_real][enable_balance = @enable_balance,\n                                     real_buy_balance = @uses_fund_real.real_buy_balance + @real_buy_balance,\n                                     real_sell_balance = @uses_fund_real.real_sell_balance + @real_sell_balance,\n                                     entrust_buy_balance = @uses_fund_real.entrust_buy_balance + @entrust_buy_balance,\n                                     current_balance = @uses_fund_real.current_balance + @current_balance,\n                                     frozen_balance = @uses_fund_real.frozen_balance + @frozen_balance,\n                                     unfrozen_balance = @uses_fund_real.unfrozen_balance + @unfrozen_balance,\n                                     correct_balance = @uses_fund_real.correct_balance + @correct_balance,\n                                     cash_balance = @uses_fund_real.cash_balance + @cash_balance,\n                                     check_balance = @uses_fund_real.check_balance + @check_balance,\n                                     uncome_buy_balance = @uses_fund_real.uncome_buy_balance + @uncome_buy_balance,\n                                     uncome_sell_balance = @uses_fund_real.uncome_sell_balance + @uncome_sell_balance,\n                                     uncome_correct_balance = @uses_fund_real.uncome_correct_balance + @uncome_correct_balance,\n                                     foregift_balance = @uses_fund_real.foregift_balance + @foregift_balance,\n                                     mortgage_balance = @uses_fund_real.mortgage_balance + @mortgage_balance]\nL134:         [AF_交易资金公用(证券)_新交易资金流水插入][fund_account = @uses_fund_account.fund_account,\n                                               client_id = @uses_fund_account.client_id,\n                                               enable_balance = @uses_fund_real.enable_balance,\n                                               branch_no = @uses_fund_account.branch_no,\n                                               occur_balance = @occur_balance_t,\n                                               remark = @remark][]\nL140:       }\nL141:     }\nL143:     // 20260112 zengyp mod 批量结息归本/批量罚息归本 不记fund_change_info，日终由簿记处理回库2.0和ftc 修改单:T202601103120\nL144:     if ('1' == @oper_flag || '2' == @oper_flag)\nL145:     {\nL146:       continue;\nL147:     }\nL149:     [AF_证券交易参数公用_子系统营业部流水号获取][serial_counter_no = CNST_USES_SERIALTYPE_FUND_CHANGE_INFO,\n                                            branch_no = @uses_fund_account.branch_no][serial_no = @serial_no1]\nL152:     [获取时间][@curr_time]\nL153:     [获取日期][@curr_date]\nL155:     if (fabs(@current_balance) > CNST_DOUBLE_ZERO)\nL156:     {\nL157:       @frozen_kind = '0';\nL158:     }\nL159:     else\nL160:     {\nL161:       @frozen_kind = '1';\nL162:     }\nL164:     @post_balance_t = @uses_fund_real.current_balance;\nL166:     // 转存管特殊处理\nL167:     if (@business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT || @business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_IN)\nL168:     {\nL169:       @frozen_kind = '0';\nL170:       @join_date = 0;\nL172:       // 20251225 zengyp mod 落表uses_fund_changeinfo的current_balance、post_balance不使用簿记传入，内存自己处理  修改单:T202512255203\nL173:       @current_balance = @uses_fund_real.current_balance;\nL174:       @cash_balance = 0.00;\nL175:       if (@business_flag == CNST_BUSIFLAG_TRANSFER_DEPOSIT_OUT)\nL176:       {\nL177:         @current_balance = @current_balance * -1;\nL178:         @post_balance_t = 0.00;\nL179:       }\nL181:     }\nL183:     // 20250925 yangxz 添加position_str 定位串 fund_account(18)+money_type(3)+serial_no(10)\nL184:     hs_snprintf(@position_str, sizeof(@position_str), \"%0*d%s%0*d%s%010d\", 19 - length(@fund_account), 0, @fund_account, 4 - length(@money_type), 0, @money_type, @serial_no1);\nL185:     [插入记录][uses_fund_changeinfo][serial_no = @serial_no1,\n                                       post_balance = @post_balance_t,\n                                       interest = @interest_t]\nL188:   }\nL189:   [手工解包结束]\nL191:   [事务处理结束]\nRecovered block type: transaction\nRecovered block summary: LF_DATASESSETTLEINIT_BKINTENER_DEAL 的事务块，包含 112 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, AF_证券交易参数公用_子系统营业部流水号获取 | targets=@curr_date, @curr_time, @unpack_sett\nCovering block: transaction [9-191] LF_DATASESSETTLEINIT_BKINTENER_DEAL 的事务块，包含 112 条语句 | actions=AF_交易资金公用(证券)_交易资金详细信息流水插入, AF_交易资金公用(证券)_新交易资金流水插入, AF_交易资金公用(证券)_资金可用余额计算获取, AF_证券交易参数公用_子系统营业部流水号获取 | targets=@curr_date, @curr_time, @unpack_sett | calls_procedure:AF_交易资金公用(证券)_交易资金详细信息流水插入, calls_procedure:AF_交易资金公用(证券)_新交易资金流水插入, calls_procedure:AF_交易资金公用(证券)_资金可用余额计算获取, calls_procedure:AF_证券交易参数公用_子系统营业部流水号获取\nRelated calls: AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT, AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT, AF_FUNDSEPUB_FUND_REAL_GET\nIncoming callers: LS_DATASESSETTLEINIT_BKINTENER_DEAL\nRelated tables: reads_table:uses_fund_account, writes_table:uses_fund_changeinfo, reads_table:uses_fund_detail\nRelated actions: clob字段解包, 业务报错返回, 事务处理开始\nTwo-hop outgoing chain: AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT -> AF_SESARGPUB_BRANCH_SERIALNO_GET\nRelated procedure (calls): AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT [2-5] AF_FUNDSEPUB_FUND_DETAIL_JOUR_INSERT | control_block | conditions: fabs(@business_frozen_balance) < CNST_DOUBLE_ZERO && fabs(@business_unfrozen_balance) < CNST_DOUBLE_ZERO, @fundnet_kind == 1201 && @real_action == '2' && fabs(@real_buy_balance) > CNST_DOUBLE_ZERO | vars: @business_frozen_balance, @business_unfrozen_balance, @fundnet_kind, @real_action, @real_buy_balance | notes: 20250528 fanwh mod 当大宗交易成交回报时, 若需要回冲fundnet的交易冻结资金, 需要记流水 修改单: T202505233079\nRelated procedure (calls): AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT [2-11] AF_FUNDSEPUB_NEW_FUND_REAL_JOUR_INSERT | control_block | conditions: hs_isnull_c(@finance_type) == 0 | vars: @finance_type | notes: finance_type为空保护; @occur_balance = @enable_balance - @old_enable_balance;\nRelated procedure (calls): AF_FUNDSEPUB_FUND_REAL_GET [2-7] AF_FUNDSEPUB_FUND_REAL_GET | action_block | actions: 遍历记录开始 | targets: uses_fund_detail | vars: @net_balance, @lower_net_balance, @upper_net_balance, @uses_fund_account.fund_account, @money_type | notes: 计算小于等于传入层级的资金"
+}

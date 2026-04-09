@@ -253,11 +253,29 @@
   - `goto / label` 关系边
   - 失败处理问句下的 `EXCEPTION / WHEN_OTHERS` 恢复
 
+### 阶段 18：SQL 表访问抽取与两跳调用链
+
+- `通用SQL执行`、`查询SQL语句开始` 现在会从 SQL 文本中抽取真实表名
+- 当前支持从 `select / update / insert / delete / merge` 中恢复 `reads_table / writes_table`
+- 查询重排新增两跳调用链 bonus
+- `related_context` 新增：
+  - `two_hop_outgoing`
+  - `two_hop_incoming`
+- `llm_context` 新增：
+  - `Two-hop outgoing chain`
+  - `Two-hop incoming chain`
+- 调用链恢复增加 `name / chinese_name` 别名归一，解决真实仓库里“定义名”和“调用名”不一致的问题
+- 补充测试，覆盖：
+  - SQL 表访问抽取
+  - 两跳调用链证据
+  - 两跳调用链重排
+
 ### 后续计划
 
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精细的 goto / label 路径恢复
+- 增强复杂动态 SQL 场景下的表访问恢复
 - 增加更精确的表访问与关系抽取
 - 增加更丰富的模型适配器
 - 增加更强的 MCP 能力和更多可组合工具
