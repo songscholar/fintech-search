@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import Thread
 
 from uses_indexer.api import CodebaseApi, make_handler_class
+from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
 
@@ -35,6 +36,14 @@ CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+class StubLlm:
+    def is_configured(self) -> bool:
+        return False
+
+    def complete(self, *, system_prompt: str, user_prompt: str) -> dict[str, object]:
+        raise AssertionError("complete should not be called when is_configured is false")
+
+
 def _build_api(tmp_path: Path) -> tuple[CodebaseApi, Path]:
     source_dir = tmp_path / "src"
     source_dir.mkdir()
@@ -45,7 +54,8 @@ def _build_api(tmp_path: Path) -> tuple[CodebaseApi, Path]:
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     qa = CodebaseQA(indexer)
-    api = CodebaseApi(indexer=indexer, qa=qa, default_db_path=db_path)
+    answerer = CodebaseAnswerer(qa=qa, llm=StubLlm())
+    api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=db_path)
     return api, db_path
 
 
@@ -76,6 +86,14 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert status == 200
     assert ask["draft_answer"]["status"] == "ok"
 
+    status, answer = api.handle_request(
+        "POST",
+        "/answer",
+        json.dumps({"question": "证券代码获取的逻辑在哪里", "evidence_limit": 2}).encode("utf-8"),
+    )
+    assert status == 200
+    assert answer["final_answer"]["source"] in {"draft", "draft_fallback", "llm"}
+
 
 def test_http_server_serves_json(tmp_path: Path) -> None:
     api, _ = _build_api(tmp_path)
@@ -100,6 +118,12 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         assert response.status == 200
         assert body["evidence_count"] >= 1
         assert "prompt_package" in body
+
+        conn.request("POST", "/answer", body=payload, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        body = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert "final_answer" in body
     finally:
         server.shutdown()
         thread.join(timeout=5)

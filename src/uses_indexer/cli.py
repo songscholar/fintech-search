@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 
 from .api import CodebaseApi
+from .answering import CodebaseAnswerer
 from .indexer import SQLiteIndexer
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
 from .qa import CodebaseQA
@@ -55,6 +56,15 @@ def main() -> int:
     ask_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
     ask_parser.add_argument("--output", help="Optional JSON output path.")
 
+    answer_parser = subparsers.add_parser("answer-codebase", help="Answer a codebase question with optional external LLM support.")
+    answer_parser.add_argument("--db", required=True, help="SQLite database path.")
+    answer_parser.add_argument("--question", required=True, help="Natural language question about the codebase.")
+    answer_parser.add_argument("--evidence-limit", type=int, default=6, help="Maximum number of evidence blocks.")
+    answer_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
+    answer_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    answer_parser.add_argument("--no-draft-fallback", action="store_true", help="Fail instead of returning draft_answer when no LLM is configured.")
+    answer_parser.add_argument("--output", help="Optional JSON output path.")
+
     serve_parser = subparsers.add_parser("serve-api", help="Run a local HTTP API around the index and QA package.")
     serve_parser.add_argument("--db", required=True, help="Default SQLite database path.")
     serve_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the local HTTP server.")
@@ -64,7 +74,8 @@ def main() -> int:
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
     qa = CodebaseQA(indexer)
-    api = CodebaseApi(indexer=indexer, qa=qa, default_db_path=getattr(args, "db", None))
+    answerer = CodebaseAnswerer(qa)
+    api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=getattr(args, "db", None))
 
     if args.command == "serve-api":
         api.serve(host=args.host, port=args.port)
@@ -93,6 +104,15 @@ def main() -> int:
             evidence_limit=args.evidence_limit,
             context_window=args.context_window,
             related_limit=args.related_limit,
+        )
+    elif args.command == "answer-codebase":
+        data = answerer.answer(
+            args.db,
+            args.question,
+            evidence_limit=args.evidence_limit,
+            context_window=args.context_window,
+            related_limit=args.related_limit,
+            allow_draft_fallback=not args.no_draft_fallback,
         )
     else:
         data = indexer.summarize_db(args.db)

@@ -5,7 +5,7 @@
 当前已经完成两层基础能力：
 
 1. 解析 XML 外壳 + `CDATA` DSL 代码体。
-2. 把解析结果写入 SQLite，并提供混合检索与证据组装能力。
+2. 把解析结果写入 SQLite，并提供混合检索、问答包和本地 API/回答接口。
 
 这还不是最终版问答系统，但已经具备了“理解仓库结构并沉淀索引”的第一版基础设施。
 
@@ -28,6 +28,9 @@
 - 提供 SQLite FTS + SQL fallback 的混合检索能力
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
+- 提供本地 `answer-codebase` 回答入口
+- 提供本地 HTTP API，包括最终回答接口 `POST /answer`
+- 提供可安装的 Codex 技能定义 `skills/uses-codebase-search`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 上完成一次全量扫描和索引验证
 
 ## 当前验证结果
@@ -72,6 +75,7 @@
 - `examples/uses_codes_db_summary.json`
 - `examples/uses_codes_evidence_example.json`
 - `examples/uses_codes_qa_example.json`
+- `examples/uses_codes_answer_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -88,17 +92,24 @@ examples/
   uses_codes_db_summary.json
   uses_codes_evidence_example.json
   uses_codes_qa_example.json
+  uses_codes_answer_example.json
+skills/
+  uses-codebase-search/
+    SKILL.md
 src/uses_indexer/
   api.py
+  answering.py
   __init__.py
   __main__.py
   cli.py
   indexer.py
+  llm.py
   models.py
   parser.py
   qa.py
 tests/
   test_api.py
+  test_answering.py
   test_parser.py
   test_indexer.py
   test_qa.py
@@ -193,6 +204,24 @@ python3 -m uses_indexer ask-codebase \
 - 一个本地生成的 `draft_answer`
 - 支撑结论的文件路径和行号
 
+生成最终回答：
+
+```bash
+python3 -m uses_indexer answer-codebase \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --question "证券代码获取的逻辑在哪里" \
+  --evidence-limit 6 \
+  --context-window 2 \
+  --related-limit 3 \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_answer_example.json
+```
+
+当前行为：
+
+- 如果配置了外部模型，会优先调用模型生成最终回答
+- 如果没有配置外部模型，会回退到基于证据生成的 `draft_answer`
+- 返回字段里会标明 `answer_source`
+
 启动本地 HTTP API：
 
 ```bash
@@ -209,6 +238,7 @@ python3 -m uses_indexer serve-api \
 - `POST /query`
 - `POST /evidence`
 - `POST /ask`
+- `POST /answer`
 
 示例：
 
@@ -222,11 +252,41 @@ curl -s http://127.0.0.1:8000/ask \
   -d '{"question":"证券代码获取的逻辑在哪里","evidence_limit":3}'
 ```
 
+```bash
+curl -s http://127.0.0.1:8000/answer \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"证券代码获取的逻辑在哪里","evidence_limit":3}'
+```
+
+## 外部模型配置
+
+`answer-codebase` 和 `POST /answer` 支持一个 OpenAI-compatible 的聊天接口，使用这些环境变量：
+
+- `USES_INDEXER_LLM_API_KEY`
+- `USES_INDEXER_LLM_MODEL`
+- `USES_INDEXER_LLM_BASE_URL`
+- `USES_INDEXER_LLM_TEMPERATURE`
+- `USES_INDEXER_LLM_MAX_TOKENS`
+
+如果只设置了 `OPENAI_API_KEY`，仍然需要显式设置 `USES_INDEXER_LLM_MODEL`。
+
+## 技能安装
+
+仓库里已经包含技能定义：
+
+- `skills/uses-codebase-search/SKILL.md`
+
+我还已经把它安装到：
+
+- `/Users/songzuoqiang/.codex/skills/uses-codebase-search/SKILL.md`
+
+重启 Codex 后，这个技能就可以作为本地技能参与后续对话。技能会优先调用本地 `uses-indexer` API 来回答 USES/UFT 代码库问题。
+
 ## 下一步
 
 - 增加更稳定的块级 AST
 - 补齐事务块、异常块、SQL 块的配对关系
 - 增加向量索引
 - 增加更精细的表访问与过程关系
-- 增加真正的外部模型调用入口
-- 增加 MCP/API 集成封装
+- 增加更丰富的模型适配器
+- 增加 MCP 集成封装

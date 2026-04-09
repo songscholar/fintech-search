@@ -130,6 +130,7 @@
 - `assemble-evidence`
 - `ask-codebase`
 - `serve-api`
+- `answer-codebase`
 
 `query-index` 当前会按下面的顺序工作：
 
@@ -171,12 +172,42 @@
 - `POST /query`
 - `POST /evidence`
 - `POST /ask`
+- `POST /answer`
 
 这个 API 层目前使用标准库实现，目标是：
 
 - 本地零额外依赖即可启动
 - 便于前端、IDE 插件或 MCP 服务复用
 - 先稳定协议，再考虑换到更完整的 Web 框架
+
+## 当前回答层
+
+当前项目已经增加一个可选的“外部模型调用层”：
+
+- `answer-codebase`
+- `POST /answer`
+
+其工作方式是：
+
+1. 先走 `ask-codebase`，构造证据、提示词和 `draft_answer`
+2. 如果配置了 OpenAI-compatible 接口，则调用外部模型生成最终答案
+3. 如果未配置模型，则回退到本地 `draft_answer`
+
+所以当前仓库已经具备：
+
+- 检索层
+- 证据组装层
+- 问答包层
+- 最终回答层
+- HTTP 服务层
+
+## 技能层
+
+仓库同时包含一个可安装的 Codex 技能：
+
+- `skills/uses-codebase-search/SKILL.md`
+
+这个技能的作用不是直接实现检索，而是把“何时调用本地索引服务、优先用哪个接口、如何引用证据”固化成一个可复用工作流。
 
 ## 下一阶段索引方向
 
@@ -193,7 +224,8 @@
 - 精确恢复 `if / while / transaction / exception` 层级
 - 增加向量索引
 - 增加更细粒度的上下文块切分
-- 增加真正的外部模型调用服务层
+- 增加更丰富的模型适配器
+- 增加 MCP 集成封装
 
 ## 文档策略
 

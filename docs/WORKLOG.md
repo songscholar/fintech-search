@@ -118,9 +118,26 @@
 - API 层保持零额外依赖，直接基于标准库 `ThreadingHTTPServer`
 - 补充 HTTP 层测试，确保服务可以真正起起来并返回 JSON
 
+### 阶段 10：最终回答层与技能化
+
+- 新增 `OpenAICompatibleLlm`
+- 新增 `CodebaseAnswerer`
+- 新增 CLI：
+  - `answer-codebase`
+- 新增 API：
+  - `POST /answer`
+- 当前支持：
+  - 配置外部模型时调用模型生成最终回答
+  - 未配置模型时回退到 `draft_answer`
+- 新增仓库内技能定义：
+  - `skills/uses-codebase-search/SKILL.md`
+- 已安装到本机：
+  - `/Users/songzuoqiang/.codex/skills/uses-codebase-search/SKILL.md`
+
 ### 后续计划
 
 - 增加块级结构恢复
 - 增加向量索引
 - 增加更精确的表访问与关系抽取
-- 增加真正的模型调用入口与服务封装
+- 增加更丰富的模型适配器
+- 增加 MCP 集成封装

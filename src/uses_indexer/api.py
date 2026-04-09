@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from .answering import CodebaseAnswerer
 from .indexer import SQLiteIndexer
+from .llm import LlmConfigError, LlmRequestError
 from .qa import CodebaseQA
 
 
@@ -24,10 +26,12 @@ class CodebaseApi:
         *,
         indexer: SQLiteIndexer | None = None,
         qa: CodebaseQA | None = None,
+        answerer: CodebaseAnswerer | None = None,
         default_db_path: str | Path | None = None,
     ) -> None:
         self.indexer = indexer or SQLiteIndexer()
         self.qa = qa or CodebaseQA(self.indexer)
+        self.answerer = answerer or CodebaseAnswerer(self.qa)
         self.default_db_path = str(default_db_path) if default_db_path else None
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000) -> None:
@@ -59,6 +63,7 @@ class CodebaseApi:
                     "POST /query",
                     "POST /evidence",
                     "POST /ask",
+                    "POST /answer",
                 ],
             }
 
@@ -103,7 +108,30 @@ class CodebaseApi:
                 related_limit=related_limit,
             )
 
-        if route in {"/query", "/evidence", "/ask"} and method != "POST":
+        if route == "/answer" and method == "POST":
+            payload = self._parse_json_body(body)
+            db_path = self._resolve_db_path(payload.get("db_path"))
+            question = self._require_string(payload, "question")
+            evidence_limit = _coerce_int(payload.get("evidence_limit", 6), "evidence_limit")
+            context_window = _coerce_int(payload.get("context_window", 2), "context_window")
+            related_limit = _coerce_int(payload.get("related_limit", 3), "related_limit")
+            allow_draft_fallback = bool(payload.get("allow_draft_fallback", True))
+            try:
+                result = self.answerer.answer(
+                    db_path,
+                    question,
+                    evidence_limit=evidence_limit,
+                    context_window=context_window,
+                    related_limit=related_limit,
+                    allow_draft_fallback=allow_draft_fallback,
+                )
+            except LlmConfigError as exc:
+                raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+            except LlmRequestError as exc:
+                raise ApiError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+            return HTTPStatus.OK, result
+
+        if route in {"/query", "/evidence", "/ask", "/answer"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")
