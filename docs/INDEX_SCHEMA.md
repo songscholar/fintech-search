@@ -6,6 +6,18 @@
 
 数据库样例文件默认会生成到 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
+## 元数据
+
+`metadata` 表当前除了记录 `source_root`、`file_count`、`schema_version`，还会记录：
+
+- `fts_enabled`
+- `vector_enabled`
+- `embedding_provider`
+- `embedding_model`
+- `embedding_dimension`
+
+这组字段用于在查询阶段判断当前 embedding 配置是否和索引库兼容。
+
 ## 表结构概览
 
 ### `files`
@@ -130,7 +142,7 @@
 
 ### `chunk_vectors`
 
-为每个语义块保存一份向量，用于本地向量式召回。
+为每个语义块保存一份向量，用于块级语义召回。
 
 主要字段：
 
@@ -178,6 +190,7 @@
 - 检索目前采用：
   - `chunks_fts` 块级召回
   - `chunk_vectors` 向量召回
+  - 查询前会先做 embedding 空间兼容校验
   - FTS5 召回
   - SQL `LIKE` fallback
   - Python 重排

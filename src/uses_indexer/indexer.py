@@ -8,7 +8,12 @@ from collections import Counter, defaultdict
 from heapq import nlargest
 from pathlib import Path
 
-from .embeddings import LocalHashedEmbedder, dot_similarity
+from .embeddings import (
+    Embedder,
+    EmbeddingRequestError,
+    create_embedder_from_env,
+    dot_similarity,
+)
 from .models import CodeStatement, ParsedUnit
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
 
@@ -255,11 +260,11 @@ class SQLiteIndexer:
     def __init__(
         self,
         parser: UftDslParser | None = None,
-        embedder: LocalHashedEmbedder | None = None,
+        embedder: Embedder | None = None,
     ) -> None:
         self.parser = parser or UftDslParser()
-        self.embedder = embedder or LocalHashedEmbedder()
-        self._vector_cache: dict[tuple[str, int, int], list[dict[str, object]]] = {}
+        self.embedder = embedder or create_embedder_from_env()
+        self._vector_cache: dict[tuple[str, int, int, str, str], list[dict[str, object]]] = {}
 
     def build_index(self, source_root: str | Path, db_path: str | Path) -> dict[str, object]:
         root = Path(source_root)
@@ -286,17 +291,17 @@ class SQLiteIndexer:
         action_counter: Counter[str] = Counter()
         chunk_counter: Counter[str] = Counter()
         vector_counter: Counter[str] = Counter()
-        embedder_info = self.embedder.info
+        initial_embedder_info = self.embedder.info
 
         with conn:
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(len(files))))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "5"))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "6"))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
             conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", embedder_info.provider))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", embedder_info.model))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(embedder_info.dimension)))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", initial_embedder_info.provider))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", initial_embedder_info.model))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(initial_embedder_info.dimension)))
 
             for path in files:
                 unit = self.parser.parse_path(path)
@@ -315,8 +320,15 @@ class SQLiteIndexer:
                 chunk_counter.update(local_chunks)
                 vector_counter.update(local_vectors)
 
+            final_embedder_info = self.embedder.info
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", final_embedder_info.provider))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", final_embedder_info.model))
+            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(final_embedder_info.dimension)))
+
         conn.close()
         self._vector_cache.clear()
+
+        final_embedder_info = self.embedder.info
 
         return {
             "source_root": str(root),
@@ -337,9 +349,9 @@ class SQLiteIndexer:
                 "chunks_fts": sum(chunk_counter.values()),
             },
             "embedding": {
-                "provider": embedder_info.provider,
-                "model": embedder_info.model,
-                "dimension": embedder_info.dimension,
+                "provider": final_embedder_info.provider,
+                "model": final_embedder_info.model,
+                "dimension": final_embedder_info.dimension,
             },
         }
 
@@ -395,7 +407,12 @@ class SQLiteIndexer:
     def query_index(self, db_path: str | Path, query: str, limit: int = 20) -> dict[str, object]:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        candidates, fts_query = self._retrieve_candidates(conn, db_path=db_path, query=query, candidate_limit=max(limit * 6, 30))
+        candidates, fts_query, vector_status = self._retrieve_candidates(
+            conn,
+            db_path=db_path,
+            query=query,
+            candidate_limit=max(limit * 6, 30),
+        )
         conn.close()
 
         hits = [
@@ -407,7 +424,8 @@ class SQLiteIndexer:
             "db_path": str(db_path),
             "query": query,
             "fts_query": fts_query,
-            "retrieval_strategy": "fts + vector + sql fallback + python rerank",
+            "retrieval_strategy": "fts + vector(if compatible) + sql fallback + python rerank",
+            "vector_status": vector_status,
             "candidate_count": len(candidates),
             "hit_count": len(hits),
             "hits": hits,
@@ -423,7 +441,12 @@ class SQLiteIndexer:
     ) -> dict[str, object]:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        candidates, fts_query = self._retrieve_candidates(conn, db_path=db_path, query=query, candidate_limit=max(limit * 8, 40))
+        candidates, fts_query, vector_status = self._retrieve_candidates(
+            conn,
+            db_path=db_path,
+            query=query,
+            candidate_limit=max(limit * 8, 40),
+        )
 
         evidence_blocks: list[dict[str, object]] = []
         seen_contexts: set[tuple[int, int, int]] = set()
@@ -490,7 +513,8 @@ class SQLiteIndexer:
             "db_path": str(db_path),
             "query": query,
             "fts_query": fts_query,
-            "retrieval_strategy": "fts + vector + sql fallback + python rerank + evidence assembly",
+            "retrieval_strategy": "fts + vector(if compatible) + sql fallback + python rerank + evidence assembly",
+            "vector_status": vector_status,
             "candidate_count": len(candidates),
             "evidence_count": len(evidence_blocks),
             "evidence": evidence_blocks,
@@ -661,8 +685,15 @@ class SQLiteIndexer:
     ) -> tuple[Counter[str], Counter[str]]:
         counter: Counter[str] = Counter()
         vector_counter: Counter[str] = Counter()
+        semantic_chunks = _build_semantic_chunks(unit.name, unit.statements)
+        if not semantic_chunks:
+            return counter, vector_counter
+
+        embedding_inputs = [f"{chunk['summary_text']}\n{chunk['content']}" for chunk in semantic_chunks]
+        vectors = self.embedder.embed_texts(embedding_inputs)
         embedder_info = self.embedder.info
-        for seq, chunk in enumerate(_build_semantic_chunks(unit.name, unit.statements), start=1):
+
+        for seq, (chunk, vector) in enumerate(zip(semantic_chunks, vectors, strict=True), start=1):
             cursor = conn.execute(
                 """
                 INSERT INTO chunks(
@@ -703,7 +734,6 @@ class SQLiteIndexer:
                 ),
             )
             chunk_id = int(cursor.lastrowid)
-            vector = self.embedder.embed_texts([f"{chunk['summary_text']}\n{chunk['content']}"])[0]
             conn.execute(
                 """
                 INSERT INTO chunks_fts(rowid, chunk_type, procedure_name, file_path, summary_text, content)
@@ -727,7 +757,7 @@ class SQLiteIndexer:
                     chunk_id,
                     embedder_info.provider,
                     embedder_info.model,
-                    embedder_info.dimension,
+                    len(vector),
                     _json(vector),
                 ),
             )
@@ -939,15 +969,23 @@ class SQLiteIndexer:
         db_path: str | Path,
         query: str,
         candidate_limit: int,
-    ) -> tuple[list[dict[str, object]], str | None]:
+    ) -> tuple[list[dict[str, object]], str | None, dict[str, object]]:
         fts_query = _build_fts_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
+        vector_status = self._vector_status(conn)
 
         if fts_query:
             for candidate in self._run_fts_queries(conn, raw_query=query, fts_query=fts_query, limit=candidate_limit):
                 _merge_candidate(candidates, candidate)
 
-        for candidate in self._run_vector_queries(conn, db_path=db_path, query=query, limit=candidate_limit):
+        vector_candidates, vector_status = self._run_vector_queries(
+            conn,
+            db_path=db_path,
+            query=query,
+            limit=candidate_limit,
+            initial_status=vector_status,
+        )
+        for candidate in vector_candidates:
             _merge_candidate(candidates, candidate)
 
         for candidate in self._run_like_queries(conn, query=query, limit=candidate_limit):
@@ -960,7 +998,7 @@ class SQLiteIndexer:
             ),
             key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"])),
         )
-        return ranked, fts_query
+        return ranked, fts_query, vector_status
 
     def _run_vector_queries(
         self,
@@ -969,17 +1007,38 @@ class SQLiteIndexer:
         db_path: str | Path,
         query: str,
         limit: int,
-    ) -> list[dict[str, object]]:
-        query_vector = self.embedder.embed_texts([query])[0]
+        initial_status: dict[str, object],
+    ) -> tuple[list[dict[str, object]], dict[str, object]]:
+        if not bool(initial_status.get("enabled")):
+            return [], initial_status
+
+        try:
+            query_vector = self.embedder.embed_texts([query])[0]
+        except EmbeddingRequestError as exc:
+            return [], {
+                **initial_status,
+                "enabled": False,
+                "reason": "query_embedding_failed",
+                "detail": str(exc),
+            }
+
         if not any(query_vector):
-            return []
+            return [], {
+                **initial_status,
+                "enabled": False,
+                "reason": "empty_query_vector",
+            }
         overlap_hints = _vector_hint_tokens(query)
 
         candidates = []
         try:
             vector_rows = self._load_chunk_vector_cache(conn, db_path)
         except sqlite3.OperationalError:
-            return []
+            return [], {
+                **initial_status,
+                "enabled": False,
+                "reason": "vector_cache_unavailable",
+            }
 
         for row in vector_rows:
             similarity = dot_similarity(query_vector, row["vector"])
@@ -1008,7 +1067,49 @@ class SQLiteIndexer:
             }
             candidates.append(candidate)
 
-        return nlargest(limit, candidates, key=lambda item: float(item["source_rank"]))
+        return nlargest(limit, candidates, key=lambda item: float(item["source_rank"])), {
+            **initial_status,
+            "reason": "enabled",
+        }
+
+    def _vector_status(self, conn: sqlite3.Connection) -> dict[str, object]:
+        db_provider = self._metadata(conn, "embedding_provider")
+        db_model = self._metadata(conn, "embedding_model")
+        db_dimension_raw = self._metadata(conn, "embedding_dimension")
+        vector_enabled = (self._metadata(conn, "vector_enabled") or "").lower() == "true"
+        vector_count = int(conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0])
+
+        current_info = self.embedder.info
+        status = {
+            "enabled": False,
+            "reason": "metadata_missing",
+            "index_provider": db_provider,
+            "index_model": db_model,
+            "index_dimension": _maybe_int(db_dimension_raw),
+            "query_provider": current_info.provider,
+            "query_model": current_info.model,
+            "query_dimension": current_info.dimension,
+        }
+
+        if not vector_enabled or vector_count == 0:
+            status["reason"] = "vector_index_unavailable"
+            return status
+
+        if not db_provider or not db_model:
+            return status
+
+        if current_info.provider != db_provider or current_info.model != db_model:
+            status["reason"] = "embedding_space_mismatch"
+            return status
+
+        db_dimension = _maybe_int(db_dimension_raw)
+        if db_dimension and current_info.dimension and current_info.dimension != db_dimension:
+            status["reason"] = "embedding_space_mismatch"
+            return status
+
+        status["enabled"] = True
+        status["reason"] = "compatible"
+        return status
 
     def _load_chunk_vector_cache(
         self,
@@ -1017,7 +1118,14 @@ class SQLiteIndexer:
     ) -> list[dict[str, object]]:
         db_file = Path(db_path)
         stat = os.stat(db_file)
-        cache_key = (str(db_file.resolve()), stat.st_mtime_ns, stat.st_size)
+        embedder_info = self.embedder.info
+        cache_key = (
+            str(db_file.resolve()),
+            stat.st_mtime_ns,
+            stat.st_size,
+            embedder_info.provider,
+            embedder_info.model,
+        )
         cached = self._vector_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1045,7 +1153,12 @@ class SQLiteIndexer:
             JOIN chunks c ON c.id = cv.chunk_id
             JOIN procedures p ON p.id = c.procedure_id
             JOIN files f ON f.id = c.file_id
-            """
+            WHERE cv.provider = ? AND cv.model = ?
+            """,
+            (
+                embedder_info.provider,
+                embedder_info.model,
+            ),
         ).fetchall()
 
         cached_rows = [

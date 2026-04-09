@@ -28,6 +28,8 @@
 - 提供 SQLite FTS + SQL fallback 的混合检索能力
 - 提供语义块 `chunk` 切分与 `chunks_fts` 检索能力
 - 提供本地哈希向量 `chunk_vectors` 与向量式召回能力
+- 提供 OpenAI-compatible embedding 接口接入能力，可替换本地哈希向量
+- 提供向量空间兼容校验，避免“用 A 模型建库、用 B 模型查询”导致错误召回
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
 - 提供一跳关系过程摘要扩展，使证据不只停留在命中过程本身
@@ -86,6 +88,25 @@
 - `examples/uses_codes_answer_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
+
+## Embedding 配置
+
+默认情况下，索引器会使用本地零依赖的 `LocalHashedEmbedder`。
+
+如果你希望用真实语义 embedding，可以设置：
+
+- `USES_INDEXER_EMBEDDING_API_KEY`
+- `USES_INDEXER_EMBEDDING_MODEL`
+- `USES_INDEXER_EMBEDDING_BASE_URL`
+- `USES_INDEXER_EMBEDDING_BATCH_SIZE`
+- `USES_INDEXER_EMBEDDING_DIMENSIONS`
+
+兼容规则：
+
+- 建库时会把 `provider / model / dimension` 写入 SQLite 元数据
+- 查询时会校验当前 embedding 配置是否和索引库一致
+- 如果不一致，会自动禁用向量召回，并在返回结果里输出 `vector_status`
+- 如果切换了 embedding 模型，应该重新执行一次 `build-index`
 
 ## 目录结构
 
@@ -202,6 +223,7 @@ python3 -m uses_indexer assemble-evidence \
 - 重排后的证据块
 - 语义块命中及其摘要
 - 向量式召回命中
+- 向量兼容状态 `vector_status`
 - 每个证据块对应的代码片段
 - 相关调用、来路调用、表访问
 - 一跳关联过程的摘要
@@ -243,6 +265,12 @@ python3 -m uses_indexer answer-codebase \
 - 如果配置了外部模型，会优先调用模型生成最终回答
 - 如果没有配置外部模型，会回退到基于证据生成的 `draft_answer`
 - 返回字段里会标明 `answer_source`
+
+如果你还配置了外部 embedding：
+
+- 建库会优先使用外部 embedding 生成 `chunk_vectors`
+- 查询会优先使用相同 embedding 空间做块级向量召回
+- 如果查询端和索引端 embedding 不兼容，会自动降级到 `FTS + LIKE + rerank`
 
 启动本地 HTTP API：
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from uses_indexer.embeddings import EmbeddingInfo, EmbeddingRequestError
 from uses_indexer.indexer import SQLiteIndexer
 
 
@@ -41,6 +42,24 @@ def _build_sample_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     return indexer, db_path
+
+
+class MismatchEmbedder:
+    @property
+    def info(self) -> EmbeddingInfo:
+        return EmbeddingInfo(provider="openai-compatible", model="text-embedding-3-large", dimension=3072)
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1] * 3072 for _ in texts]
+
+
+class FailingEmbedder:
+    @property
+    def info(self) -> EmbeddingInfo:
+        return EmbeddingInfo(provider="local-hash", model="local-hash-256", dimension=256)
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        raise EmbeddingRequestError("boom")
 
 
 def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
@@ -82,6 +101,29 @@ def test_query_index_includes_vector_retrieval_for_related_query(tmp_path: Path)
 
     assert result["hit_count"] >= 1
     assert any(hit["retrieval_source"] == "vector_chunk" for hit in result["hits"])
+
+
+def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
+    _, db_path = _build_sample_index(tmp_path)
+    indexer = SQLiteIndexer(embedder=MismatchEmbedder())
+
+    result = indexer.query_index(db_path, "证券信息获取", limit=10)
+
+    assert result["vector_status"]["enabled"] is False
+    assert result["vector_status"]["reason"] == "embedding_space_mismatch"
+    assert all(hit["retrieval_source"] != "vector_chunk" for hit in result["hits"])
+
+
+def test_query_index_falls_back_to_fts_when_vector_request_fails(tmp_path: Path) -> None:
+    _, db_path = _build_sample_index(tmp_path)
+    indexer = SQLiteIndexer(embedder=FailingEmbedder())
+
+    result = indexer.query_index(db_path, "证券代码获取", limit=10)
+
+    assert result["hit_count"] >= 1
+    assert result["vector_status"]["enabled"] is False
+    assert result["vector_status"]["reason"] == "query_embedding_failed"
+    assert any(str(hit["retrieval_source"]).startswith("fts_") for hit in result["hits"])
 
 
 def test_assemble_evidence_returns_llm_ready_context(tmp_path: Path) -> None:

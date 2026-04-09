@@ -1,5 +1,5 @@
 {
-  "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db",
+  "db_path": "examples/uses_codes_index.db",
   "files": 2564,
   "procedures": 2564,
   "histories": 7380,

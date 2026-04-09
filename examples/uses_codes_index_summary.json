@@ -1,6 +1,6 @@
 {
   "source_root": "/Users/songzuoqiang/Documents/agent/code/uses_codes",
-  "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db",
+  "db_path": "examples/uses_codes_index.db",
   "file_count": 2564,
   "unit_kind_counts": {
     "Function": 1858,

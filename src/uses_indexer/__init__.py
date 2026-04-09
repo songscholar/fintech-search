@@ -2,7 +2,15 @@
 
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
-from .embeddings import EmbeddingInfo, LocalHashedEmbedder
+from .embeddings import (
+    EmbeddingConfigError,
+    EmbeddingInfo,
+    EmbeddingRequestError,
+    LocalHashedEmbedder,
+    OpenAICompatibleEmbedder,
+    OpenAICompatibleEmbeddingConfig,
+    create_embedder_from_env,
+)
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
 from .llm import OpenAICompatibleConfig, OpenAICompatibleLlm
@@ -16,8 +24,13 @@ __all__ = [
     "CodexIntegrationInstaller",
     "CodebaseMcpServer",
     "CodebaseQA",
+    "create_embedder_from_env",
+    "EmbeddingConfigError",
     "EmbeddingInfo",
+    "EmbeddingRequestError",
     "LocalHashedEmbedder",
+    "OpenAICompatibleEmbedder",
+    "OpenAICompatibleEmbeddingConfig",
     "OpenAICompatibleConfig",
     "OpenAICompatibleLlm",
     "SQLiteIndexer",

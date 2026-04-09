@@ -192,10 +192,29 @@
 - `query-index` 当前会把 `vector_chunk` 结果与 `FTS`、`LIKE` 一起混合重排
 - 当前目标是补足“不完全同词但语义接近”的召回
 
+### 阶段 15：外部 embedding 接入与兼容保护
+
+- 新增 `OpenAICompatibleEmbedder`
+- 新增 `create_embedder_from_env`
+- 当前 embedding 层支持：
+  - 默认走本地 `LocalHashedEmbedder`
+  - 配置环境变量后切到 OpenAI-compatible embedding 接口
+- 建库时会把 `embedding_provider / embedding_model / embedding_dimension` 写入 SQLite 元数据
+- 查询时会先校验当前 embedding 配置与索引库是否处于同一向量空间
+- 如果不兼容，会自动禁用向量召回，并在结果中输出 `vector_status`
+- 如果向量请求失败，会自动回退到 `FTS + LIKE + rerank`
+- `_insert_chunks` 改成按文件内语义块批量生成向量，减少外部 embedding 请求次数
+- 补充测试，覆盖：
+  - 默认本地 embedding
+  - 环境变量切换到外部 embedding
+  - 外部 embedding 分批请求
+  - 向量空间不匹配时的安全降级
+  - 查询 embedding 请求失败时的安全回退
+
 ### 后续计划
 
 - 增加块级结构恢复
-- 增加向量索引
+- 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精确的表访问与关系抽取
 - 增加更丰富的模型适配器
 - 增加更强的 MCP 能力和更多可组合工具
