@@ -314,7 +314,10 @@ SINGLE_BLOCK_ACTIONS = {
 }
 BRACE_ATTACHED_BLOCK_ACTIONS = {
     "处理失败": "failure_handler",
+    "EXCEPTION": "exception_handler",
+    "WHEN_OTHERS": "when_others_handler",
 }
+EXIT_LABEL_NAMES = {"svr_end"}
 
 
 class SQLiteIndexer:
@@ -1197,6 +1200,54 @@ class SQLiteIndexer:
                     detail={"line_start": statement.line_start, "line_end": statement.line_end},
                 )
                 edge_counter["writes_variable"] += 1
+
+        if statement.kind == "goto" and statement.target:
+            self._insert_edge(
+                conn,
+                file_id=file_id,
+                procedure_id=procedure_id,
+                statement_id=statement_id,
+                procedure_name=unit.name,
+                file_path=unit.path,
+                edge_type="jumps_to_label",
+                source_name=unit.name,
+                target_name=statement.target,
+                target_kind="label",
+                detail={"line_start": statement.line_start, "line_end": statement.line_end},
+            )
+            edge_counter["jumps_to_label"] += 1
+
+            if statement.target in EXIT_LABEL_NAMES:
+                self._insert_edge(
+                    conn,
+                    file_id=file_id,
+                    procedure_id=procedure_id,
+                    statement_id=statement_id,
+                    procedure_name=unit.name,
+                    file_path=unit.path,
+                    edge_type="jumps_to_exit",
+                    source_name=unit.name,
+                    target_name=statement.target,
+                    target_kind="label",
+                    detail={"line_start": statement.line_start, "line_end": statement.line_end},
+                )
+                edge_counter["jumps_to_exit"] += 1
+
+        if statement.kind == "label" and statement.target:
+            self._insert_edge(
+                conn,
+                file_id=file_id,
+                procedure_id=procedure_id,
+                statement_id=statement_id,
+                procedure_name=unit.name,
+                file_path=unit.path,
+                edge_type="defines_label",
+                source_name=unit.name,
+                target_name=statement.target,
+                target_kind="label",
+                detail={"line_start": statement.line_start, "line_end": statement.line_end},
+            )
+            edge_counter["defines_label"] += 1
 
         return action_counter
 
@@ -2258,6 +2309,24 @@ class SQLiteIndexer:
             ).fetchall()
         ]
 
+        control_flow = [
+            {
+                "edge_type": str(row["edge_type"]),
+                "target_name": str(row["target_name"]),
+            }
+            for row in conn.execute(
+                """
+                SELECT DISTINCT edge_type, target_name
+                FROM edges
+                WHERE procedure_id = ?
+                  AND edge_type IN ('jumps_to_label', 'jumps_to_exit', 'defines_label')
+                ORDER BY edge_type, target_name
+                LIMIT ?
+                """,
+                (procedure_id, related_limit),
+            ).fetchall()
+        ]
+
         related_procedures = self._fetch_related_procedure_summaries(
             conn,
             outgoing_calls=outgoing_calls,
@@ -2270,6 +2339,7 @@ class SQLiteIndexer:
             "incoming_callers": incoming_callers,
             "related_tables": related_tables,
             "related_actions": related_actions,
+            "control_flow": control_flow,
             "related_procedures": related_procedures,
         }
 
@@ -2382,6 +2452,12 @@ class SQLiteIndexer:
                 lines.append(f"Related tables: {table_desc}")
             if related["related_actions"]:
                 lines.append(f"Related actions: {', '.join(related['related_actions'])}")
+            if related["control_flow"]:
+                flow_desc = ", ".join(
+                    f"{item['edge_type']}:{item['target_name']}"
+                    for item in related["control_flow"]
+                )
+                lines.append(f"Control flow: {flow_desc}")
             if related["related_procedures"]:
                 for item in related["related_procedures"]:
                     summary_text = item["summary_text"] or ""
@@ -2402,6 +2478,33 @@ def _recover_blocks(statements: list[CodeStatement]) -> list[dict[str, object]]:
     paired_stacks: dict[str, list[int]] = {block_type: [] for block_type in PAIRED_BLOCK_ACTIONS}
 
     for seq, statement in enumerate(statements, start=1):
+        if statement.kind == "goto" and statement.target:
+            block_type = "goto_exit" if statement.target in EXIT_LABEL_NAMES else "goto_jump"
+            blocks.append(
+                _make_recovered_block(
+                    statements=statements,
+                    block_type=block_type,
+                    anchor_name=statement.target,
+                    anchor_seq=seq,
+                    statement_start_seq=seq,
+                    statement_end_seq=seq,
+                )
+            )
+            continue
+
+        if statement.kind == "label" and statement.target in EXIT_LABEL_NAMES:
+            blocks.append(
+                _make_recovered_block(
+                    statements=statements,
+                    block_type="exit_label",
+                    anchor_name=statement.target,
+                    anchor_seq=seq,
+                    statement_start_seq=seq,
+                    statement_end_seq=seq,
+                )
+            )
+            continue
+
         if statement.kind != "action" or not statement.name:
             continue
 
@@ -2558,6 +2661,16 @@ def _summarize_block(
         summary = f"{procedure_name} 的 SQL 执行语句"
     elif block_type == "failure_handler":
         summary = f"{procedure_name} 的失败处理块"
+    elif block_type == "exception_handler":
+        summary = f"{procedure_name} 的 EXCEPTION 异常处理块"
+    elif block_type == "when_others_handler":
+        summary = f"{procedure_name} 的 WHEN_OTHERS 兜底处理块"
+    elif block_type == "goto_exit":
+        summary = f"{procedure_name} 的退出跳转语句，跳向 {anchor_name}"
+    elif block_type == "goto_jump":
+        summary = f"{procedure_name} 的跳转语句，跳向 {anchor_name}"
+    elif block_type == "exit_label":
+        summary = f"{procedure_name} 的退出标签 {anchor_name}"
     elif block_type.endswith("_loop"):
         summary = f"{procedure_name} 的 {anchor_name} 代码块"
     else:

@@ -160,6 +160,10 @@
 - SQL 查询块
 - SQL 执行语句
 - 失败处理块
+- `EXCEPTION` 异常块
+- `WHEN_OTHERS` 兜底异常块
+- `goto svr_end` 一类退出跳转
+- 退出标签
 - 记录 / 记录池 / 组件循环块
 
 主要字段：
@@ -180,6 +184,12 @@
 ### `block_edges`
 
 块级关系摘要表，用于快速回答“这个事务块里改了哪些表、调了哪些过程”。
+
+现在也会汇总：
+
+- 跳到了哪个标签
+- 是否跳向退出标签
+- 当前过程定义了哪些标签
 
 主要字段：
 
@@ -222,6 +232,9 @@
 - `uses_component`
 - `writes_variable`
 - `uses_target`
+- `jumps_to_label`
+- `jumps_to_exit`
+- `defines_label`
 
 ## 当前检索方式
 

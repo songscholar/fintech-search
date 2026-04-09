@@ -74,6 +74,7 @@
           "SQL结果集解包结束",
           "业务报错返回"
         ],
+        "control_flow": [],
         "related_procedures": []
       }
     },
@@ -130,6 +131,7 @@
           "遍历组件开始",
           "遍历组件结束"
         ],
+        "control_flow": [],
         "related_procedures": []
       }
     },
@@ -186,6 +188,7 @@
           "遍历组件开始",
           "遍历组件结束"
         ],
+        "control_flow": [],
         "related_procedures": []
       }
     },
@@ -247,6 +250,7 @@
           "SQL结果集解包开始",
           "SQL结果集解包结束"
         ],
+        "control_flow": [],
         "related_procedures": []
       }
     },
@@ -308,6 +312,7 @@
           "SQL结果集解包开始",
           "SQL结果集解包结束"
         ],
+        "control_flow": [],
         "related_procedures": []
       }
     },
@@ -415,6 +420,7 @@
           "处理成功",
           "直接返回"
         ],
+        "control_flow": [],
         "related_procedures": []
       }
     }

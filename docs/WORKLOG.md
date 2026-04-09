@@ -234,10 +234,30 @@
   - 失败处理块召回
   - 证据中的覆盖块摘要
 
+### 阶段 17：异常路径与退出标签恢复
+
+- 新增结构块：
+  - `exception_handler`
+  - `when_others_handler`
+  - `goto_exit`
+  - `goto_jump`
+  - `exit_label`
+- 新增关系边：
+  - `jumps_to_label`
+  - `jumps_to_exit`
+  - `defines_label`
+- `related_context` 现在会补充控制流摘要
+- `llm_context` 现在会显式输出 `Control flow`
+- 补充测试，覆盖：
+  - `svr_end` 查询
+  - `goto / label` 关系边
+  - 失败处理问句下的 `EXCEPTION / WHEN_OTHERS` 恢复
+
 ### 后续计划
 
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
+- 增加更精细的 goto / label 路径恢复
 - 增加更精确的表访问与关系抽取
 - 增加更丰富的模型适配器
 - 增加更强的 MCP 能力和更多可组合工具

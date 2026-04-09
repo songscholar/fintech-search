@@ -31,6 +31,7 @@
 - 提供 OpenAI-compatible embedding 接口接入能力，可替换本地哈希向量
 - 提供向量空间兼容校验，避免“用 A 模型建库、用 B 模型查询”导致错误召回
 - 提供结构块恢复：事务块、SQL 块、失败处理块、记录循环块
+- 提供异常与控制流恢复：`EXCEPTION`、`WHEN_OTHERS`、`goto svr_end`、退出标签
 - 提供块级关系摘要，使证据能带上“在哪个事务/SQL/失败路径里”
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
@@ -76,7 +77,7 @@
 - `chunks`: 由建库时按过程语义块自动生成
 - `chunk_vectors`: 与 `chunks` 一一对应
 - `blocks`: 由建库时按事务 / SQL / 失败处理 / 循环等稳定结构恢复生成
-- `block_edges`: 与 `blocks` 对应的块级关系摘要
+- `block_edges`: 聚合块内部的过程调用、表访问和控制流关系
 - `procedures_fts`: `2564`
 - `statements_fts`: `159148`
 - `actions_fts`: `26225`
@@ -91,6 +92,8 @@
 - `examples/uses_codes_evidence_example.json`
 - `examples/uses_codes_qa_example.json`
 - `examples/uses_codes_answer_example.json`
+- `examples/uses_codes_failure_flow_example.json`
+- `examples/uses_codes_exit_flow_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -129,6 +132,8 @@ examples/
   uses_codes_evidence_example.json
   uses_codes_qa_example.json
   uses_codes_answer_example.json
+  uses_codes_failure_flow_example.json
+  uses_codes_exit_flow_example.json
 plugins/
   uses-codebase-plugin/
     .codex-plugin/plugin.json
@@ -230,6 +235,7 @@ python3 -m uses_indexer assemble-evidence \
 - 向量式召回命中
 - 向量兼容状态 `vector_status`
 - 覆盖当前证据的事务块 / SQL 块 / 失败处理块摘要
+- 覆盖当前证据的异常处理块和退出跳转摘要
 - 每个证据块对应的代码片段
 - 相关调用、来路调用、表访问
 - 一跳关联过程的摘要

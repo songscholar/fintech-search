@@ -31,7 +31,10 @@
     "writes_variable": 23824,
     "reads_table": 1704,
     "calls_procedure": 8085,
-    "uses_component": 287
+    "uses_component": 287,
+    "defines_label": 39,
+    "jumps_to_label": 25,
+    "jumps_to_exit": 19
   },
   "variable_ref_counts": {
     "read": 181264,
@@ -52,27 +55,35 @@
     "transaction": 494,
     "record_pool_loop": 41,
     "component_loop": 68,
+    "exit_label": 8,
     "sql_execute": 1081,
     "failure_handler": 1479,
     "record_loop": 348,
-    "sql_query": 173
+    "sql_query": 173,
+    "exception_handler": 560,
+    "when_others_handler": 548,
+    "goto_exit": 19,
+    "goto_jump": 6
   },
   "block_edge_counts": {
-    "uses_action": 14407,
+    "uses_action": 16994,
     "writes_table": 556,
     "calls_procedure": 1381,
     "reads_table": 981,
     "uses_component": 127,
-    "uses_target": 4604,
-    "writes_variable": 8326
+    "uses_target": 5523,
+    "writes_variable": 8333,
+    "defines_label": 8,
+    "jumps_to_exit": 29,
+    "jumps_to_label": 35
   },
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 61249,
+    "edges_fts": 61332,
     "chunks_fts": 28748,
-    "blocks_fts": 3684
+    "blocks_fts": 4825
   },
   "embedding": {
     "provider": "local-hash",

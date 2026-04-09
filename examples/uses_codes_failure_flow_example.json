@@ -1,0 +1,656 @@
+{
+  "db_path": "examples/uses_codes_index.db",
+  "query": "查询交易资金表失败在哪里处理",
+  "fts_query": "查询交易资金表失败* OR 处理*",
+  "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank + evidence assembly",
+  "vector_status": {
+    "enabled": true,
+    "reason": "enabled",
+    "index_provider": "local-hash",
+    "index_model": "local-hash-256",
+    "index_dimension": 256,
+    "query_provider": "local-hash",
+    "query_model": "local-hash-256",
+    "query_dimension": 256
+  },
+  "candidate_count": 242,
+  "evidence_count": 4,
+  "evidence": [
+    {
+      "rank": 1,
+      "score": 168.0,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_FUNDPUB_ENMONEYTYPE_QRY",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDPUB_ENMONEYTYPE_QRY.uftatomfunction",
+      "matched_text": "AF_FUNDPUB_ENMONEYTYPE_QRY | action_block | actions: 继续执行, 通用SQL执行, 处理失败, EXCEPTION | targets: select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account, ERR_FUND_QRY_FUNDREAL_FAIL | vars: @en_money_type, @fund_account, @sql_row_count | notes: 取开通币种个数; 20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/2"
+      ],
+      "chunk_type": "action_block",
+      "chunk_summary": "AF_FUNDPUB_ENMONEYTYPE_QRY | action_block | actions: 继续执行, 通用SQL执行, 处理失败, EXCEPTION | targets: select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account, ERR_FUND_QRY_FUNDREAL_FAIL | vars: @en_money_type, @fund_account, @sql_row_count | notes: 取开通币种个数; 20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850",
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 1,
+      "line_end": 18,
+      "excerpt": "L1: [继续执行]\nL3:   //取开通币种个数\nL4:   //20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850\nL5:   // TODO sql有问题\nL6:   <M>[通用SQL执行][select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                       max(decode(a.money_type,'1',a.money_type,null)) ||\n                       max(decode(a.money_type,'2',a.money_type,null)),' ')\n                       into @en_money_type\n                       from uses_fund_real a\n                       where a.fund_account = @fund_account][count = @sql_row_count]\nL13:   [处理失败]\nL14:   {\nL15:     [EXCEPTION]\nL16:     [WHEN_OTHERS]\nL17:     {\nL18:       [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]",
+      "context_statements": [
+        {
+          "statement_id": 2858,
+          "seq": 1,
+          "kind": "action",
+          "line_start": 1,
+          "line_end": 1,
+          "raw": "[继续执行]"
+        },
+        {
+          "statement_id": 2859,
+          "seq": 2,
+          "kind": "comment",
+          "line_start": 3,
+          "line_end": 3,
+          "raw": "  //取开通币种个数"
+        },
+        {
+          "statement_id": 2860,
+          "seq": 3,
+          "kind": "comment",
+          "line_start": 4,
+          "line_end": 4,
+          "raw": "  //20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850"
+        },
+        {
+          "statement_id": 2861,
+          "seq": 4,
+          "kind": "comment",
+          "line_start": 5,
+          "line_end": 5,
+          "raw": "  // TODO sql有问题"
+        },
+        {
+          "statement_id": 2862,
+          "seq": 5,
+          "kind": "action",
+          "line_start": 6,
+          "line_end": 11,
+          "raw": "  <M>[通用SQL执行][select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account][count = @sql_row_count]"
+        },
+        {
+          "statement_id": 2863,
+          "seq": 6,
+          "kind": "action",
+          "line_start": 13,
+          "line_end": 13,
+          "raw": "  [处理失败]"
+        },
+        {
+          "statement_id": 2864,
+          "seq": 7,
+          "kind": "brace",
+          "line_start": 14,
+          "line_end": 14,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 2865,
+          "seq": 8,
+          "kind": "action",
+          "line_start": 15,
+          "line_end": 15,
+          "raw": "    [EXCEPTION]"
+        },
+        {
+          "statement_id": 2866,
+          "seq": 9,
+          "kind": "action",
+          "line_start": 16,
+          "line_end": 16,
+          "raw": "    [WHEN_OTHERS]"
+        },
+        {
+          "statement_id": 2867,
+          "seq": 10,
+          "kind": "brace",
+          "line_start": 17,
+          "line_end": 17,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 2868,
+          "seq": 11,
+          "kind": "action",
+          "line_start": 18,
+          "line_end": 18,
+          "raw": "      [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "when_others_handler",
+          "anchor_name": "WHEN_OTHERS",
+          "line_start": 16,
+          "line_end": 19,
+          "summary_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的 WHEN_OTHERS 兜底处理块 | actions=WHEN_OTHERS, {, }, 业务报错返回 | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_FUND_QRY_FUNDREAL_FAIL",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "WHEN_OTHERS",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "业务报错返回",
+              "target_kind": "action"
+            }
+          ]
+        },
+        {
+          "block_type": "exception_handler",
+          "anchor_name": "EXCEPTION",
+          "line_start": 15,
+          "line_end": 19,
+          "summary_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的 EXCEPTION 异常处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_FUND_QRY_FUNDREAL_FAIL",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "EXCEPTION",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "WHEN_OTHERS",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "业务报错返回",
+              "target_kind": "action"
+            }
+          ]
+        },
+        {
+          "block_type": "sql_execute",
+          "anchor_name": "通用SQL执行",
+          "line_start": 6,
+          "line_end": 11,
+          "summary_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的 SQL 执行语句 | SQL=select nvl(max(decode(a.money_type,'0',a.money_type,null)) || max(decode(a.money_type,'1',a.money_type,null)) || max(... | actions=通用SQL执行 | targets=select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account",
+              "target_kind": "expression"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "通用SQL执行",
+              "target_kind": "action"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [],
+        "incoming_callers": [],
+        "related_tables": [],
+        "related_actions": [
+          "EXCEPTION",
+          "WHEN_OTHERS",
+          "业务报错返回"
+        ],
+        "control_flow": [],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 2,
+      "score": 165.0,
+      "hit_type": "block",
+      "retrieval_source": "fts_block",
+      "match_source": "block_summary",
+      "procedure_name": "AF_FUNDPUB_ENMONEYTYPE_QRY",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDPUB_ENMONEYTYPE_QRY.uftatomfunction",
+      "matched_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的失败处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=2/2"
+      ],
+      "chunk_type": null,
+      "chunk_summary": null,
+      "block_type": "failure_handler",
+      "block_summary": "AF_FUNDPUB_ENMONEYTYPE_QRY 的失败处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+      "line_start": 13,
+      "line_end": 20,
+      "excerpt": "L13:   [处理失败]\nL14:   {\nL15:     [EXCEPTION]\nL16:     [WHEN_OTHERS]\nL17:     {\nL18:       [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]\nL19:     }\nL20:   }",
+      "context_statements": [
+        {
+          "statement_id": 2863,
+          "seq": 6,
+          "kind": "action",
+          "line_start": 13,
+          "line_end": 13,
+          "raw": "  [处理失败]"
+        },
+        {
+          "statement_id": 2864,
+          "seq": 7,
+          "kind": "brace",
+          "line_start": 14,
+          "line_end": 14,
+          "raw": "  {"
+        },
+        {
+          "statement_id": 2865,
+          "seq": 8,
+          "kind": "action",
+          "line_start": 15,
+          "line_end": 15,
+          "raw": "    [EXCEPTION]"
+        },
+        {
+          "statement_id": 2866,
+          "seq": 9,
+          "kind": "action",
+          "line_start": 16,
+          "line_end": 16,
+          "raw": "    [WHEN_OTHERS]"
+        },
+        {
+          "statement_id": 2867,
+          "seq": 10,
+          "kind": "brace",
+          "line_start": 17,
+          "line_end": 17,
+          "raw": "    {"
+        },
+        {
+          "statement_id": 2868,
+          "seq": 11,
+          "kind": "action",
+          "line_start": 18,
+          "line_end": 18,
+          "raw": "      [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]"
+        },
+        {
+          "statement_id": 2869,
+          "seq": 12,
+          "kind": "brace",
+          "line_start": 19,
+          "line_end": 19,
+          "raw": "    }"
+        },
+        {
+          "statement_id": 2870,
+          "seq": 13,
+          "kind": "brace",
+          "line_start": 20,
+          "line_end": 20,
+          "raw": "  }"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "when_others_handler",
+          "anchor_name": "WHEN_OTHERS",
+          "line_start": 16,
+          "line_end": 19,
+          "summary_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的 WHEN_OTHERS 兜底处理块 | actions=WHEN_OTHERS, {, }, 业务报错返回 | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_FUND_QRY_FUNDREAL_FAIL",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "WHEN_OTHERS",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "业务报错返回",
+              "target_kind": "action"
+            }
+          ]
+        },
+        {
+          "block_type": "exception_handler",
+          "anchor_name": "EXCEPTION",
+          "line_start": 15,
+          "line_end": 19,
+          "summary_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的 EXCEPTION 异常处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_FUND_QRY_FUNDREAL_FAIL",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "EXCEPTION",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "WHEN_OTHERS",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "业务报错返回",
+              "target_kind": "action"
+            }
+          ]
+        },
+        {
+          "block_type": "failure_handler",
+          "anchor_name": "处理失败",
+          "line_start": 13,
+          "line_end": 20,
+          "summary_text": "AF_FUNDPUB_ENMONEYTYPE_QRY 的失败处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_FUND_QRY_FUNDREAL_FAIL",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "EXCEPTION",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "WHEN_OTHERS",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "业务报错返回",
+              "target_kind": "action"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [],
+        "incoming_callers": [],
+        "related_tables": [],
+        "related_actions": [
+          "EXCEPTION",
+          "WHEN_OTHERS",
+          "业务报错返回"
+        ],
+        "control_flow": [],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 5,
+      "score": 155.0,
+      "hit_type": "procedure",
+      "retrieval_source": "fts_procedure",
+      "match_source": "procedure_fts",
+      "procedure_name": "LF_INNERSESSETT_PROCESSFLAG_GET",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_PROCESSFLAG_GET.uftfunction",
+      "matched_text": "LF_内部远程调用(证券清算)_处理标志获取",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/2"
+      ],
+      "chunk_type": null,
+      "chunk_summary": null,
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 2,
+      "line_end": 24,
+      "excerpt": "L2:     [事务处理开始]\nL3:     hs_strcpy(@table_name,\"sett_oper_log\");\nL5:     <M>[通用SQL执行][select count(*)\n                            into @row_count\n                            from sett_oper_log\n                            where init_date = @init_date\n                                 and\n                                 subsys_id = @subsys_id\n                                 and\n                                 node_id = @node_id\n                                 and\n                                 instr(remark, @remark) > 0\n                                 and oper_flag = 1][count = @sql_row_count]\nL19:     [处理失败]\nL21:             [业务报错返回][ERR_USER_QRY_TABLERECORD_FAIL][查询表记录失败][@table_name,\n                                                                              @init_date,\n                                                                              @subsys_id,\n                                                                              @node_id]",
+      "context_statements": [
+        {
+          "statement_id": 44947,
+          "seq": 1,
+          "kind": "action",
+          "line_start": 2,
+          "line_end": 2,
+          "raw": "    [事务处理开始]"
+        },
+        {
+          "statement_id": 44948,
+          "seq": 2,
+          "kind": "assignment",
+          "line_start": 3,
+          "line_end": 3,
+          "raw": "    hs_strcpy(@table_name,\"sett_oper_log\");"
+        },
+        {
+          "statement_id": 44949,
+          "seq": 3,
+          "kind": "action",
+          "line_start": 5,
+          "line_end": 15,
+          "raw": "    <M>[通用SQL执行][select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1][count = @sql_row_count]"
+        },
+        {
+          "statement_id": 44950,
+          "seq": 4,
+          "kind": "action",
+          "line_start": 19,
+          "line_end": 19,
+          "raw": "    [处理失败]"
+        },
+        {
+          "statement_id": 44952,
+          "seq": 6,
+          "kind": "action",
+          "line_start": 21,
+          "line_end": 24,
+          "raw": "            [业务报错返回][ERR_USER_QRY_TABLERECORD_FAIL][查询表记录失败][@table_name,\n                                                                          @init_date,\n                                                                          @subsys_id,\n                                                                          @node_id]"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "failure_handler",
+          "anchor_name": "处理失败",
+          "line_start": 19,
+          "line_end": 25,
+          "summary_text": "LF_INNERSESSETT_PROCESSFLAG_GET 的失败处理块 | actions={, }, 业务报错返回, 处理失败 | targets=ERR_USER_QRY_TABLERECORD_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_USER_QRY_TABLERECORD_FAIL",
+              "target_kind": "table"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "业务报错返回",
+              "target_kind": "action"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "处理失败",
+              "target_kind": "action"
+            }
+          ]
+        },
+        {
+          "block_type": "sql_execute",
+          "anchor_name": "通用SQL执行",
+          "line_start": 5,
+          "line_end": 15,
+          "summary_text": "LF_INNERSESSETT_PROCESSFLAG_GET 的 SQL 执行语句 | SQL=select count(*) into @row_count from sett_oper_log where init_date = @init_date and subsys_id = @subsys_id and node_i... | actions=通用SQL执行 | targets=select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1",
+              "target_kind": "expression"
+            },
+            {
+              "edge_type": "uses_action",
+              "target_name": "通用SQL执行",
+              "target_kind": "action"
+            }
+          ]
+        },
+        {
+          "block_type": "transaction",
+          "anchor_name": "事务处理开始",
+          "line_start": 2,
+          "line_end": 39,
+          "summary_text": "LF_INNERSESSETT_PROCESSFLAG_GET 的事务块，包含 19 条语句 | SQL=select count(*) into @row_count from sett_oper_log where init_date = @init_date and subsys_id = @subsys_id and node_i... | actions=else, if, {, } | targets=ERR_USER_QRY_TABLERECORD_FAIL, select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1",
+          "relations": [
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@oper_flag",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@oper_flag",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@table_name",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "uses_target",
+              "target_name": "ERR_USER_QRY_TABLERECORD_FAIL",
+              "target_kind": "table"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [],
+        "incoming_callers": [],
+        "related_tables": [],
+        "related_actions": [
+          "业务报错返回",
+          "事务处理开始",
+          "事务处理结束"
+        ],
+        "control_flow": [],
+        "related_procedures": []
+      }
+    },
+    {
+      "rank": 6,
+      "score": 155.0,
+      "hit_type": "procedure",
+      "retrieval_source": "fts_procedure",
+      "match_source": "procedure_fts",
+      "procedure_name": "LF_INNERSESSETT_PROCESSFLAG_INSERT",
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_PROCESSFLAG_INSERT.uftfunction",
+      "matched_text": "LF_内部远程调用(证券清算)_处理标志记录",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/2"
+      ],
+      "chunk_type": null,
+      "chunk_summary": null,
+      "block_type": null,
+      "block_summary": null,
+      "line_start": 2,
+      "line_end": 6,
+      "excerpt": "L2:     [事务处理开始]\nL3:     [获取日期][@curr_date]\nL4:     [获取微秒时间][@curr_microtime]\nL5:     @curr_milltime = @curr_microtime / 1000;\nL6:     hs_strcpy(@table_name,\"sett_oper_log\");",
+      "context_statements": [
+        {
+          "statement_id": 44966,
+          "seq": 1,
+          "kind": "action",
+          "line_start": 2,
+          "line_end": 2,
+          "raw": "    [事务处理开始]"
+        },
+        {
+          "statement_id": 44967,
+          "seq": 2,
+          "kind": "action",
+          "line_start": 3,
+          "line_end": 3,
+          "raw": "    [获取日期][@curr_date]"
+        },
+        {
+          "statement_id": 44968,
+          "seq": 3,
+          "kind": "action",
+          "line_start": 4,
+          "line_end": 4,
+          "raw": "    [获取微秒时间][@curr_microtime]"
+        },
+        {
+          "statement_id": 44969,
+          "seq": 4,
+          "kind": "assignment",
+          "line_start": 5,
+          "line_end": 5,
+          "raw": "    @curr_milltime = @curr_microtime / 1000;"
+        },
+        {
+          "statement_id": 44970,
+          "seq": 5,
+          "kind": "assignment",
+          "line_start": 6,
+          "line_end": 6,
+          "raw": "    hs_strcpy(@table_name,\"sett_oper_log\");"
+        }
+      ],
+      "recovered_blocks": [
+        {
+          "block_type": "transaction",
+          "anchor_name": "事务处理开始",
+          "line_start": 2,
+          "line_end": 24,
+          "summary_text": "LF_INNERSESSETT_PROCESSFLAG_INSERT 的事务块，包含 11 条语句 | SQL=insert into sett_oper_log ( init_date, operator_no, curr_date, curr_milltime, op_station, subsys_id, node_id, sett_ba... | actions={, }, 业务报错返回, 事务处理开始 | targets=@curr_date, @curr_microtime, ERR_USER_MOD_TABLERECORD_FAIL",
+          "relations": [
+            {
+              "edge_type": "uses_target",
+              "target_name": "@curr_date",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "uses_target",
+              "target_name": "@curr_microtime",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@curr_milltime",
+              "target_kind": "variable"
+            },
+            {
+              "edge_type": "writes_variable",
+              "target_name": "@table_name",
+              "target_kind": "variable"
+            }
+          ]
+        }
+      ],
+      "related_context": {
+        "outgoing_calls": [],
+        "incoming_callers": [],
+        "related_tables": [],
+        "related_actions": [
+          "业务报错返回",
+          "事务处理开始",
+          "事务处理结束"
+        ],
+        "control_flow": [],
+        "related_procedures": []
+      }
+    }
+  ],
+  "llm_context": "Question: 查询交易资金表失败在哪里处理\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: AF_FUNDPUB_ENMONEYTYPE_QRY\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDPUB_ENMONEYTYPE_QRY.uftatomfunction\nLines: 1-18\nMatched text: AF_FUNDPUB_ENMONEYTYPE_QRY | action_block | actions: 继续执行, 通用SQL执行, 处理失败, EXCEPTION | targets: select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account, ERR_FUND_QRY_FUNDREAL_FAIL | vars: @en_money_type, @fund_account, @sql_row_count | notes: 取开通币种个数; 20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=2/2\nSnippet:\nL1: [继续执行]\nL3:   //取开通币种个数\nL4:   //20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850\nL5:   // TODO sql有问题\nL6:   <M>[通用SQL执行][select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                       max(decode(a.money_type,'1',a.money_type,null)) ||\n                       max(decode(a.money_type,'2',a.money_type,null)),' ')\n                       into @en_money_type\n                       from uses_fund_real a\n                       where a.fund_account = @fund_account][count = @sql_row_count]\nL13:   [处理失败]\nL14:   {\nL15:     [EXCEPTION]\nL16:     [WHEN_OTHERS]\nL17:     {\nL18:       [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]\nChunk type: action_block\nChunk summary: AF_FUNDPUB_ENMONEYTYPE_QRY | action_block | actions: 继续执行, 通用SQL执行, 处理失败, EXCEPTION | targets: select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account, ERR_FUND_QRY_FUNDREAL_FAIL | vars: @en_money_type, @fund_account, @sql_row_count | notes: 取开通币种个数; 20211101 ligq mod 优化代码,提高性能,获取币种时不使用游标,采用max和decode的组合写法实现,并注释原代码. 修改单: M202109020850\nCovering block: when_others_handler [16-19] AF_FUNDPUB_ENMONEYTYPE_QRY 的 WHEN_OTHERS 兜底处理块 | actions=WHEN_OTHERS, {, }, 业务报错返回 | targets=ERR_FUND_QRY_FUNDREAL_FAIL | uses_target:ERR_FUND_QRY_FUNDREAL_FAIL, uses_action:WHEN_OTHERS, uses_action:业务报错返回\nCovering block: exception_handler [15-19] AF_FUNDPUB_ENMONEYTYPE_QRY 的 EXCEPTION 异常处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL | uses_target:ERR_FUND_QRY_FUNDREAL_FAIL, uses_action:EXCEPTION, uses_action:WHEN_OTHERS, uses_action:业务报错返回\nCovering block: sql_execute [6-11] AF_FUNDPUB_ENMONEYTYPE_QRY 的 SQL 执行语句 | SQL=select nvl(max(decode(a.money_type,'0',a.money_type,null)) || max(decode(a.money_type,'1',a.money_type,null)) || max(... | actions=通用SQL执行 | targets=select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account | uses_target:select nvl(max(decode(a.money_type,'0',a.money_type,null)) ||\n                   max(decode(a.money_type,'1',a.money_type,null)) ||\n                   max(decode(a.money_type,'2',a.money_type,null)),' ')\n                   into @en_money_type\n                   from uses_fund_real a\n                   where a.fund_account = @fund_account, uses_action:通用SQL执行\nRelated actions: EXCEPTION, WHEN_OTHERS, 业务报错返回\n\n[Evidence 2]\nProcedure: AF_FUNDPUB_ENMONEYTYPE_QRY\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/fundsepub/AF_FUNDPUB_ENMONEYTYPE_QRY.uftatomfunction\nLines: 13-20\nMatched text: AF_FUNDPUB_ENMONEYTYPE_QRY 的失败处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL\nMatch source: block_summary\nRetrieval source: fts_block\nWhy relevant: fts_hit, token_overlap=2/2\nSnippet:\nL13:   [处理失败]\nL14:   {\nL15:     [EXCEPTION]\nL16:     [WHEN_OTHERS]\nL17:     {\nL18:       [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]\nL19:     }\nL20:   }\nRecovered block type: failure_handler\nRecovered block summary: AF_FUNDPUB_ENMONEYTYPE_QRY 的失败处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL\nCovering block: when_others_handler [16-19] AF_FUNDPUB_ENMONEYTYPE_QRY 的 WHEN_OTHERS 兜底处理块 | actions=WHEN_OTHERS, {, }, 业务报错返回 | targets=ERR_FUND_QRY_FUNDREAL_FAIL | uses_target:ERR_FUND_QRY_FUNDREAL_FAIL, uses_action:WHEN_OTHERS, uses_action:业务报错返回\nCovering block: exception_handler [15-19] AF_FUNDPUB_ENMONEYTYPE_QRY 的 EXCEPTION 异常处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL | uses_target:ERR_FUND_QRY_FUNDREAL_FAIL, uses_action:EXCEPTION, uses_action:WHEN_OTHERS, uses_action:业务报错返回\nCovering block: failure_handler [13-20] AF_FUNDPUB_ENMONEYTYPE_QRY 的失败处理块 | actions=EXCEPTION, WHEN_OTHERS, {, } | targets=ERR_FUND_QRY_FUNDREAL_FAIL | uses_target:ERR_FUND_QRY_FUNDREAL_FAIL, uses_action:EXCEPTION, uses_action:WHEN_OTHERS, uses_action:业务报错返回\nRelated actions: EXCEPTION, WHEN_OTHERS, 业务报错返回\n\n[Evidence 5]\nProcedure: LF_INNERSESSETT_PROCESSFLAG_GET\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_PROCESSFLAG_GET.uftfunction\nLines: 2-24\nMatched text: LF_内部远程调用(证券清算)_处理标志获取\nMatch source: procedure_fts\nRetrieval source: fts_procedure\nWhy relevant: fts_hit, token_overlap=1/2\nSnippet:\nL2:     [事务处理开始]\nL3:     hs_strcpy(@table_name,\"sett_oper_log\");\nL5:     <M>[通用SQL执行][select count(*)\n                            into @row_count\n                            from sett_oper_log\n                            where init_date = @init_date\n                                 and\n                                 subsys_id = @subsys_id\n                                 and\n                                 node_id = @node_id\n                                 and\n                                 instr(remark, @remark) > 0\n                                 and oper_flag = 1][count = @sql_row_count]\nL19:     [处理失败]\nL21:             [业务报错返回][ERR_USER_QRY_TABLERECORD_FAIL][查询表记录失败][@table_name,\n                                                                              @init_date,\n                                                                              @subsys_id,\n                                                                              @node_id]\nCovering block: failure_handler [19-25] LF_INNERSESSETT_PROCESSFLAG_GET 的失败处理块 | actions={, }, 业务报错返回, 处理失败 | targets=ERR_USER_QRY_TABLERECORD_FAIL | uses_target:ERR_USER_QRY_TABLERECORD_FAIL, uses_action:业务报错返回, uses_action:处理失败\nCovering block: sql_execute [5-15] LF_INNERSESSETT_PROCESSFLAG_GET 的 SQL 执行语句 | SQL=select count(*) into @row_count from sett_oper_log where init_date = @init_date and subsys_id = @subsys_id and node_i... | actions=通用SQL执行 | targets=select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1 | uses_target:select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1, uses_action:通用SQL执行\nCovering block: transaction [2-39] LF_INNERSESSETT_PROCESSFLAG_GET 的事务块，包含 19 条语句 | SQL=select count(*) into @row_count from sett_oper_log where init_date = @init_date and subsys_id = @subsys_id and node_i... | actions=else, if, {, } | targets=ERR_USER_QRY_TABLERECORD_FAIL, select count(*)\n                        into @row_count\n                        from sett_oper_log\n                        where init_date = @init_date\n                             and\n                             subsys_id = @subsys_id\n                             and\n                             node_id = @node_id \n                             and \n                             instr(remark, @remark) > 0\n                             and oper_flag = 1 | writes_variable:@oper_flag, writes_variable:@oper_flag, writes_variable:@table_name, uses_target:ERR_USER_QRY_TABLERECORD_FAIL\nRelated actions: 业务报错返回, 事务处理开始, 事务处理结束\n\n[Evidence 6]\nProcedure: LF_INNERSESSETT_PROCESSFLAG_INSERT\nFile: /Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersessett/LF_INNERSESSETT_PROCESSFLAG_INSERT.uftfunction\nLines: 2-6\nMatched text: LF_内部远程调用(证券清算)_处理标志记录\nMatch source: procedure_fts\nRetrieval source: fts_procedure\nWhy relevant: fts_hit, token_overlap=1/2\nSnippet:\nL2:     [事务处理开始]\nL3:     [获取日期][@curr_date]\nL4:     [获取微秒时间][@curr_microtime]\nL5:     @curr_milltime = @curr_microtime / 1000;\nL6:     hs_strcpy(@table_name,\"sett_oper_log\");\nCovering block: transaction [2-24] LF_INNERSESSETT_PROCESSFLAG_INSERT 的事务块，包含 11 条语句 | SQL=insert into sett_oper_log ( init_date, operator_no, curr_date, curr_milltime, op_station, subsys_id, node_id, sett_ba... | actions={, }, 业务报错返回, 事务处理开始 | targets=@curr_date, @curr_microtime, ERR_USER_MOD_TABLERECORD_FAIL | uses_target:@curr_date, uses_target:@curr_microtime, writes_variable:@curr_milltime, writes_variable:@table_name\nRelated actions: 业务报错返回, 事务处理开始, 事务处理结束"
+}

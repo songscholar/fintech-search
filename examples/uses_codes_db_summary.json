@@ -7,18 +7,18 @@
   "statements": 159148,
   "actions": 26225,
   "variable_refs": 214948,
-  "edges": 61249,
+  "edges": 61332,
   "chunks": 28748,
   "chunk_vectors": 28748,
-  "blocks": 3684,
-  "block_edges": 30382,
+  "blocks": 4825,
+  "block_edges": 33967,
   "fts_counts": {
     "procedures_fts": 2564,
     "statements_fts": 159148,
     "actions_fts": 26225,
-    "edges_fts": 61249,
+    "edges_fts": 61332,
     "chunks_fts": 28748,
-    "blocks_fts": 3684
+    "blocks_fts": 4825
   },
   "embedding": {
     "provider": "local-hash",
@@ -49,7 +49,10 @@
     "calls_procedure": 8085,
     "reads_table": 1704,
     "writes_table": 849,
-    "uses_component": 287
+    "uses_component": 287,
+    "defines_label": 39,
+    "jumps_to_label": 25,
+    "jumps_to_exit": 19
   },
   "chunk_type_counts": {
     "control_block": 19645,
@@ -62,19 +65,27 @@
   "block_type_counts": {
     "failure_handler": 1479,
     "sql_execute": 1081,
+    "exception_handler": 560,
+    "when_others_handler": 548,
     "transaction": 494,
     "record_loop": 348,
     "sql_query": 173,
     "component_loop": 68,
-    "record_pool_loop": 41
+    "record_pool_loop": 41,
+    "goto_exit": 19,
+    "exit_label": 8,
+    "goto_jump": 6
   },
   "block_edge_type_counts": {
-    "uses_action": 14407,
-    "writes_variable": 8326,
-    "uses_target": 4604,
+    "uses_action": 16994,
+    "writes_variable": 8333,
+    "uses_target": 5523,
     "calls_procedure": 1381,
     "reads_table": 981,
     "writes_table": 556,
-    "uses_component": 127
+    "uses_component": 127,
+    "jumps_to_label": 35,
+    "jumps_to_exit": 29,
+    "defines_label": 8
   }
 }

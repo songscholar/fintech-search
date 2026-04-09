@@ -26,6 +26,8 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
       [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]
     }
   }
+  goto svr_end;
+  <svr_end>:
   @row_count = 1;
   ]]></code>
 </business:Function>
@@ -87,6 +89,8 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0] >= 3
     assert conn.execute("SELECT COUNT(*) FROM block_edges").fetchone()[0] >= 2
+    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'jumps_to_label'").fetchone()[0] >= 1
+    assert conn.execute("SELECT COUNT(*) FROM edges WHERE edge_type = 'defines_label'").fetchone()[0] >= 1
     assert conn.execute("SELECT COUNT(*) FROM procedures_fts").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM statements_fts").fetchone()[0] >= 5
     assert conn.execute("SELECT COUNT(*) FROM actions_fts").fetchone()[0] >= 4
@@ -124,6 +128,15 @@ def test_query_index_includes_block_hits_for_failure_and_sql_queries(tmp_path: P
 
     assert result["hit_count"] >= 1
     assert any(hit["hit_type"] == "block" for hit in result["hits"])
+
+
+def test_query_index_includes_control_flow_hits_for_exit_labels(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "svr_end", limit=10)
+
+    assert result["hit_count"] >= 1
+    assert any(hit["match_source"] in {"block_summary", "label", "goto"} or hit["matched_text"] == "svr_end" for hit in result["hits"])
 
 
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
@@ -164,7 +177,21 @@ def test_assemble_evidence_returns_llm_ready_context(tmp_path: Path) -> None:
     )
     assert "AF_系统参数公用_证券代码获取" in af_sample_block["excerpt"]
     assert "LS_FLOW" in af_sample_block["related_context"]["incoming_callers"]
+    assert any(item["edge_type"] in {"jumps_to_label", "jumps_to_exit", "defines_label"} for item in af_sample_block["related_context"]["control_flow"])
     assert af_sample_block["chunk_type"] in {None, "call_flow", "call_block", "action_block", "control_block"}
     assert any(item["block_type"] in {"transaction", "sql_execute", "failure_handler"} for item in af_sample_block["recovered_blocks"])
     assert "Related procedure" in result["llm_context"]
     assert "Covering block:" in result["llm_context"]
+    assert "Control flow:" in result["llm_context"]
+
+
+def test_assemble_evidence_surfaces_exception_blocks_for_failure_query(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.assemble_evidence(db_path, "查询交易资金表失败在哪里处理", limit=3, context_window=1, related_limit=2)
+
+    assert result["evidence_count"] >= 1
+    failure_block = result["evidence"][0]
+    block_types = {item["block_type"] for item in failure_block["recovered_blocks"]}
+    assert "failure_handler" in block_types or failure_block.get("block_type") == "failure_handler"
+    assert "exception_handler" in block_types or "when_others_handler" in block_types
