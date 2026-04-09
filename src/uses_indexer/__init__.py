@@ -4,12 +4,14 @@ from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .indexer import SQLiteIndexer
 from .llm import OpenAICompatibleConfig, OpenAICompatibleLlm
+from .mcp_server import CodebaseMcpServer
 from .parser import UftDslParser
 from .qa import CodebaseQA
 
 __all__ = [
     "CodebaseAnswerer",
     "CodebaseApi",
+    "CodebaseMcpServer",
     "CodebaseQA",
     "OpenAICompatibleConfig",
     "OpenAICompatibleLlm",

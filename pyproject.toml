@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uses-indexer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Parser and indexing scaffolding for the USES UFT DSL codebase."
 readme = "README.md"
 requires-python = ">=3.11"

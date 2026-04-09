@@ -134,10 +134,35 @@
 - 已安装到本机：
   - `/Users/songzuoqiang/.codex/skills/uses-codebase-search/SKILL.md`
 
+### 阶段 11：MCP 与插件集成
+
+- 新增 `CodebaseMcpServer`
+- 新增 CLI：
+  - `serve-mcp`
+- 当前 MCP server 通过 stdio 暴露工具：
+  - `db_summary`
+  - `query_codebase`
+  - `assemble_evidence`
+  - `ask_codebase`
+  - `answer_codebase`
+- 新增 repo-local 插件：
+  - `plugins/uses-codebase-plugin/.codex-plugin/plugin.json`
+  - `plugins/uses-codebase-plugin/.mcp.json`
+  - `plugins/uses-codebase-plugin/scripts/run_mcp_server.py`
+  - `plugins/uses-codebase-plugin/skills/uses-codebase-search/SKILL.md`
+- 新增 repo-local marketplace：
+  - `.agents/plugins/marketplace.json`
+- 更新仓库技能定义，使其优先使用 MCP，HTTP 作为 fallback
+- 补充 MCP 层测试，覆盖：
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+  - stdio 输出格式
+
 ### 后续计划
 
 - 增加块级结构恢复
 - 增加向量索引
 - 增加更精确的表访问与关系抽取
 - 增加更丰富的模型适配器
-- 增加 MCP 集成封装
+- 增加更强的 MCP 能力和更多可组合工具

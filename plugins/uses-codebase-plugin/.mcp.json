@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "uses-codebase": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "./scripts/run_mcp_server.py"
+      ],
+      "cwd": ".",
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "note": "Local stdio MCP server for the indexed USES/UFT codebase."
+    }
+  }
+}

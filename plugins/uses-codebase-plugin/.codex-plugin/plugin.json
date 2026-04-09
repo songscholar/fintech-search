@@ -1,0 +1,42 @@
+{
+  "name": "uses-codebase-plugin",
+  "version": "0.2.0",
+  "description": "Expose the local USES/UFT codebase index as MCP tools and skills for Codex.",
+  "author": {
+    "name": "Song Zuoqiang",
+    "url": "https://github.com/songscholar"
+  },
+  "homepage": "https://github.com/songscholar/fintech-search",
+  "repository": "https://github.com/songscholar/fintech-search",
+  "license": "Apache-2.0",
+  "keywords": [
+    "uses",
+    "uft",
+    "mcp",
+    "code-search",
+    "rag"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "USES Codebase Search",
+    "shortDescription": "Grounded answers for the local USES/UFT DSL repository",
+    "longDescription": "Connects Codex to the local USES/UFT index so questions can be answered with procedure names, file paths, line numbers, evidence blocks, and optional external LLM synthesis.",
+    "developerName": "Song Zuoqiang",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Local Tools",
+      "Grounded Search"
+    ],
+    "websiteURL": "https://github.com/songscholar/fintech-search",
+    "privacyPolicyURL": "https://github.com/songscholar/fintech-search",
+    "termsOfServiceURL": "https://github.com/songscholar/fintech-search",
+    "defaultPrompt": [
+      "证券代码获取的逻辑在哪里？",
+      "哪个过程会调用这个 LF 逻辑？",
+      "帮我找出这个业务规则的证据文件和行号。"
+    ],
+    "brandColor": "#0F766E"
+  }
+}

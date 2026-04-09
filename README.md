@@ -5,7 +5,7 @@
 当前已经完成两层基础能力：
 
 1. 解析 XML 外壳 + `CDATA` DSL 代码体。
-2. 把解析结果写入 SQLite，并提供混合检索、问答包和本地 API/回答接口。
+2. 把解析结果写入 SQLite，并提供混合检索、问答包、本地 API/回答接口和 MCP 插件入口。
 
 这还不是最终版问答系统，但已经具备了“理解仓库结构并沉淀索引”的第一版基础设施。
 
@@ -30,7 +30,9 @@
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
 - 提供本地 `answer-codebase` 回答入口
 - 提供本地 HTTP API，包括最终回答接口 `POST /answer`
+- 提供本地 stdio MCP server，包括 `db_summary / query_codebase / assemble_evidence / ask_codebase / answer_codebase`
 - 提供可安装的 Codex 技能定义 `skills/uses-codebase-search`
+- 提供 repo-local Codex 插件定义 `plugins/uses-codebase-plugin`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 上完成一次全量扫描和索引验证
 
 ## 当前验证结果
@@ -82,6 +84,8 @@
 ## 目录结构
 
 ```text
+.agents/
+  plugins/marketplace.json
 docs/
   ARCHITECTURE.md
   INDEX_SCHEMA.md
@@ -93,6 +97,12 @@ examples/
   uses_codes_evidence_example.json
   uses_codes_qa_example.json
   uses_codes_answer_example.json
+plugins/
+  uses-codebase-plugin/
+    .codex-plugin/plugin.json
+    .mcp.json
+    scripts/run_mcp_server.py
+    skills/uses-codebase-search/SKILL.md
 skills/
   uses-codebase-search/
     SKILL.md
@@ -104,12 +114,14 @@ src/uses_indexer/
   cli.py
   indexer.py
   llm.py
+  mcp_server.py
   models.py
   parser.py
   qa.py
 tests/
   test_api.py
   test_answering.py
+  test_mcp.py
   test_parser.py
   test_indexer.py
   test_qa.py
@@ -258,6 +270,43 @@ curl -s http://127.0.0.1:8000/answer \
   -d '{"question":"证券代码获取的逻辑在哪里","evidence_limit":3}'
 ```
 
+启动本地 stdio MCP server：
+
+```bash
+python3 -m uses_indexer serve-mcp \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db
+```
+
+可用 MCP 工具：
+
+- `db_summary`
+- `query_codebase`
+- `assemble_evidence`
+- `ask_codebase`
+- `answer_codebase`
+
+如果你想把它作为 Codex 的 repo-local 插件使用，仓库里已经包含：
+
+- `plugins/uses-codebase-plugin/.codex-plugin/plugin.json`
+- `plugins/uses-codebase-plugin/.mcp.json`
+- `.agents/plugins/marketplace.json`
+
+插件默认会启动：
+
+```bash
+python3 ./scripts/run_mcp_server.py
+```
+
+默认索引库是：
+
+- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db`
+
+如果需要切换索引库，可以传：
+
+```bash
+python3 ./scripts/run_mcp_server.py --db /absolute/path/to/your.db
+```
+
 ## 外部模型配置
 
 `answer-codebase` 和 `POST /answer` 支持一个 OpenAI-compatible 的聊天接口，使用这些环境变量：
@@ -280,7 +329,7 @@ curl -s http://127.0.0.1:8000/answer \
 
 - `/Users/songzuoqiang/.codex/skills/uses-codebase-search/SKILL.md`
 
-重启 Codex 后，这个技能就可以作为本地技能参与后续对话。技能会优先调用本地 `uses-indexer` API 来回答 USES/UFT 代码库问题。
+重启 Codex 后，这个技能就可以作为本地技能参与后续对话。技能会优先调用本地 MCP 工具，在 MCP 不可用时再回退到本地 `uses-indexer` API。
 
 ## 下一步
 
@@ -289,4 +338,4 @@ curl -s http://127.0.0.1:8000/answer \
 - 增加向量索引
 - 增加更精细的表访问与过程关系
 - 增加更丰富的模型适配器
-- 增加 MCP 集成封装
+- 增加更强的 MCP 能力和更细粒度的工具

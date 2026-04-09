@@ -1,6 +1,6 @@
 ---
 name: uses-codebase-search
-description: Use when the user asks about the local USES/UFT codebase, wants repository-grounded answers, or needs procedure names, file paths, line numbers, and business logic from /Users/songzuoqiang/Documents/agent/code/uses_codes. Start or reuse the local uses-indexer service in /Users/songzuoqiang/Documents/agent/condex/codes, then call the local /answer or /ask endpoint to retrieve grounded answers instead of relying on memory.
+description: Use when the user asks about the local USES/UFT codebase, wants repository-grounded answers, or needs procedure names, file paths, line numbers, and business logic from /Users/songzuoqiang/Documents/agent/code/uses_codes. Prefer the local MCP server and plugin tools when available, and fall back to the local HTTP service only when MCP is unavailable.
 ---
 
 # USES Codebase Search
@@ -9,13 +9,18 @@ Use this skill for questions about the local USES/UFT codebase under `/Users/son
 
 ## Preferred workflow
 
-1. Check whether the local API is already running:
+1. Prefer MCP tools if the plugin is installed:
+   - `answer_codebase`
+   - `ask_codebase`
+   - `assemble_evidence`
+   - `query_codebase`
+2. If MCP is unavailable, check whether the local API is already running:
    - `curl -s http://127.0.0.1:8000/health`
-2. If it is not running, start it from `/Users/songzuoqiang/Documents/agent/condex/codes`:
+3. If it is not running, start it from `/Users/songzuoqiang/Documents/agent/condex/codes`:
    - `PYTHONPATH=src python3 -m uses_indexer serve-api --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db --host 127.0.0.1 --port 8000`
-3. For a final grounded answer, call:
+4. For a final grounded answer, call:
    - `POST http://127.0.0.1:8000/answer`
-4. If the caller only needs evidence or prompt material, use:
+5. If the caller only needs evidence or prompt material, use:
    - `POST http://127.0.0.1:8000/ask`
    - `POST http://127.0.0.1:8000/evidence`
 

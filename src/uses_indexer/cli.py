@@ -8,6 +8,7 @@ from pathlib import Path
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .indexer import SQLiteIndexer
+from .mcp_server import CodebaseMcpServer
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
 from .qa import CodebaseQA
 
@@ -70,15 +71,23 @@ def main() -> int:
     serve_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the local HTTP server.")
     serve_parser.add_argument("--port", type=int, default=8000, help="Port to bind the local HTTP server.")
 
+    mcp_parser = subparsers.add_parser("serve-mcp", help="Run a local stdio MCP server around the index and QA package.")
+    mcp_parser.add_argument("--db", help="Default SQLite database path. If omitted, the server will try examples/uses_codes_index.db.")
+
     args = parser.parse_args()
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa)
     api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=getattr(args, "db", None))
+    default_mcp_db = getattr(args, "db", None) or _discover_default_db(Path.cwd())
+    mcp_server = CodebaseMcpServer(indexer=indexer, qa=qa, answerer=answerer, default_db_path=default_mcp_db)
 
     if args.command == "serve-api":
         api.serve(host=args.host, port=args.port)
+        return 0
+    if args.command == "serve-mcp":
+        mcp_server.serve()
         return 0
 
     if args.command == "parse-file":
@@ -157,3 +166,10 @@ def _scan_dir(parser: UftDslParser, root: Path, limit: int) -> dict[str, object]
         "statement_counts": dict(statement_counter),
         "sample": sample,
     }
+
+
+def _discover_default_db(root: Path) -> str | None:
+    candidate = root / "examples" / "uses_codes_index.db"
+    if candidate.exists():
+        return str(candidate)
+    return None
