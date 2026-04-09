@@ -105,6 +105,19 @@
   - `supporting_locations`
 - 当前问答层不直接依赖外部模型 API，而是先把可复用的问答输入和本地草稿答案整理好
 
+### 阶段 9：本地 HTTP API
+
+- 新增 `CodebaseApi`
+- 新增 `serve-api` CLI
+- 暴露接口：
+  - `GET /health`
+  - `GET /db-summary`
+  - `POST /query`
+  - `POST /evidence`
+  - `POST /ask`
+- API 层保持零额外依赖，直接基于标准库 `ThreadingHTTPServer`
+- 补充 HTTP 层测试，确保服务可以真正起起来并返回 JSON
+
 ### 后续计划
 
 - 增加块级结构恢复

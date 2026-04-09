@@ -89,6 +89,7 @@ examples/
   uses_codes_evidence_example.json
   uses_codes_qa_example.json
 src/uses_indexer/
+  api.py
   __init__.py
   __main__.py
   cli.py
@@ -97,6 +98,7 @@ src/uses_indexer/
   parser.py
   qa.py
 tests/
+  test_api.py
   test_parser.py
   test_indexer.py
   test_qa.py
@@ -191,10 +193,40 @@ python3 -m uses_indexer ask-codebase \
 - 一个本地生成的 `draft_answer`
 - 支撑结论的文件路径和行号
 
+启动本地 HTTP API：
+
+```bash
+python3 -m uses_indexer serve-api \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+可用接口：
+
+- `GET /health`
+- `GET /db-summary`
+- `POST /query`
+- `POST /evidence`
+- `POST /ask`
+
+示例：
+
+```bash
+curl -s http://127.0.0.1:8000/health
+```
+
+```bash
+curl -s http://127.0.0.1:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"证券代码获取的逻辑在哪里","evidence_limit":3}'
+```
+
 ## 下一步
 
 - 增加更稳定的块级 AST
 - 补齐事务块、异常块、SQL 块的配对关系
 - 增加向量索引
 - 增加更精细的表访问与过程关系
-- 增加真正的问答入口和 MCP/API 封装
+- 增加真正的外部模型调用入口
+- 增加 MCP/API 集成封装

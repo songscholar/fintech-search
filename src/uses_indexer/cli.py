@@ -5,6 +5,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from .api import CodebaseApi
 from .indexer import SQLiteIndexer
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
 from .qa import CodebaseQA
@@ -54,10 +55,20 @@ def main() -> int:
     ask_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
     ask_parser.add_argument("--output", help="Optional JSON output path.")
 
+    serve_parser = subparsers.add_parser("serve-api", help="Run a local HTTP API around the index and QA package.")
+    serve_parser.add_argument("--db", required=True, help="Default SQLite database path.")
+    serve_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the local HTTP server.")
+    serve_parser.add_argument("--port", type=int, default=8000, help="Port to bind the local HTTP server.")
+
     args = parser.parse_args()
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
     qa = CodebaseQA(indexer)
+    api = CodebaseApi(indexer=indexer, qa=qa, default_db_path=getattr(args, "db", None))
+
+    if args.command == "serve-api":
+        api.serve(host=args.host, port=args.port)
+        return 0
 
     if args.command == "parse-file":
         data = parser_impl.parse_path(args.path).to_dict()

@@ -129,6 +129,7 @@
 - `query-index`
 - `assemble-evidence`
 - `ask-codebase`
+- `serve-api`
 
 `query-index` 当前会按下面的顺序工作：
 
@@ -163,6 +164,20 @@
 
 这意味着当前仓库已经具备“检索层 + 问答包层”，差的主要是外部模型调用和服务化封装。
 
+`serve-api` 则把这两层暴露成一个本地 HTTP 服务：
+
+- `GET /health`
+- `GET /db-summary`
+- `POST /query`
+- `POST /evidence`
+- `POST /ask`
+
+这个 API 层目前使用标准库实现，目标是：
+
+- 本地零额外依赖即可启动
+- 便于前端、IDE 插件或 MCP 服务复用
+- 先稳定协议，再考虑换到更完整的 Web 框架
+
 ## 下一阶段索引方向
 
 当当前索引层稳定后，下一阶段会继续增加：
@@ -178,7 +193,7 @@
 - 精确恢复 `if / while / transaction / exception` 层级
 - 增加向量索引
 - 增加更细粒度的上下文块切分
-- 增加真正的问答服务层
+- 增加真正的外部模型调用服务层
 
 ## 文档策略
 
