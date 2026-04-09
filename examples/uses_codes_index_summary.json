@@ -1,0 +1,40 @@
+{
+  "source_root": "/Users/songzuoqiang/Documents/agent/code/uses_codes",
+  "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db",
+  "file_count": 2564,
+  "unit_kind_counts": {
+    "Function": 1858,
+    "Service": 703,
+    "FactorService": 3
+  },
+  "prefix_counts": {
+    "AF": 391,
+    "LF": 1466,
+    "LS": 704,
+    "RS": 3
+  },
+  "statement_counts": {
+    "action": 18140,
+    "comment": 33196,
+    "assignment": 23673,
+    "raw": 3438,
+    "control": 22026,
+    "brace": 50526,
+    "call": 8085,
+    "label": 39,
+    "goto": 25
+  },
+  "edge_counts": {
+    "uses_action": 18140,
+    "uses_target": 8360,
+    "writes_table": 849,
+    "writes_variable": 23824,
+    "reads_table": 1704,
+    "calls_procedure": 8085,
+    "uses_component": 287
+  },
+  "variable_ref_counts": {
+    "read": 181264,
+    "write": 33684
+  }
+}

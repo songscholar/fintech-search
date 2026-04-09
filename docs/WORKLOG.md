@@ -45,8 +45,41 @@
 - 增加对 `++@var / --@var` 的写入识别
 - 增加对 `hs_strcpy / sprintf / hs_snprintf / substr` 等常见输出参数写入识别
 
+### 阶段 5：SQLite 索引层
+
+- 新增 `SQLiteIndexer`
+- 增加表结构：
+  - `files`
+  - `procedures`
+  - `histories`
+  - `params`
+  - `statements`
+  - `actions`
+  - `variable_refs`
+  - `edges`
+- 对完整目录 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 完成一版真实建库
+- 当前数据库统计：
+  - `files` `2564`
+  - `procedures` `2564`
+  - `histories` `7380`
+  - `params` `70004`
+  - `statements` `159148`
+  - `actions` `26225`
+  - `variable_refs` `214948`
+  - `edges` `61249`
+
+### 阶段 6：基础查询能力
+
+- CLI 增加：
+  - `build-index`
+  - `db-summary`
+  - `query-index`
+- 支持按过程名、中文名、动作名、动作目标、变量名、语句原文进行基础检索
+- 增加索引层测试并通过
+
 ### 后续计划
 
-- 用真实仓库跑第一版解析
-- 校验输出质量
-- 再把结果接到 SQLite 索引层
+- 增加 SQLite FTS
+- 增加块级结构恢复
+- 增加更精确的表访问与关系抽取
+- 增加问答层使用的证据组装

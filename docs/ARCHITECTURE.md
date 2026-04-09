@@ -8,18 +8,20 @@
 
 ## 当前阶段范围
 
-第一版只做这些事情：
+当前版本已经做到：
 
 - 识别文件类型：`LF / LS / AF / RS`
 - 解析 XML 元信息
 - 解析 `CDATA` 中的 DSL 代码体
 - 产出统一的 JSON 结构
+- 把解析结果落入 SQLite
+- 提供基础 SQL 查询接口
 
-第一版暂时不做这些事情：
+当前版本还没有做到：
 
 - 完整编译器级 AST
 - 精确块嵌套恢复
-- SQLite 索引落库
+- SQLite FTS
 - 向量检索
 - RAG 问答
 
@@ -85,27 +87,69 @@
 2. 即使局部语法特殊，也能保留原文不丢信息
 3. 后续可以在现有语句流基础上继续恢复块关系，而不需要推翻重做
 
-## 下一阶段索引方向
+## 当前 SQLite 索引
 
-当解析层稳定后，下一阶段会增加：
+当前 SQLite 库已经包含这些表：
 
 - `files`
 - `procedures`
-- `params`
 - `histories`
+- `params`
+- `statements`
 - `actions`
-- `db_access`
+- `variable_refs`
 - `edges`
-- `chunks`
 
-重点关系：
+其中：
+
+- `statements` 保存结构化语句流
+- `actions` 是从语句流里投影出的 DSL 动作与过程调用
+- `variable_refs` 保存变量读写
+- `edges` 保存过程调用、表访问、变量写入等关系
+
+当前已经落下的重点关系：
 
 - `LS -> LF`
-- `LF -> AF`
+- `LF / LS / AF / RS -> procedure`
 - `procedure -> table`
-- `procedure -> error code`
-- `procedure -> config id`
-- `procedure -> rpc/service`
+- `procedure -> variable`
+- `procedure -> action`
+- `procedure -> component`
+
+## 当前查询方式
+
+当前查询能力以普通 SQLite 查询为主，已经提供这些入口：
+
+- `build-index`
+- `db-summary`
+- `query-index`
+
+`query-index` 目前会同时从这些维度查找：
+
+- 过程名 / 中文名 / 文件路径
+- 动作名 / 动作目标
+- 变量名
+- 原始语句文本
+- 关系边目标
+
+这还是第一版检索能力，重点是把结构化信息查出来，而不是追求最终问答效果。
+
+## 下一阶段索引方向
+
+当当前索引层稳定后，下一阶段会继续增加：
+
+- `blocks`
+- `chunks`
+- `fts_statements`
+- `fts_actions`
+- 更精确的 `db_access`
+
+重点增强方向：
+
+- 精确恢复 `if / while / transaction / exception` 层级
+- 增加 SQLite FTS
+- 增加混合检索和重排
+- 增加面向问答的上下文组装
 
 ## 文档策略
 

@@ -1,0 +1,37 @@
+{
+  "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db",
+  "files": 2564,
+  "procedures": 2564,
+  "histories": 7380,
+  "params": 70004,
+  "statements": 159148,
+  "actions": 26225,
+  "variable_refs": 214948,
+  "edges": 61249,
+  "file_prefix_counts": {
+    "LF": 1466,
+    "LS": 704,
+    "AF": 391,
+    "RS": 3
+  },
+  "statement_kind_counts": {
+    "brace": 50526,
+    "comment": 33196,
+    "assignment": 23673,
+    "control": 22026,
+    "action": 18140,
+    "call": 8085,
+    "raw": 3438,
+    "label": 39,
+    "goto": 25
+  },
+  "edge_type_counts": {
+    "writes_variable": 23824,
+    "uses_action": 18140,
+    "uses_target": 8360,
+    "calls_procedure": 8085,
+    "reads_table": 1704,
+    "writes_table": 849,
+    "uses_component": 287
+  }
+}
