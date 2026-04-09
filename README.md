@@ -71,6 +71,7 @@
 - `examples/uses_codes_index_summary.json`
 - `examples/uses_codes_db_summary.json`
 - `examples/uses_codes_evidence_example.json`
+- `examples/uses_codes_qa_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -86,6 +87,7 @@ examples/
   uses_codes_index_summary.json
   uses_codes_db_summary.json
   uses_codes_evidence_example.json
+  uses_codes_qa_example.json
 src/uses_indexer/
   __init__.py
   __main__.py
@@ -93,9 +95,11 @@ src/uses_indexer/
   indexer.py
   models.py
   parser.py
+  qa.py
 tests/
   test_parser.py
   test_indexer.py
+  test_qa.py
 ```
 
 ## 快速开始
@@ -167,6 +171,25 @@ python3 -m uses_indexer assemble-evidence \
 - 每个证据块对应的代码片段
 - 相关调用、来路调用、表访问
 - 一段可直接交给 LLM 的 `llm_context`
+
+生成完整的问答包：
+
+```bash
+python3 -m uses_indexer ask-codebase \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --question "证券代码获取的逻辑在哪里" \
+  --evidence-limit 6 \
+  --context-window 2 \
+  --related-limit 3
+```
+
+这个命令会返回：
+
+- 检索到的证据块
+- 标准化 `system_prompt`
+- 可直接发给模型的 `user_prompt`
+- 一个本地生成的 `draft_answer`
+- 支撑结论的文件路径和行号
 
 ## 下一步
 

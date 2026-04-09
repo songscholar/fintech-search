@@ -128,6 +128,7 @@
 - `db-summary`
 - `query-index`
 - `assemble-evidence`
+- `ask-codebase`
 
 `query-index` 当前会按下面的顺序工作：
 
@@ -152,6 +153,15 @@
 - 生成可直接给 LLM 的 `llm_context`
 
 所以当前这层已经不是“单纯搜一下”，而是一个可供问答系统直接消费的检索前置层。
+
+`ask-codebase` 则再向前走一步：
+
+- 调用 `assemble-evidence`
+- 构造统一的 `system_prompt`
+- 构造面向 LLM 的 `user_prompt`
+- 生成一个本地 `draft_answer`
+
+这意味着当前仓库已经具备“检索层 + 问答包层”，差的主要是外部模型调用和服务化封装。
 
 ## 下一阶段索引方向
 

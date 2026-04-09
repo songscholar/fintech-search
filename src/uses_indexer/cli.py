@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .indexer import SQLiteIndexer
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
+from .qa import CodebaseQA
 
 
 def main() -> int:
@@ -45,9 +46,18 @@ def main() -> int:
     evidence_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
     evidence_parser.add_argument("--output", help="Optional JSON output path.")
 
+    ask_parser = subparsers.add_parser("ask-codebase", help="Build a QA package from indexed evidence.")
+    ask_parser.add_argument("--db", required=True, help="SQLite database path.")
+    ask_parser.add_argument("--question", required=True, help="Natural language question about the codebase.")
+    ask_parser.add_argument("--evidence-limit", type=int, default=6, help="Maximum number of evidence blocks.")
+    ask_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
+    ask_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    ask_parser.add_argument("--output", help="Optional JSON output path.")
+
     args = parser.parse_args()
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
+    qa = CodebaseQA(indexer)
 
     if args.command == "parse-file":
         data = parser_impl.parse_path(args.path).to_dict()
@@ -62,6 +72,14 @@ def main() -> int:
             args.db,
             args.query,
             limit=args.limit,
+            context_window=args.context_window,
+            related_limit=args.related_limit,
+        )
+    elif args.command == "ask-codebase":
+        data = qa.ask(
+            args.db,
+            args.question,
+            evidence_limit=args.evidence_limit,
             context_window=args.context_window,
             related_limit=args.related_limit,
         )
