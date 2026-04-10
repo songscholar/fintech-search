@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+from urllib import request
 
 from uses_indexer.embeddings import (
+    EmbeddingRequestError,
     EmbeddingConfigError,
     LocalHashedEmbedder,
+    OpenAICompatibleEmbeddingConfig,
     OpenAICompatibleEmbedder,
     create_embedder_from_env,
 )
@@ -211,3 +214,37 @@ def test_openai_compatible_embedder_reuses_sqlite_cache(monkeypatch, tmp_path) -
     assert payloads[0]["input"] == ["abc", "abcdef"]
     assert first_embedder.info.dimension == 2
     assert second_embedder.info.dimension == 2
+
+
+def test_openai_compatible_embedder_wraps_read_timeout(monkeypatch) -> None:
+    clear_embedding_env(monkeypatch)
+
+    class TimeoutResponse:
+        def __enter__(self) -> "TimeoutResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def read(self) -> bytes:
+            raise TimeoutError("timed out")
+
+    def fake_urlopen(req: request.Request, timeout: float = 60.0) -> TimeoutResponse:
+        return TimeoutResponse()
+
+    monkeypatch.setattr("uses_indexer.embeddings.request.urlopen", fake_urlopen)
+
+    embedder = OpenAICompatibleEmbedder(
+        OpenAICompatibleEmbeddingConfig(
+            api_key="test-key",
+            model="text-embedding-3-large",
+            timeout_seconds=1.5,
+        )
+    )
+
+    try:
+        embedder.embed_texts(["abc"])
+    except EmbeddingRequestError as exc:
+        assert "timed out" in str(exc)
+    else:
+        raise AssertionError("Expected EmbeddingRequestError")

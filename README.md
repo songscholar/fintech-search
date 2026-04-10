@@ -112,6 +112,8 @@
 - `examples/uses_codes_eval_report_subset_local_hash.json`
 - `examples/uses_codes_eval_report_real_embedding_subset.json`
 - `examples/uses_codes_eval_compare_real_embedding_subset.json`
+- `examples/uses_codes_embedding_medium_benchmark.json`
+- `examples/uses_codes_index_real_embedding_medium_summary.json`
 
 ### 检索评测摘要
 

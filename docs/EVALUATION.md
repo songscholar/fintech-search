@@ -200,6 +200,23 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前实现已经改成全局批量补齐缺失向量，并支持 `--resume-vectors`
 - 代表性 16 条真实语义块请求耗时约 `13.45` 秒；在继续调优 batch size 和接口稳定性前，仍不建议把全量真实 embedding 建库当作普通短测试
 
+## 当前中等规模 Embedding 测试
+
+本轮又使用 6 个中等复杂文件做真实 embedding 测试，共 `475` 个语义块。首次构建在 `256` 条向量落库后遇到接口读取超时；随后使用 `--resume-vectors`、batch size `8`、timeout `120` 秒继续补齐剩余向量。
+
+输出文件：
+
+- `examples/uses_codes_embedding_medium_benchmark.json`
+- `examples/uses_codes_index_real_embedding_medium_summary.json`
+
+结论：
+
+- `chunk_vectors` 最终补齐到 `475 / 475`
+- 续建阶段 `missing_before = 219`、`inserted = 219`、`missing_after = 0`
+- 续建后再次执行 no-op resume，结果为 `missing_before = 0`、`inserted = 0`、`batches = 0`
+- 这验证了全局批处理、每批提交、cache 和 `--resume-vectors` 能处理真实接口中途超时的场景
+- 当前接口在较大 batch 或较长输入上仍可能超时，全量建库建议优先使用 batch size `8` 或 `16`，并始终开启 embedding cache
+
 ## 后续扩展
 
 - 增加更多真实业务问题，优先扩到 30 到 50 条。

@@ -345,6 +345,8 @@ class OpenAICompatibleEmbedder:
             raise EmbeddingRequestError(f"Embedding request failed with status {exc.code}: {detail}") from exc
         except error.URLError as exc:
             raise EmbeddingRequestError(f"Embedding request failed: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise EmbeddingRequestError(f"Embedding request timed out after {self.config.timeout_seconds} seconds") from exc
 
         try:
             parsed = json.loads(raw)

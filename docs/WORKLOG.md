@@ -468,6 +468,40 @@
   - 向量 batch 失败前已完成的 batch 会落库
   - `--resume-vectors` 只补齐缺失向量并跳过已有向量
 
+### 阶段 27：真实 Embedding 中等规模续建验证
+
+- 使用 6 个中等复杂文件做真实 embedding 测试：
+  - 子集根目录：`/tmp/uses_codes_embedding_medium_subset`
+  - 文件数：`6`
+  - 语义块数：`475`
+- 首次构建启用：
+  - `OPENAI_EMBEDDING_BATCH_SIZE=16`
+  - `OPENAI_EMBEDDING_TIMEOUT=90`
+  - `OPENAI_EMBEDDING_CACHE_DB=examples/uses_codes_embedding_cache_medium.db`
+- 首次构建在 `256` 条向量已落库后遇到接口读取超时
+- 修复 `OpenAICompatibleEmbedder`：
+  - 将底层 `TimeoutError` 包装为 `EmbeddingRequestError`
+- 续建使用：
+  - `--resume-vectors`
+  - `OPENAI_EMBEDDING_BATCH_SIZE=8`
+  - `OPENAI_EMBEDDING_TIMEOUT=120`
+- 续建结果：
+  - `missing_before = 219`
+  - `inserted = 219`
+  - `batches = 28`
+  - `missing_after = 0`
+  - 最终 `chunk_vectors = 475`
+- 再次执行 no-op resume：
+  - `missing_before = 0`
+  - `inserted = 0`
+  - `batches = 0`
+- 新增报告：
+  - `examples/uses_codes_embedding_medium_benchmark.json`
+  - `examples/uses_codes_index_real_embedding_medium_summary.json`
+- 结论：
+  - 全局批处理、每批提交、cache 和 `--resume-vectors` 已能覆盖真实接口中途超时场景
+  - 全量建库建议优先使用 batch size `8` 或 `16` 并开启 embedding cache
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题
