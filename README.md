@@ -108,6 +108,10 @@
 - `examples/uses_codes_eval_report_local_hash.json`
 - `examples/uses_codes_eval_compare.json`
 - `examples/uses_codes_embedding_smoke.json`
+- `examples/uses_codes_embedding_e2e_report.json`
+- `examples/uses_codes_eval_report_subset_local_hash.json`
+- `examples/uses_codes_eval_report_real_embedding_subset.json`
+- `examples/uses_codes_eval_compare_real_embedding_subset.json`
 
 ### 检索评测摘要
 
@@ -158,7 +162,7 @@ export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
-  --root /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  /Users/songzuoqiang/Documents/agent/code/uses_codes \
   --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_openai.db
 ```
 

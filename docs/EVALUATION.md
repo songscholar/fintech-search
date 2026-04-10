@@ -136,7 +136,7 @@ PYTHONPATH=src python3 -m uses_indexer compare-eval \
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
-  --root /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  /Users/songzuoqiang/Documents/agent/code/uses_codes \
   --db examples/uses_codes_index.db
 ```
 
@@ -148,7 +148,7 @@ export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
-  --root /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  /Users/songzuoqiang/Documents/agent/code/uses_codes \
   --db examples/uses_codes_index_openai.db
 ```
 
@@ -160,6 +160,33 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `OPENAI_EMBEDDING_URL` 可以填到 `/v1`，程序会自动补成 `/v1/embeddings`。
 - 当前对 `https://oapi.aivue.cn/v1` 的 smoke test 中，batch size `1`、`4`、`16` 均可返回 `3072` 维向量；完整大仓建库建议先从 `OPENAI_EMBEDDING_BATCH_SIZE=16` 开始。
 - `examples/uses_codes_index_openai.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
+
+## 当前真实 Embedding 端到端结果
+
+本轮先使用评测用例覆盖子集做端到端测试，子集包含 4 个核心过程文件、193 个语义块。这样可以验证真实 embedding 的建库、查询向量、评测和对比报告链路，同时避免全量建库在当前接口延迟下长时间卡住。
+
+输出文件：
+
+- `examples/uses_codes_embedding_e2e_report.json`
+- `examples/uses_codes_index_subset_local_hash_summary.json`
+- `examples/uses_codes_index_real_embedding_subset_summary.json`
+- `examples/uses_codes_eval_report_subset_local_hash.json`
+- `examples/uses_codes_eval_report_real_embedding_subset.json`
+- `examples/uses_codes_eval_compare_real_embedding_subset.json`
+
+子集对比结论：
+
+- 本地 hash 子集和真实 embedding 子集的 `pass@10` 都是 `1.0`
+- 真实 embedding 子集的 `matched_cases` 仍为 `5`
+- `expectation_recall@3` 和 `expectation_recall@5` 相对本地 hash 子集各下降 `0.1`
+- case 级变化为 `unchanged = 5`，没有新增 `improved` 或 `regressed`
+
+全量建库风险：
+
+- 全量索引当前有 `28748` 个语义块、`2553` 个含 chunk 的文件
+- 当前实现按文件内 chunk 分批，batch size `16` 估算约 `3620` 次请求
+- 代表性 16 条真实语义块请求耗时约 `13.45` 秒
+- 在加入全局批处理、断点续建或 embedding cache 前，不建议把全量真实 embedding 建库当作常规短测试
 
 ## 后续扩展
 

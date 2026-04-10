@@ -1,0 +1,87 @@
+{
+  "checked_at": "2026-04-10",
+  "scope": "evaluation_subset",
+  "subset_root": "/tmp/uses_codes_eval_subset",
+  "source_root": "/Users/songzuoqiang/Documents/agent/code/uses_codes",
+  "subset_files": [
+    "uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+    "uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+    "uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+    "uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction"
+  ],
+  "embedding": {
+    "provider": "openai-compatible",
+    "model": "text-embedding-3-large",
+    "endpoint_base_url": "https://oapi.aivue.cn/v1",
+    "dimension": 3072,
+    "batch_size": 16,
+    "timeout_seconds": 60
+  },
+  "secret_policy": "API key was provided only through environment variables and is not stored in repository files.",
+  "subset_index": {
+    "local_hash_db": "examples/uses_codes_index_subset_local_hash.db",
+    "real_embedding_db": "examples/uses_codes_index_real_embedding_subset.db",
+    "file_count": 4,
+    "chunk_count": 193,
+    "vector_count": 193
+  },
+  "evaluation_reports": {
+    "local_hash": "examples/uses_codes_eval_report_subset_local_hash.json",
+    "real_embedding": "examples/uses_codes_eval_report_real_embedding_subset.json",
+    "comparison": "examples/uses_codes_eval_compare_real_embedding_subset.json"
+  },
+  "metrics": {
+    "local_hash": {
+      "pass_at_1": 0.8,
+      "pass_at_3": 1.0,
+      "pass_at_5": 1.0,
+      "pass_at_10": 1.0,
+      "expectation_recall_at_1": 0.8,
+      "expectation_recall_at_3": 1.0,
+      "expectation_recall_at_5": 1.0,
+      "expectation_recall_at_10": 1.0,
+      "mean_first_relevant_rank": 1.4,
+      "matched_cases": 5
+    },
+    "real_embedding": {
+      "pass_at_1": 0.8,
+      "pass_at_3": 1.0,
+      "pass_at_5": 1.0,
+      "pass_at_10": 1.0,
+      "expectation_recall_at_1": 0.8,
+      "expectation_recall_at_3": 0.9,
+      "expectation_recall_at_5": 0.9,
+      "expectation_recall_at_10": 1.0,
+      "mean_first_relevant_rank": 1.4,
+      "matched_cases": 5
+    },
+    "delta": {
+      "pass_at_10": 0.0,
+      "expectation_recall_at_3": -0.1,
+      "expectation_recall_at_5": -0.1,
+      "expectation_recall_at_10": 0.0,
+      "mean_first_relevant_rank": 0.0
+    },
+    "case_change_counts": {
+      "improved": 0,
+      "regressed": 0,
+      "unchanged": 5,
+      "added": 0,
+      "removed": 0
+    }
+  },
+  "full_index_cost_estimate": {
+    "full_chunk_count": 28748,
+    "chunked_file_count": 2553,
+    "estimated_requests_with_current_file_batching_at_batch_16": 3620,
+    "global_batch_lower_bound_requests_at_batch_16": 1797,
+    "representative_batch_16_elapsed_seconds": 13.45,
+    "rough_hours_with_current_file_batching": 13.52,
+    "rough_hours_with_global_batch_lower_bound": 6.71
+  },
+  "conclusion": [
+    "The real embedding pipeline is end-to-end functional on the evaluation subset.",
+    "Top-level case pass metrics did not regress, but expectation_recall@3 and expectation_recall@5 dropped by 0.1 on this subset.",
+    "Do not run full real-embedding indexing as a routine short test before adding global batching, checkpoint/resume, or an embedding cache."
+  ]
+}

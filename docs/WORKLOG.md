@@ -393,9 +393,37 @@
   - 别名维度、批量大小和超时参数
   - 非法超时参数报错
 
+### 阶段 24：真实 Embedding 端到端评测
+
+- 使用评测用例覆盖子集完成端到端测试：
+  - 子集根目录：`/tmp/uses_codes_eval_subset`
+  - 子集文件数：`4`
+  - 子集语义块数：`193`
+  - 真实 embedding 向量数：`193`
+- 新增子集索引摘要：
+  - `examples/uses_codes_index_subset_local_hash_summary.json`
+  - `examples/uses_codes_index_real_embedding_subset_summary.json`
+- 新增子集评测报告：
+  - `examples/uses_codes_eval_report_subset_local_hash.json`
+  - `examples/uses_codes_eval_report_real_embedding_subset.json`
+  - `examples/uses_codes_eval_compare_real_embedding_subset.json`
+- 新增端到端测试汇总：
+  - `examples/uses_codes_embedding_e2e_report.json`
+- 本轮评测结论：
+  - 本地 hash 子集和真实 embedding 子集的 `pass@10` 都是 `1.0`
+  - 真实 embedding 子集的 `matched_cases` 为 `5`
+  - `expectation_recall@3` 和 `expectation_recall@5` 相对本地 hash 子集各下降 `0.1`
+  - case 级变化为 `unchanged = 5`
+- 全量成本评估：
+  - 全量索引当前有 `28748` 个语义块
+  - 当前按文件内 chunk 分批，batch size `16` 估算约 `3620` 次外部 embedding 请求
+  - 代表性 16 条真实语义块请求耗时约 `13.45` 秒
+  - 在加入全局批处理、断点续建或 embedding cache 前，不建议直接做全量真实 embedding 短测试
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题
+- 增加外部 embedding 全局批处理、断点续建和本地 cache
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精细的 goto / label 路径恢复
