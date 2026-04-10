@@ -5,7 +5,10 @@ import json
 import math
 import os
 import re
+import sqlite3
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 from urllib import error, request
 
@@ -74,12 +77,110 @@ class OpenAICompatibleEmbeddingConfig:
     batch_size: int = 32
     dimensions: int | None = None
     timeout_seconds: float = 60.0
+    cache_db_path: str | None = None
+
+
+class SQLiteEmbeddingCache:
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path).expanduser()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(self.path)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS embedding_cache (
+              cache_key TEXT PRIMARY KEY,
+              provider TEXT NOT NULL,
+              model TEXT NOT NULL,
+              base_url TEXT NOT NULL,
+              dimensions TEXT NOT NULL,
+              text_sha256 TEXT NOT NULL,
+              vector_dimension INTEGER NOT NULL,
+              vector_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_embedding_cache_lookup
+            ON embedding_cache(provider, model, base_url, dimensions, text_sha256)
+            """
+        )
+        self.conn.commit()
+
+    def get_many(self, cache_keys: list[str]) -> dict[str, list[float]]:
+        if not cache_keys:
+            return {}
+
+        found: dict[str, list[float]] = {}
+        for start in range(0, len(cache_keys), 900):
+            batch = cache_keys[start : start + 900]
+            placeholders = ",".join("?" for _ in batch)
+            rows = self.conn.execute(
+                f"SELECT cache_key, vector_json FROM embedding_cache WHERE cache_key IN ({placeholders})",
+                batch,
+            ).fetchall()
+            for cache_key, vector_json in rows:
+                try:
+                    parsed = json.loads(str(vector_json))
+                    if isinstance(parsed, list):
+                        found[str(cache_key)] = [float(value) for value in parsed]
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+        return found
+
+    def put_many(
+        self,
+        *,
+        provider: str,
+        model: str,
+        base_url: str,
+        dimensions: int | None,
+        items: list[tuple[str, str, list[float]]],
+    ) -> None:
+        if not items:
+            return
+
+        dimension_key = _dimension_cache_key(dimensions)
+        created_at = int(time.time())
+        self.conn.executemany(
+            """
+            INSERT OR REPLACE INTO embedding_cache(
+              cache_key,
+              provider,
+              model,
+              base_url,
+              dimensions,
+              text_sha256,
+              vector_dimension,
+              vector_json,
+              created_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    cache_key,
+                    provider,
+                    model,
+                    base_url,
+                    dimension_key,
+                    text_sha256,
+                    len(vector),
+                    json.dumps(vector, ensure_ascii=False, separators=(",", ":")),
+                    created_at,
+                )
+                for cache_key, text_sha256, vector in items
+            ],
+        )
+        self.conn.commit()
 
 
 class OpenAICompatibleEmbedder:
     def __init__(self, config: OpenAICompatibleEmbeddingConfig) -> None:
         self.config = config
         self._dimension: int | None = config.dimensions
+        self.cache = SQLiteEmbeddingCache(config.cache_db_path) if config.cache_db_path else None
 
     @classmethod
     def from_env(cls) -> "OpenAICompatibleEmbedder | None":
@@ -116,6 +217,10 @@ class OpenAICompatibleEmbedder:
             default=60.0,
             aliases=("OPENAI_EMBEDDING_TIMEOUT",),
         )
+        _, cache_db_path = _get_env_with_name(
+            "USES_INDEXER_EMBEDDING_CACHE_DB",
+            "OPENAI_EMBEDDING_CACHE_DB",
+        )
 
         return cls(
             OpenAICompatibleEmbeddingConfig(
@@ -125,6 +230,7 @@ class OpenAICompatibleEmbedder:
                 batch_size=batch_size,
                 dimensions=dimensions,
                 timeout_seconds=timeout_seconds,
+                cache_db_path=cache_db_path,
             )
         )
 
@@ -139,6 +245,8 @@ class OpenAICompatibleEmbedder:
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
+        if self.cache is not None:
+            return self._embed_texts_with_cache(texts)
 
         results: list[list[float]] = []
         batch_size = max(self.config.batch_size, 1)
@@ -146,6 +254,70 @@ class OpenAICompatibleEmbedder:
             batch = texts[start : start + batch_size]
             results.extend(self._embed_batch(batch))
         return results
+
+    def _embed_texts_with_cache(self, texts: list[str]) -> list[list[float]]:
+        if self.cache is None:
+            return self.embed_texts(texts)
+
+        cache_items = [self._cache_item(text) for text in texts]
+        cache_keys = [item[0] for item in cache_items]
+        cached = self.cache.get_many(cache_keys)
+
+        results: list[list[float] | None] = [None] * len(texts)
+        missing_by_key: dict[str, tuple[str, str, list[int]]] = {}
+
+        for index, (cache_key, text_sha256, text) in enumerate(cache_items):
+            vector = cached.get(cache_key)
+            if vector is not None:
+                self._set_dimension_from_vector(vector)
+                results[index] = vector
+                continue
+            existing = missing_by_key.get(cache_key)
+            if existing is None:
+                missing_by_key[cache_key] = (text_sha256, text, [index])
+            else:
+                existing[2].append(index)
+
+        missing_items = [
+            (cache_key, text_sha256, text, indexes)
+            for cache_key, (text_sha256, text, indexes) in missing_by_key.items()
+        ]
+        batch_size = max(self.config.batch_size, 1)
+        for start in range(0, len(missing_items), batch_size):
+            batch_items = missing_items[start : start + batch_size]
+            vectors = self._embed_batch([item[2] for item in batch_items])
+            cache_rows: list[tuple[str, str, list[float]]] = []
+            for (cache_key, text_sha256, _text, indexes), vector in zip(batch_items, vectors, strict=True):
+                self._set_dimension_from_vector(vector)
+                cache_rows.append((cache_key, text_sha256, vector))
+                for index in indexes:
+                    results[index] = vector
+            self.cache.put_many(
+                provider="openai-compatible",
+                model=self.config.model,
+                base_url=self.config.base_url,
+                dimensions=self.config.dimensions,
+                items=cache_rows,
+            )
+
+        return [_require_vector(index, vector) for index, vector in enumerate(results)]
+
+    def _cache_item(self, text: str) -> tuple[str, str, str]:
+        text_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        payload = {
+            "version": 1,
+            "provider": "openai-compatible",
+            "model": self.config.model,
+            "base_url": self.config.base_url,
+            "dimensions": _dimension_cache_key(self.config.dimensions),
+            "text_sha256": text_sha256,
+        }
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest(), text_sha256, text
+
+    def _set_dimension_from_vector(self, vector: list[float]) -> None:
+        if self._dimension is None:
+            self._dimension = len(vector)
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         payload: dict[str, object] = {
@@ -284,6 +456,16 @@ def _get_env_with_name(*names: str) -> tuple[str | None, str | None]:
         if raw is not None and raw != "":
             return name, raw
     return None, None
+
+
+def _require_vector(index: int, vector: list[float] | None) -> list[float]:
+    if vector is None:
+        raise EmbeddingRequestError(f"Embedding result missing vector for index {index}")
+    return vector
+
+
+def _dimension_cache_key(dimensions: int | None) -> str:
+    return str(dimensions) if dimensions is not None else ""
 
 
 def _normalize_embedding_base_url(raw_url: str) -> str:

@@ -142,6 +142,7 @@
 - `USES_INDEXER_EMBEDDING_BATCH_SIZE`
 - `USES_INDEXER_EMBEDDING_DIMENSIONS`
 - `USES_INDEXER_EMBEDDING_TIMEOUT`
+- `USES_INDEXER_EMBEDDING_CACHE_DB`
 
 也兼容当前常见的 OpenAI embedding 专用变量名：
 
@@ -151,6 +152,7 @@
 - `OPENAI_EMBEDDING_BATCH_SIZE`
 - `OPENAI_EMBEDDING_DIMENSIONS`
 - `OPENAI_EMBEDDING_TIMEOUT`
+- `OPENAI_EMBEDDING_CACHE_DB`
 
 示例：
 
@@ -160,6 +162,7 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
+export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_embedding_cache.db"
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code/uses_codes \
@@ -174,6 +177,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 查询时会校验当前 embedding 配置是否和索引库一致
 - 如果不一致，会自动禁用向量召回，并在返回结果里输出 `vector_status`
 - 如果切换了 embedding 模型，应该重新执行一次 `build-index`
+- 如果配置了 `*_EMBEDDING_CACHE_DB`，外部 embedding 会先查本地 SQLite 缓存，未命中才请求接口；缓存文件建议放在 `examples/*.db` 或其他不纳入版本控制的位置
 
 ## 目录结构
 

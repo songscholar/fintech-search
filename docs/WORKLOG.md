@@ -420,10 +420,31 @@
   - 代表性 16 条真实语义块请求耗时约 `13.45` 秒
   - 在加入全局批处理、断点续建或 embedding cache 前，不建议直接做全量真实 embedding 短测试
 
+### 阶段 25：外部 Embedding 本地缓存
+
+- 新增 `SQLiteEmbeddingCache`
+- `OpenAICompatibleEmbedder` 现在支持可选本地 SQLite 缓存：
+  - `USES_INDEXER_EMBEDDING_CACHE_DB`
+  - `OPENAI_EMBEDDING_CACHE_DB`
+- 缓存 key 由以下内容共同决定：
+  - provider
+  - model
+  - base URL
+  - dimensions
+  - text SHA-256
+- 缓存只保存文本 hash 和向量 JSON，不保存原始代码文本
+- 命中缓存时不会调用外部 embedding 接口
+- 未命中时按原 batch size 调用外部接口，并在请求成功后立即写入缓存
+- 这样即使全量真实 embedding 建库中途中断，已完成的向量也能在下一次运行时复用
+- 补充测试，覆盖：
+  - `OPENAI_EMBEDDING_CACHE_DB` 环境变量读取
+  - SQLite cache 跨 embedder 实例复用
+  - 命中缓存时不重复请求外部接口
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题
-- 增加外部 embedding 全局批处理、断点续建和本地 cache
+- 增加外部 embedding 全局批处理和断点续建
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精细的 goto / label 路径恢复

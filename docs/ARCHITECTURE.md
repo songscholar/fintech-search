@@ -230,10 +230,13 @@ SQL 恢复这边也有一个仓库特性要处理：
 2. 增强模式
    - 使用 OpenAI-compatible embedding 接口
    - 通过环境变量配置
+   - 可选启用 SQLite embedding cache，避免重复请求相同文本的向量
    - 适合提升自然语言到业务流程的语义召回
 
 索引构建时会把 `provider / model / dimension` 写入 `metadata`。
 查询时会读取这组元数据，和当前 embedder 做兼容性比对；只有两边处于同一向量空间时，才会真正开启 `vector_chunk` 召回。
+
+外部 embedding 缓存的 key 会绑定 `provider / model / base_url / dimensions / text_sha256`，所以切换模型、端点或维度时不会误用旧向量。缓存只保存文本 hash 和向量 JSON，不保存原始代码文本。
 
 `ask-codebase` 则再向前走一步：
 

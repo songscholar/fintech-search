@@ -17,6 +17,7 @@ EMBEDDING_ENV_VARS = (
     "USES_INDEXER_EMBEDDING_BATCH_SIZE",
     "USES_INDEXER_EMBEDDING_DIMENSIONS",
     "USES_INDEXER_EMBEDDING_TIMEOUT",
+    "USES_INDEXER_EMBEDDING_CACHE_DB",
     "OPENAI_EMBEDDING_KEY",
     "OPENAI_EMBEDDING_NAME",
     "OPENAI_EMBEDDING_MODEL",
@@ -24,6 +25,7 @@ EMBEDDING_ENV_VARS = (
     "OPENAI_EMBEDDING_BATCH_SIZE",
     "OPENAI_EMBEDDING_DIMENSIONS",
     "OPENAI_EMBEDDING_TIMEOUT",
+    "OPENAI_EMBEDDING_CACHE_DB",
     "OPENAI_API_KEY",
 )
 
@@ -62,7 +64,7 @@ def test_create_embedder_from_env_uses_openai_compatible_config(monkeypatch) -> 
     assert embedder.config.timeout_seconds == 30.0
 
 
-def test_create_embedder_from_env_accepts_openai_embedding_aliases(monkeypatch) -> None:
+def test_create_embedder_from_env_accepts_openai_embedding_aliases(monkeypatch, tmp_path) -> None:
     clear_embedding_env(monkeypatch)
     monkeypatch.setenv("OPENAI_EMBEDDING_KEY", "test-key")
     monkeypatch.setenv("OPENAI_EMBEDDING_NAME", "text-embedding-3-large")
@@ -70,6 +72,7 @@ def test_create_embedder_from_env_accepts_openai_embedding_aliases(monkeypatch) 
     monkeypatch.setenv("OPENAI_EMBEDDING_BATCH_SIZE", "16")
     monkeypatch.setenv("OPENAI_EMBEDDING_DIMENSIONS", "3072")
     monkeypatch.setenv("OPENAI_EMBEDDING_TIMEOUT", "12.5")
+    monkeypatch.setenv("OPENAI_EMBEDDING_CACHE_DB", str(tmp_path / "embedding-cache.db"))
 
     embedder = create_embedder_from_env()
 
@@ -79,6 +82,7 @@ def test_create_embedder_from_env_accepts_openai_embedding_aliases(monkeypatch) 
     assert embedder.config.base_url == "https://example.test/v1/embeddings"
     assert embedder.config.batch_size == 16
     assert embedder.config.timeout_seconds == 12.5
+    assert embedder.config.cache_db_path == str(tmp_path / "embedding-cache.db")
 
 
 def test_openai_compatible_embedder_batches_requests(monkeypatch) -> None:
@@ -157,3 +161,53 @@ def test_create_embedder_from_env_rejects_invalid_timeout_alias(monkeypatch) -> 
         assert "OPENAI_EMBEDDING_TIMEOUT" in str(exc)
     else:
         raise AssertionError("Expected EmbeddingConfigError")
+
+
+def test_openai_compatible_embedder_reuses_sqlite_cache(monkeypatch, tmp_path) -> None:
+    clear_embedding_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_EMBEDDING_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_EMBEDDING_NAME", "text-embedding-3-large")
+    monkeypatch.setenv("OPENAI_EMBEDDING_CACHE_DB", str(tmp_path / "embedding-cache.db"))
+
+    payloads: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def fake_urlopen(req, timeout: float = 60.0):  # type: ignore[no-untyped-def]
+        body = json.loads(req.data.decode("utf-8"))
+        payloads.append(body)
+        inputs = body["input"]
+        return FakeResponse(
+            {
+                "data": [
+                    {"index": index, "embedding": [float(len(text)), float(index + 1)]}
+                    for index, text in enumerate(inputs)
+                ]
+            }
+        )
+
+    monkeypatch.setattr("uses_indexer.embeddings.request.urlopen", fake_urlopen)
+
+    first_embedder = create_embedder_from_env()
+    first_vectors = first_embedder.embed_texts(["abc", "abcdef"])
+
+    second_embedder = create_embedder_from_env()
+    second_vectors = second_embedder.embed_texts(["abc", "abcdef"])
+
+    assert first_vectors == [[3.0, 1.0], [6.0, 2.0]]
+    assert second_vectors == first_vectors
+    assert len(payloads) == 1
+    assert payloads[0]["input"] == ["abc", "abcdef"]
+    assert first_embedder.info.dimension == 2
+    assert second_embedder.info.dimension == 2

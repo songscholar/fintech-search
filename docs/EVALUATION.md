@@ -146,6 +146,7 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
+export OPENAI_EMBEDDING_CACHE_DB="examples/uses_codes_embedding_cache.db"
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code/uses_codes \
@@ -158,8 +159,9 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 密钥只通过环境变量注入，不要写进仓库文件。
 - `OPENAI_EMBEDDING_URL` 可以填到 `/v1`，程序会自动补成 `/v1/embeddings`。
+- `OPENAI_EMBEDDING_CACHE_DB` 是可选的本地 SQLite 缓存；开启后，相同模型、地址、维度和文本 hash 的 embedding 会复用缓存。
 - 当前对 `https://oapi.aivue.cn/v1` 的 smoke test 中，batch size `1`、`4`、`16` 均可返回 `3072` 维向量；完整大仓建库建议先从 `OPENAI_EMBEDDING_BATCH_SIZE=16` 开始。
-- `examples/uses_codes_index_openai.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
+- `examples/uses_codes_index_openai.db` 和 `examples/uses_codes_embedding_cache.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
 
 ## 当前真实 Embedding 端到端结果
 
@@ -186,7 +188,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 全量索引当前有 `28748` 个语义块、`2553` 个含 chunk 的文件
 - 当前实现按文件内 chunk 分批，batch size `16` 估算约 `3620` 次请求
 - 代表性 16 条真实语义块请求耗时约 `13.45` 秒
-- 在加入全局批处理、断点续建或 embedding cache 前，不建议把全量真实 embedding 建库当作常规短测试
+- 目前已经加入 embedding cache；在继续加入全局批处理或断点续建前，仍不建议把全量真实 embedding 建库当作常规短测试
 
 ## 后续扩展
 
