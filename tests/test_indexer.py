@@ -306,6 +306,30 @@ def test_query_index_applies_intent_aware_rerank(tmp_path: Path) -> None:
     assert "intent_failure_block" in failure_result["hits"][0]["reasons"]
 
 
+def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "哪些流程调用证券代码获取", limit=6)
+
+    assert result["hits"][0]["procedure_name"] == "AF_SAMPLE"
+    assert "证券代码获取" in str(result["hits"][0]["matched_text"])
+    assert "focus_match_in_hit=证券代码获取" in result["hits"][0]["reasons"]
+
+    vector_mismatches = [
+        index
+        for index, hit in enumerate(result["hits"])
+        if hit["retrieval_source"] == "vector_chunk" and "vector_focus_mismatch" in hit["reasons"]
+    ]
+    exact_focus_hits = [
+        index
+        for index, hit in enumerate(result["hits"])
+        if "证券代码获取" in str(hit["matched_text"])
+    ]
+    assert exact_focus_hits
+    assert vector_mismatches
+    assert max(exact_focus_hits) < min(vector_mismatches)
+
+
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
     _, db_path = _build_sample_index(tmp_path)
     indexer = SQLiteIndexer(embedder=MismatchEmbedder())

@@ -190,8 +190,12 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 本地 hash 子集和真实 embedding 子集的 `pass@10` 都是 `1.0`
 - 真实 embedding 子集的 `matched_cases` 仍为 `5`
-- `expectation_recall@3` 和 `expectation_recall@5` 相对本地 hash 子集各下降 `0.1`
-- case 级变化为 `unchanged = 5`，没有新增 `improved` 或 `regressed`
+- 早期真实 embedding 子集曾出现 `expectation_recall@3` 和 `expectation_recall@5` 各下降 `0.1` 的问题，根因是向量候选把不含局部精确焦点词的泛相关 chunk 推到了前面
+- 当前已加入 focus-aware 融合调权：调用链问题会抽取 `证券代码获取` 这类焦点词，并排除 `查询 / 执行 / 报错` 这类通用操作意图词，优先提升命中焦点词的 FTS / 结构化关系 / chunk-block 证据，并降低缺少焦点词的 `vector_chunk` 排名
+- 调权后真实 embedding 子集的 `pass@1/pass@3/pass@5/pass@10` 均为 `1.0`
+- 调权后真实 embedding 子集的 `expectation_recall@1/@3/@5/@10` 均为 `1.0`
+- `stock-code-get-callers` 从首个相关命中 rank `3` 提升到 rank `1`
+- case 级变化为 `improved = 1`、`regressed = 0`、`unchanged = 4`
 
 全量建库风险：
 

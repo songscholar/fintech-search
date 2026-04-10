@@ -502,10 +502,36 @@
   - 全局批处理、每批提交、cache 和 `--resume-vectors` 已能覆盖真实接口中途超时场景
   - 全量建库建议优先使用 batch size `8` 或 `16` 并开启 embedding cache
 
+### 阶段 28：真实 Embedding 融合调权
+
+- 问题背景：
+  - 真实 embedding 子集评测中，`stock-code-get-callers` 的局部精确证据被语义相近但不含目标调用的 `vector_chunk` 推后
+  - 该 case 表现为首个相关命中在 rank `3`，`expectation_recall@3` 和 `expectation_recall@5` 相对本地 hash 子集各下降 `0.1`
+- 调整策略：
+  - 扩展中文查询切分词，识别 `哪些流程调用证券代码获取` 这类调用链问题
+  - 从查询中抽取 `证券代码获取` 这类 `focus_terms`，并排除 `查询 / 执行 / 报错` 这类通用操作意图词
+  - 对 `matched_text` 直接包含焦点词的候选加权
+  - 对只在上下文中包含焦点词的候选给较弱加权
+  - 对调用链问题中缺少焦点词的 `vector_chunk` 增加惩罚
+  - 调用链多跳重排只给包含焦点词的候选追加结构化关系奖励，避免泛相关块借关系分数继续上浮
+  - 调用链 intent 加权要求显式过程焦点，或焦点词加 `call_flow / call_block / calls_procedure` 信号同时存在
+- 新增回归测试：
+  - `test_query_index_keeps_exact_call_focus_above_vector_only_context`
+  - 验证 `哪些流程调用证券代码获取` 中，命中精确焦点词的证据排在 `vector_focus_mismatch` 候选之前
+- 重新运行真实 embedding 子集评测：
+  - `pass@1/pass@3/pass@5/pass@10 = 1.0`
+  - `expectation_recall@1/@3/@5/@10 = 1.0`
+  - `mean_first_relevant_rank = 1.0`
+  - `stock-code-get-callers` 从首个相关命中 rank `3` 提升到 rank `1`
+  - case 级变化为 `improved = 1`、`regressed = 0`、`unchanged = 4`
+- 更新报告：
+  - `examples/uses_codes_eval_report_real_embedding_subset.json`
+  - `examples/uses_codes_eval_compare_real_embedding_subset.json`
+  - `examples/uses_codes_embedding_e2e_report.json`
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题
-- 调优真实 embedding 与 FTS / 结构化召回的融合权重
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精细的 goto / label 路径恢复

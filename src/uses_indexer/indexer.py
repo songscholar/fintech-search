@@ -290,7 +290,7 @@ TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<in
 QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 CHUNK_SIGNIFICANT_LIMIT = 6
 VECTOR_SIMILARITY_THRESHOLD = 0.05
-CHINESE_QUERY_SPLIT_RE = re.compile(r"(?:在哪里|在哪儿|哪里|什么|如何|怎么|是否|能否|可以|请问|一下|的|了|在|是|和|与|及|或|并|把|将|从|到|为|对|按|里)")
+CHINESE_QUERY_SPLIT_RE = re.compile(r"(?:被谁调用|谁调用|在哪里|在哪儿|哪里|哪些|哪个|谁|什么|如何|怎么|是否|能否|可以|请问|一下|调用|流程|的|了|在|是|和|与|及|或|并|把|将|从|到|为|对|按|里)")
 GENERIC_QUERY_TERMS = {
     "逻辑",
     "代码",
@@ -343,6 +343,17 @@ PROCEDURE_INTENT_KEYWORDS = ("过程", "函数", "服务", "接口", "原子", "
 SQL_WRITE_HINTS = (" update ", " delete ", " insert ", " merge ", "writes_table", "清空记录池", "修改记录", "插入记录")
 SQL_READ_HINTS = (" select ", " from ", " join ", "reads_table", "获取记录", "获取字段")
 FAILURE_MATCH_HINTS = ("失败", "报错", "异常", "exception", "when_others", "svr_end", "goto", "处理失败", "业务报错返回")
+FOCUS_EXCLUDED_QUERY_TERMS = (
+    GENERIC_QUERY_TERMS
+    | set(TABLE_INTENT_KEYWORDS)
+    | set(WRITE_INTENT_KEYWORDS)
+    | set(READ_INTENT_KEYWORDS)
+    | set(VARIABLE_INTENT_KEYWORDS)
+    | set(CALL_CHAIN_INTENT_KEYWORDS)
+    | set(FAILURE_INTENT_KEYWORDS)
+    | set(PROCEDURE_INTENT_KEYWORDS)
+    | {"执行", "处理"}
+)
 
 
 class SQLiteIndexer:
@@ -2118,6 +2129,16 @@ class SQLiteIndexer:
             score += token_ratio * 18.0
             reasons.append(f"token_overlap={coverage}/{max(len(query_tokens), 1)}")
 
+        focus_terms = list(query_analysis.get("focus_terms", []))
+        focus_in_hit = [str(term) for term in focus_terms if str(term) and str(term) in matched_text]
+        focus_in_context = [str(term) for term in focus_terms if str(term) and str(term) in search_text]
+        if focus_in_hit:
+            score += min(len(focus_in_hit) * 14.0, 24.0)
+            reasons.append(f"focus_match_in_hit={','.join(focus_in_hit[:3])}")
+        elif focus_in_context:
+            score += min(len(focus_in_context) * 8.0, 16.0)
+            reasons.append(f"focus_match_in_context={','.join(focus_in_context[:3])}")
+
         if normalized_query and normalized_query in matched_text:
             score += 16.0
             reasons.append("exact_match_in_hit")
@@ -2154,6 +2175,15 @@ class SQLiteIndexer:
         )
         score += intent_bonus
         reasons.extend(intent_reasons)
+
+        if (
+            candidate.get("retrieval_source") == "vector_chunk"
+            and query_analysis["wants_call_chain"]
+            and focus_terms
+            and not (focus_in_hit or focus_in_context)
+        ):
+            score -= 14.0
+            reasons.append("vector_focus_mismatch")
 
         score += max(min(float(candidate.get("source_rank") or 0.0), 12.0), -12.0)
 
@@ -2197,6 +2227,18 @@ class SQLiteIndexer:
             one_overlap = sorted((one_hop - {procedure_name}) & seed_names)
             two_overlap = sorted((two_hop - one_hop - {procedure_name}) & seed_names)
             if one_overlap or two_overlap:
+                combined = (
+                    f"{candidate.get('search_text') or ''} "
+                    f"{candidate.get('matched_text') or ''} "
+                    f"{candidate.get('procedure_name') or ''}"
+                ).lower()
+                if (
+                    query_analysis["wants_call_chain"]
+                    and query_analysis.get("focus_terms")
+                    and not _focus_terms_present(query_analysis, combined)
+                ):
+                    reranked.append(candidate)
+                    continue
                 bonus = (len(one_overlap) * 3.0 + len(two_overlap) * 1.5) * call_chain_multiplier
                 candidate["score"] = round(float(candidate["score"]) + bonus, 6)
                 reasons = list(candidate.get("reasons", []))
@@ -3774,6 +3816,15 @@ def _analyze_query(query: str) -> dict[str, object]:
     wants_callers = _contains_any(lowered, ("被谁调用", "谁调用", "上游", "入口"))
     wants_failure_flow = _contains_any(lowered, FAILURE_INTENT_KEYWORDS)
     wants_procedure = bool(procedure_terms) or _contains_any(lowered, PROCEDURE_INTENT_KEYWORDS)
+    focus_terms = {
+        token
+        for token in token_set
+        if len(token) >= 2
+        and token not in FOCUS_EXCLUDED_QUERY_TERMS
+        and token not in procedure_terms
+        and token not in variable_terms
+        and token not in table_terms
+    }
 
     intents = []
     for name, enabled in (
@@ -3794,6 +3845,7 @@ def _analyze_query(query: str) -> dict[str, object]:
         "procedure_terms": sorted(procedure_terms),
         "variable_terms": sorted(variable_terms),
         "table_terms": sorted(table_terms),
+        "focus_terms": sorted(focus_terms),
         "intents": intents,
         "wants_table_sql": wants_table_sql,
         "wants_table_write": wants_table_write,
@@ -3808,6 +3860,10 @@ def _analyze_query(query: str) -> dict[str, object]:
 
 def _contains_any(value: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in value for keyword in keywords)
+
+
+def _focus_terms_present(query_analysis: dict[str, object], value: str) -> bool:
+    return any(str(term) and str(term) in value for term in query_analysis.get("focus_terms", []))
 
 
 def _intent_bonus(
@@ -3891,13 +3947,17 @@ def _intent_bonus(
         if hit_type == "procedure":
             bonus += 4.0 if query_analysis["wants_callers"] else 8.0
             reasons.append("intent_call_chain_procedure")
+        has_procedure_focus = any(str(term) in combined for term in query_analysis["procedure_terms"])
+        has_text_focus = _focus_terms_present(query_analysis, combined)
+        has_call_signal = "call_flow" in combined or "call_block" in combined or "calls_procedure" in combined
         if hit_type in {"chunk", "action", "edge", "statement"} and (
-            "call_flow" in combined
-            or "calls_procedure" in combined
-            or any(str(term) in combined for term in query_analysis["procedure_terms"])
+            has_procedure_focus
+            or (has_text_focus and has_call_signal)
         ):
             bonus += 14.0 if query_analysis["wants_callers"] else 9.0
             reasons.append("intent_call_chain")
+            if has_text_focus:
+                reasons.append("intent_call_chain_focus")
 
     if query_analysis["wants_procedure"] and not query_analysis["wants_call_chain"]:
         if hit_type == "procedure":

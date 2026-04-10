@@ -44,28 +44,30 @@
       "matched_cases": 5
     },
     "real_embedding": {
-      "pass_at_1": 0.8,
+      "pass_at_1": 1.0,
       "pass_at_3": 1.0,
       "pass_at_5": 1.0,
       "pass_at_10": 1.0,
-      "expectation_recall_at_1": 0.8,
-      "expectation_recall_at_3": 0.9,
-      "expectation_recall_at_5": 0.9,
+      "expectation_recall_at_1": 1.0,
+      "expectation_recall_at_3": 1.0,
+      "expectation_recall_at_5": 1.0,
       "expectation_recall_at_10": 1.0,
-      "mean_first_relevant_rank": 1.4,
+      "mean_first_relevant_rank": 1.0,
       "matched_cases": 5
     },
     "delta": {
+      "pass_at_1": 0.2,
       "pass_at_10": 0.0,
-      "expectation_recall_at_3": -0.1,
-      "expectation_recall_at_5": -0.1,
+      "expectation_recall_at_1": 0.2,
+      "expectation_recall_at_3": 0.0,
+      "expectation_recall_at_5": 0.0,
       "expectation_recall_at_10": 0.0,
-      "mean_first_relevant_rank": 0.0
+      "mean_first_relevant_rank": -0.4
     },
     "case_change_counts": {
-      "improved": 0,
+      "improved": 1,
       "regressed": 0,
-      "unchanged": 5,
+      "unchanged": 4,
       "added": 0,
       "removed": 0
     }
@@ -81,7 +83,8 @@
   },
   "conclusion": [
     "The real embedding pipeline is end-to-end functional on the evaluation subset.",
-    "Top-level case pass metrics did not regress, but expectation_recall@3 and expectation_recall@5 dropped by 0.1 on this subset.",
-    "Do not run full real-embedding indexing as a routine short test before adding global batching, checkpoint/resume, or an embedding cache."
+    "Focus-aware fusion now keeps exact FTS, structured relation, and chunk-block evidence ahead of vector-only context for call-chain questions.",
+    "The stock-code-get-callers case improved from first relevant rank 3 to rank 1, and subset expectation_recall@1/@3/@5/@10 is now 1.0.",
+    "Full real-embedding indexing should still use global batching, embedding cache, and --resume-vectors because the external endpoint may time out on larger batches."
   ]
 }

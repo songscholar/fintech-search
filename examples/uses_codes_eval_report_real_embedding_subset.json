@@ -11,18 +11,18 @@
   ],
   "summary": {
     "pass_at_k": {
-      "1": 0.8,
+      "1": 1.0,
       "3": 1.0,
       "5": 1.0,
       "10": 1.0
     },
     "expectation_recall_at_k": {
-      "1": 0.8,
-      "3": 0.9,
-      "5": 0.9,
+      "1": 1.0,
+      "3": 1.0,
+      "5": 1.0,
       "10": 1.0
     },
-    "mean_first_relevant_rank": 1.4,
+    "mean_first_relevant_rank": 1.0,
     "matched_cases": 5
   },
   "cases": [
@@ -277,6 +277,7 @@
           "reasons": [
             "fts_hit",
             "token_overlap=2/2",
+            "focus_match_in_hit=err_secu_qry_entrust_fail",
             "multi_source_match=2",
             "intent_failure_chunk",
             "failure_flow_match",
@@ -296,6 +297,7 @@
           "reasons": [
             "fts_hit",
             "token_overlap=2/2",
+            "focus_match_in_hit=err_secu_qry_entrust_fail",
             "multi_source_match=2",
             "intent_failure_chunk",
             "failure_flow_match",
@@ -315,6 +317,7 @@
           "reasons": [
             "fts_hit",
             "token_overlap=2/2",
+            "focus_match_in_hit=err_secu_qry_entrust_fail",
             "failure_flow_match",
             "call_chain_two_hop=AF_LF_3103219",
             "call_chain_weight=0.35"
@@ -332,6 +335,7 @@
           "reasons": [
             "fts_hit",
             "token_overlap=2/2",
+            "focus_match_in_hit=err_secu_qry_entrust_fail",
             "failure_flow_match",
             "call_chain_two_hop=AF_LF_3103219",
             "call_chain_weight=0.35"
@@ -349,6 +353,7 @@
           "reasons": [
             "fts_hit",
             "token_overlap=2/2",
+            "focus_match_in_hit=err_secu_qry_entrust_fail",
             "failure_flow_match",
             "call_chain_two_hop=AF_LF_3103219",
             "call_chain_weight=0.35"
@@ -559,17 +564,17 @@
       ],
       "expected_count": 2,
       "matched_count": 2,
-      "first_relevant_rank": 3,
+      "first_relevant_rank": 1,
       "pass_at_k": {
-        "1": false,
+        "1": true,
         "3": true,
         "5": true,
         "10": true
       },
       "recall_at_k": {
-        "1": 0.0,
-        "3": 0.5,
-        "5": 0.5,
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
         "10": 1.0
       },
       "expectations": [
@@ -577,30 +582,30 @@
           "kind": "procedure",
           "value": "AF_SESBIDPUB_ADV_TAKE_CHECK",
           "matched": true,
-          "first_rank": 3,
+          "first_rank": 1,
           "matched_hit": {
-            "rank": 3,
+            "rank": 1,
             "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
             "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
-            "line_start": 250,
-            "line_end": 263,
-            "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_flow | actions: 正常返回, AF_系统参数公用_投顾产品标的信息获取, 遍历组件开始 | targets: AF_系统参数公用_投顾产品标的信息获取, comp_advisercode | vars: @transin_date, @transout_date, @date_clear, @comp_advisercode, @adproduct_id, @profit_status",
-            "match_source": "chunk_vector"
+            "line_start": 51,
+            "line_end": 53,
+            "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type",
+            "match_source": "chunk_summary"
           }
         },
         {
           "kind": "text",
           "value": "AF_系统参数公用_证券代码获取",
           "matched": true,
-          "first_rank": 9,
+          "first_rank": 1,
           "matched_hit": {
-            "rank": 9,
-            "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
-            "file_path": "/tmp/uses_codes_eval_subset/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
-            "line_start": 140,
-            "line_end": 144,
-            "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @report_milltime, @report_microtime, @error_no_t, @return_code, @stock_code_t, @usps_stkcode",
-            "match_source": "chunk_vector"
+            "rank": 1,
+            "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+            "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+            "line_start": 51,
+            "line_end": 53,
+            "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type",
+            "match_source": "chunk_summary"
           }
         }
       ],
@@ -608,86 +613,103 @@
         {
           "rank": 1,
           "hit_type": "chunk",
-          "match_source": "chunk_vector",
-          "procedure_name": "AF_LF_3103219",
-          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
-          "line_start": 159,
-          "line_end": 162,
-          "matched_text": "AF_LF_3103219 | call_flow | actions: AF_系统参数公用_证券代码详细参数获取, 处理成功 | targets: AF_系统参数公用_证券代码详细参数获取 | vars: @frozen_code, @exchange_type_t, @stock_type, @store_unit, @asset_flag, @asset_price | notes: 201308012 刘晓春 mod  增加国债预计发行资金负修正计算 单号：20130808007",
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+          "line_start": 51,
+          "line_end": 53,
+          "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type",
           "reasons": [
-            "vector_similarity=0.574",
+            "fts_hit",
+            "token_overlap=1/1",
+            "focus_match_in_hit=证券代码获取",
+            "multi_source_match=2",
             "intent_call_chain",
-            "call_chain_two_hop=AF_SESBIDPUB_ADV_TAKE_CHECK,LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "intent_call_chain_focus",
+            "call_chain_two_hop=LF_INNERSESOQUERY_QRYACCT_ENTRUST",
             "call_chain_weight=1.50"
           ]
         },
         {
           "rank": 2,
           "hit_type": "chunk",
-          "match_source": "chunk_vector",
-          "procedure_name": "AF_LF_3103219",
-          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
-          "line_start": 150,
-          "line_end": 156,
-          "matched_text": "AF_LF_3103219 | call_flow | actions: 正常返回, AF_系统参数公用_证券代码详细参数获取, 处理成功 | targets: AF_系统参数公用_证券代码详细参数获取 | vars: @exchange_type_t, @stock_type, @store_unit, @asset_flag, @frozen_code, @asset_price | notes: 如果是国债回购、企债回购或者质押出入库代码，则需要取其冻结代码来进行校验 对于报价回购205代码，由于frozen_code为空，所以不再获取冻结代码",
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+          "line_start": 67,
+          "line_end": 68,
+          "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_real_back, @usps_stkcode.stock_real_back",
           "reasons": [
-            "vector_similarity=0.534",
+            "fts_hit",
+            "token_overlap=1/1",
+            "focus_match_in_hit=证券代码获取",
+            "multi_source_match=2",
             "intent_call_chain",
-            "call_chain_two_hop=AF_SESBIDPUB_ADV_TAKE_CHECK,LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "intent_call_chain_focus",
+            "call_chain_two_hop=LF_INNERSESOQUERY_QRYACCT_ENTRUST",
             "call_chain_weight=1.50"
           ]
         },
         {
           "rank": 3,
           "hit_type": "chunk",
-          "match_source": "chunk_vector",
-          "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
-          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
-          "line_start": 250,
-          "line_end": 263,
-          "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_flow | actions: 正常返回, AF_系统参数公用_投顾产品标的信息获取, 遍历组件开始 | targets: AF_系统参数公用_投顾产品标的信息获取, comp_advisercode | vars: @transin_date, @transout_date, @date_clear, @comp_advisercode, @adproduct_id, @profit_status",
+          "match_source": "chunk_summary",
+          "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+          "file_path": "/tmp/uses_codes_eval_subset/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+          "line_start": 140,
+          "line_end": 144,
+          "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @report_milltime, @report_microtime, @error_no_t, @return_code, @stock_code_t, @usps_stkcode",
           "reasons": [
-            "vector_similarity=0.424",
+            "fts_hit",
+            "token_overlap=1/1",
+            "focus_match_in_hit=证券代码获取",
+            "multi_source_match=2",
             "intent_call_chain",
-            "call_chain_two_hop=AF_LF_3103219,LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "intent_call_chain_focus",
+            "call_chain_two_hop=AF_SESBIDPUB_ADV_TAKE_CHECK",
             "call_chain_weight=1.50"
           ]
         },
         {
           "rank": 4,
           "hit_type": "chunk",
-          "match_source": "chunk_vector",
-          "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
-          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
-          "line_start": 137,
-          "line_end": 146,
-          "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_flow | actions: AF_系统参数公用_投顾产品标的信息获取, 遍历组件开始, 遍历组件结束 | targets: AF_系统参数公用_投顾产品标的信息获取, comp_advisercode | vars: @comp_advisercode, @adproduct_id, @comp_advisercode.adproduct_id, @where_str | notes: 20250416 maty mod 增加adproduct_id字段赋值，与2.0一致 修改单：T202504185361",
+          "match_source": "chunk_summary",
+          "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+          "file_path": "/tmp/uses_codes_eval_subset/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+          "line_start": 296,
+          "line_end": 300,
+          "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @report_milltime, @report_microtime, @error_no_t, @return_code, @stock_code_t, @usps_stkcode",
           "reasons": [
-            "vector_similarity=0.422",
+            "fts_hit",
+            "token_overlap=1/1",
+            "focus_match_in_hit=证券代码获取",
+            "multi_source_match=2",
             "intent_call_chain",
-            "call_chain_two_hop=AF_LF_3103219,LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "intent_call_chain_focus",
+            "call_chain_two_hop=AF_SESBIDPUB_ADV_TAKE_CHECK",
             "call_chain_weight=1.50"
           ]
         },
         {
           "rank": 5,
-          "hit_type": "chunk",
-          "match_source": "chunk_vector",
+          "hit_type": "action",
+          "match_source": "action_fts",
           "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
           "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
-          "line_start": 278,
-          "line_end": 289,
-          "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_flow | actions: 正常返回, AF_系统参数公用_投顾产品信息获取 | targets: AF_系统参数公用_投顾产品信息获取 | vars: @follow_buy_rate, @period_buy_rate, @follow_sell_rate, @period_sell_rate, @min_fare, @adviser_flag | notes: 获取实际佣金",
+          "line_start": 51,
+          "line_end": 51,
+          "matched_text": "AF_系统参数公用_证券代码获取",
           "reasons": [
-            "vector_similarity=0.412",
-            "intent_call_chain",
-            "call_chain_two_hop=AF_LF_3103219,LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "fts_hit",
+            "token_overlap=1/1",
+            "focus_match_in_hit=证券代码获取",
+            "call_chain_two_hop=LF_INNERSESOQUERY_QRYACCT_ENTRUST",
             "call_chain_weight=1.50"
           ]
         }
       ],
       "retrieval": {
-        "candidate_count": 47,
+        "candidate_count": 59,
         "hit_count": 10,
         "vector_status": {
           "enabled": true,

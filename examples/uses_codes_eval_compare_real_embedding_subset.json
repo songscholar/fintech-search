@@ -13,21 +13,21 @@
   ],
   "summary_delta": {
     "pass_at_k": {
-      "1": 0.0,
+      "1": 0.2,
       "3": 0.0,
       "5": 0.0,
       "10": 0.0
     },
     "expectation_recall_at_k": {
-      "1": 0.0,
-      "3": -0.1,
-      "5": -0.1,
+      "1": 0.2,
+      "3": 0.0,
+      "5": 0.0,
       "10": 0.0
     },
     "mean_first_relevant_rank": {
       "before": 1.4,
-      "after": 1.4,
-      "delta": 0.0
+      "after": 1.0,
+      "delta": -0.4
     },
     "matched_cases": {
       "before": 5,
@@ -36,9 +36,9 @@
     }
   },
   "case_change_counts": {
-    "improved": 0,
+    "improved": 1,
     "regressed": 0,
-    "unchanged": 5,
+    "unchanged": 4,
     "added": 0,
     "removed": 0
   },
@@ -211,7 +211,7 @@
     {
       "id": "stock-code-get-callers",
       "question": "哪些流程调用证券代码获取",
-      "change": "unchanged",
+      "change": "improved",
       "before": {
         "first_relevant_rank": 3,
         "matched_count": 2,
@@ -238,28 +238,28 @@
         }
       },
       "after": {
-        "first_relevant_rank": 3,
+        "first_relevant_rank": 1,
         "matched_count": 2,
         "expected_count": 2,
         "pass_at_k": {
-          "1": false,
+          "1": true,
           "3": true,
           "5": true,
           "10": true
         },
         "recall_at_k": {
-          "1": 0.0,
-          "3": 0.5,
-          "5": 0.5,
+          "1": 1.0,
+          "3": 1.0,
+          "5": 1.0,
           "10": 1.0
         },
         "top_hit": {
           "rank": 1,
           "hit_type": "chunk",
-          "match_source": "chunk_vector",
-          "procedure_name": "AF_LF_3103219",
-          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
-          "matched_text": "AF_LF_3103219 | call_flow | actions: AF_系统参数公用_证券代码详细参数获取, 处理成功 | targets: AF_系统参数公用_证券代码详细参数获取 | vars: @frozen_code, @exchange_type_t, @stock_type, @store_unit, @asset_flag, @asset_price | notes: 201308012 刘晓春 mod  增加国债预计发行资金负修正计算 单号：20130808007"
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+          "file_path": "/tmp/uses_codes_eval_subset/uftatom/pub/sesbidpub/AF_SESBIDPUB_ADV_TAKE_CHECK.uftatomfunction",
+          "matched_text": "AF_SESBIDPUB_ADV_TAKE_CHECK | call_block | actions: AF_系统参数公用_证券代码获取 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_type_t, @usps_stkcode.stock_type"
         }
       }
     },
