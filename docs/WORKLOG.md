@@ -369,6 +369,30 @@
   - 相同报告自比较
   - 首个相关排名后移时标记为 regression
 
+### 阶段 23：OpenAI 兼容 Embedding 实测接入
+
+- 扩展 `OpenAICompatibleEmbedder` 的环境变量兼容层，支持：
+  - `OPENAI_EMBEDDING_KEY`
+  - `OPENAI_EMBEDDING_URL`
+  - `OPENAI_EMBEDDING_NAME`
+  - `OPENAI_EMBEDDING_MODEL`
+  - `OPENAI_EMBEDDING_BATCH_SIZE`
+  - `OPENAI_EMBEDDING_DIMENSIONS`
+  - `OPENAI_EMBEDDING_TIMEOUT`
+- `OPENAI_EMBEDDING_URL` 支持填到 `/v1`，程序会自动规范化为 `/v1/embeddings`
+- 外部 embedding 请求超时时间现在可以通过环境变量调整，避免大仓建库时被慢响应长期卡住
+- 对 `https://oapi.aivue.cn/v1` + `text-embedding-3-large` 做了 smoke test：
+  - batch size `1`、`4`、`16` 均返回 `3072` 维向量
+  - 完整建库建议先使用 `OPENAI_EMBEDDING_BATCH_SIZE=16`
+- 新增本地 hash 评测基准：
+  - `examples/uses_codes_eval_report_local_hash.json`
+- 新增不含密钥的真实 embedding 探测记录：
+  - `examples/uses_codes_embedding_smoke.json`
+- 补充测试，覆盖：
+  - OpenAI embedding 别名配置
+  - 别名维度、批量大小和超时参数
+  - 非法超时参数报错
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题

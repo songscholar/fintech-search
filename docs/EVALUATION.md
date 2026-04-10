@@ -119,6 +119,7 @@ PYTHONPATH=src python3 -m uses_indexer compare-eval \
 当前样例报告：
 
 - `examples/uses_codes_eval_report.json`
+- `examples/uses_codes_eval_report_local_hash.json`
 - `examples/uses_codes_eval_compare.json`
 
 当前样例结果：
@@ -128,6 +129,37 @@ PYTHONPATH=src python3 -m uses_indexer compare-eval \
 - `pass@5 = 1.0`
 - `pass@10 = 1.0`
 - `expectation_recall@10 = 0.9`
+
+## 真实 Embedding 对比流程
+
+如果要对比本地 hash embedding 和真实语义 embedding，建议固定同一份 `eval/uses_codes_cases.json`，分别构建两个 SQLite 索引库：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  --root /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  --db examples/uses_codes_index.db
+```
+
+```bash
+export OPENAI_EMBEDDING_KEY="..."
+export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
+export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
+export OPENAI_EMBEDDING_BATCH_SIZE=16
+export OPENAI_EMBEDDING_TIMEOUT=60
+
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  --root /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  --db examples/uses_codes_index_openai.db
+```
+
+然后分别运行 `eval-retrieval`，再用 `compare-eval` 生成对比报告。`examples/uses_codes_eval_report_local_hash.json` 是当前本地 hash 索引的基准报告，真实 embedding 的报告建议输出为 `examples/uses_codes_eval_report_real_embedding.json`。
+
+注意事项：
+
+- 密钥只通过环境变量注入，不要写进仓库文件。
+- `OPENAI_EMBEDDING_URL` 可以填到 `/v1`，程序会自动补成 `/v1/embeddings`。
+- 当前对 `https://oapi.aivue.cn/v1` 的 smoke test 中，batch size `1`、`4`、`16` 均可返回 `3072` 维向量；完整大仓建库建议先从 `OPENAI_EMBEDDING_BATCH_SIZE=16` 开始。
+- `examples/uses_codes_index_openai.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
 
 ## 后续扩展
 

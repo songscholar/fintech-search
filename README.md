@@ -105,7 +105,9 @@
 - `examples/uses_codes_dynamic_sql_example.json`
 - `examples/uses_codes_intent_rerank_example.json`
 - `examples/uses_codes_eval_report.json`
+- `examples/uses_codes_eval_report_local_hash.json`
 - `examples/uses_codes_eval_compare.json`
+- `examples/uses_codes_embedding_smoke.json`
 
 ### 检索评测摘要
 
@@ -114,6 +116,7 @@
 当前样例报告：
 
 - `examples/uses_codes_eval_report.json`
+- `examples/uses_codes_eval_report_local_hash.json`
 - `pass@1`: `1.0`
 - `pass@3`: `1.0`
 - `pass@5`: `1.0`
@@ -134,6 +137,32 @@
 - `USES_INDEXER_EMBEDDING_BASE_URL`
 - `USES_INDEXER_EMBEDDING_BATCH_SIZE`
 - `USES_INDEXER_EMBEDDING_DIMENSIONS`
+- `USES_INDEXER_EMBEDDING_TIMEOUT`
+
+也兼容当前常见的 OpenAI embedding 专用变量名：
+
+- `OPENAI_EMBEDDING_KEY`
+- `OPENAI_EMBEDDING_NAME` 或 `OPENAI_EMBEDDING_MODEL`
+- `OPENAI_EMBEDDING_URL`
+- `OPENAI_EMBEDDING_BATCH_SIZE`
+- `OPENAI_EMBEDDING_DIMENSIONS`
+- `OPENAI_EMBEDDING_TIMEOUT`
+
+示例：
+
+```bash
+export OPENAI_EMBEDDING_KEY="..."
+export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
+export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
+export OPENAI_EMBEDDING_BATCH_SIZE=16
+export OPENAI_EMBEDDING_TIMEOUT=60
+
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  --root /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_openai.db
+```
+
+`OPENAI_EMBEDDING_URL` 可以填到 `/v1`，索引器会自动补成 `/v1/embeddings`。
 
 兼容规则：
 

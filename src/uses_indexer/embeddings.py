@@ -73,6 +73,7 @@ class OpenAICompatibleEmbeddingConfig:
     base_url: str = "https://api.openai.com/v1/embeddings"
     batch_size: int = 32
     dimensions: int | None = None
+    timeout_seconds: float = 60.0
 
 
 class OpenAICompatibleEmbedder:
@@ -82,14 +83,39 @@ class OpenAICompatibleEmbedder:
 
     @classmethod
     def from_env(cls) -> "OpenAICompatibleEmbedder | None":
-        api_key = os.getenv("USES_INDEXER_EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
-        model = os.getenv("USES_INDEXER_EMBEDDING_MODEL")
+        api_key = (
+            os.getenv("USES_INDEXER_EMBEDDING_API_KEY")
+            or os.getenv("OPENAI_EMBEDDING_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
+        model = (
+            os.getenv("USES_INDEXER_EMBEDDING_MODEL")
+            or os.getenv("OPENAI_EMBEDDING_NAME")
+            or os.getenv("OPENAI_EMBEDDING_MODEL")
+        )
         if not api_key or not model:
             return None
 
-        base_url = os.getenv("USES_INDEXER_EMBEDDING_BASE_URL", "https://api.openai.com/v1/embeddings")
-        batch_size = _parse_positive_int_env("USES_INDEXER_EMBEDDING_BATCH_SIZE", default=32)
-        dimensions = _parse_positive_int_env("USES_INDEXER_EMBEDDING_DIMENSIONS", default=None)
+        base_url = _normalize_embedding_base_url(
+            os.getenv("USES_INDEXER_EMBEDDING_BASE_URL")
+            or os.getenv("OPENAI_EMBEDDING_URL")
+            or "https://api.openai.com/v1/embeddings"
+        )
+        batch_size = _parse_positive_int_env(
+            "USES_INDEXER_EMBEDDING_BATCH_SIZE",
+            default=32,
+            aliases=("OPENAI_EMBEDDING_BATCH_SIZE",),
+        )
+        dimensions = _parse_positive_int_env(
+            "USES_INDEXER_EMBEDDING_DIMENSIONS",
+            default=None,
+            aliases=("OPENAI_EMBEDDING_DIMENSIONS",),
+        )
+        timeout_seconds = _parse_positive_float_env(
+            "USES_INDEXER_EMBEDDING_TIMEOUT",
+            default=60.0,
+            aliases=("OPENAI_EMBEDDING_TIMEOUT",),
+        )
 
         return cls(
             OpenAICompatibleEmbeddingConfig(
@@ -98,6 +124,7 @@ class OpenAICompatibleEmbedder:
                 base_url=base_url,
                 batch_size=batch_size,
                 dimensions=dimensions,
+                timeout_seconds=timeout_seconds,
             )
         )
 
@@ -139,7 +166,7 @@ class OpenAICompatibleEmbedder:
         )
 
         try:
-            with request.urlopen(http_request, timeout=60) as response:
+            with request.urlopen(http_request, timeout=self.config.timeout_seconds) as response:
                 raw = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -221,16 +248,46 @@ def _latin_features(token: str) -> list[tuple[str, float]]:
     return features
 
 
-def _parse_positive_int_env(name: str, default: int | None) -> int | None:
-    raw = os.getenv(name)
-    if raw is None or raw == "":
+def _parse_positive_int_env(name: str, default: int | None, aliases: tuple[str, ...] = ()) -> int | None:
+    selected_name, raw = _get_env_with_name(name, *aliases)
+    if raw is None:
         return default
 
     try:
         value = int(raw)
     except ValueError as exc:
-        raise EmbeddingConfigError(f"{name} must be an integer, got {raw!r}") from exc
+        raise EmbeddingConfigError(f"{selected_name} must be an integer, got {raw!r}") from exc
 
     if value <= 0:
-        raise EmbeddingConfigError(f"{name} must be greater than 0, got {value}")
+        raise EmbeddingConfigError(f"{selected_name} must be greater than 0, got {value}")
     return value
+
+
+def _parse_positive_float_env(name: str, default: float, aliases: tuple[str, ...] = ()) -> float:
+    selected_name, raw = _get_env_with_name(name, *aliases)
+    if raw is None:
+        return default
+
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise EmbeddingConfigError(f"{selected_name} must be a number, got {raw!r}") from exc
+
+    if value <= 0:
+        raise EmbeddingConfigError(f"{selected_name} must be greater than 0, got {value}")
+    return value
+
+
+def _get_env_with_name(*names: str) -> tuple[str | None, str | None]:
+    for name in names:
+        raw = os.getenv(name)
+        if raw is not None and raw != "":
+            return name, raw
+    return None, None
+
+
+def _normalize_embedding_base_url(raw_url: str) -> str:
+    url = raw_url.strip().rstrip("/")
+    if url.endswith("/embeddings"):
+        return url
+    return f"{url}/embeddings"
