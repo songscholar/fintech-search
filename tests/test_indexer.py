@@ -176,6 +176,26 @@ def test_query_index_recovers_dynamic_sql_tables(tmp_path: Path) -> None:
     assert any("uses_dynamic_table" in str(hit["matched_text"]) or "uses_dynamic_table" in " ".join(hit["reasons"]) for hit in result["hits"])
 
 
+def test_query_index_applies_intent_aware_rerank(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    variable_result = indexer.query_index(db_path, "@deep_flag 在哪里赋值", limit=5)
+    assert variable_result["hits"][0]["match_source"] == "assignment"
+    assert "intent_assignment_statement" in variable_result["hits"][0]["reasons"]
+
+    table_result = indexer.query_index(db_path, "uses_deep_table 在哪里更新", limit=5)
+    assert table_result["hits"][0]["hit_type"] == "block"
+    assert "intent_sql_block" in table_result["hits"][0]["reasons"]
+
+    call_result = indexer.query_index(db_path, "AF_DEEP 被谁调用", limit=5)
+    assert call_result["hits"][0]["procedure_name"] == "AF_SAMPLE"
+    assert "intent_call_chain" in call_result["hits"][0]["reasons"]
+
+    failure_result = indexer.query_index(db_path, "查询失败在哪里处理", limit=5)
+    assert failure_result["hits"][0]["hit_type"] == "block"
+    assert "intent_failure_block" in failure_result["hits"][0]["reasons"]
+
+
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
     _, db_path = _build_sample_index(tmp_path)
     indexer = SQLiteIndexer(embedder=MismatchEmbedder())

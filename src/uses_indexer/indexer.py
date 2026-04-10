@@ -328,6 +328,19 @@ SQL_SKIP_TABLES = {"dual"}
 DOUBLE_QUOTED_STRING_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 CALL_EXPR_RE = re.compile(r"(?P<func>hs_snprintf|snprintf|sprintf|hs_strcpy|strcpy)\s*\((?P<args>.*)\)\s*;?\s*$", re.DOTALL)
 TRACKED_STRING_VAR_TOKENS = ("sql", "table", "where", "column", "group", "order", "join")
+QUERY_PROCEDURE_RE = re.compile(r"\b(?:AF|LF|LS|RS|AS)_[A-Za-z0-9_]+\b")
+QUERY_VARIABLE_RE = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?")
+TABLE_TOKEN_PREFIXES = ("uses_", "reload_", "upbs_", "usps_", "uact_", "stb_", "ufx_", "udp_")
+TABLE_INTENT_KEYWORDS = ("表", "sql", "数据库", "查询", "读取", "select", "from", "join", "update", "delete", "insert", "merge")
+WRITE_INTENT_KEYWORDS = ("更新", "修改", "删除", "清空", "写入", "update", "delete", "insert", "merge")
+READ_INTENT_KEYWORDS = ("查询", "读取", "获取", "select", "from", "join")
+VARIABLE_INTENT_KEYWORDS = ("变量", "赋值", "写入", "读取", "参数", "字段")
+CALL_CHAIN_INTENT_KEYWORDS = ("调用链", "被谁调用", "谁调用", "调用", "链路", "上游", "下游")
+FAILURE_INTENT_KEYWORDS = ("失败", "报错", "异常", "exception", "when_others", "goto", "svr_end", "退出", "错误")
+PROCEDURE_INTENT_KEYWORDS = ("过程", "函数", "服务", "接口", "原子", "方法")
+SQL_WRITE_HINTS = (" update ", " delete ", " insert ", " merge ", "writes_table", "清空记录池", "修改记录", "插入记录")
+SQL_READ_HINTS = (" select ", " from ", " join ", "reads_table", "获取记录", "获取字段")
+FAILURE_MATCH_HINTS = ("失败", "报错", "异常", "exception", "when_others", "svr_end", "goto", "处理失败", "业务报错返回")
 
 
 class SQLiteIndexer:
@@ -1332,6 +1345,7 @@ class SQLiteIndexer:
         candidate_limit: int,
     ) -> tuple[list[dict[str, object]], str | None, dict[str, object]]:
         fts_query = _build_fts_query(query)
+        query_analysis = _analyze_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
         vector_status = self._vector_status(conn)
 
@@ -1354,12 +1368,17 @@ class SQLiteIndexer:
 
         ranked = sorted(
             (
-                self._rerank_candidate(candidate, query=query)
+                self._rerank_candidate(candidate, query=query, query_analysis=query_analysis)
                 for candidate in candidates.values()
             ),
             key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"])),
         )
-        ranked = self._apply_call_chain_rerank(conn, ranked, seed_limit=min(candidate_limit, 12))
+        ranked = self._apply_call_chain_rerank(
+            conn,
+            ranked,
+            seed_limit=min(candidate_limit, 12),
+            query_analysis=query_analysis,
+        )
         return ranked, fts_query, vector_status
 
     def _run_vector_queries(
@@ -1952,6 +1971,7 @@ class SQLiteIndexer:
         candidate: dict[str, object],
         *,
         query: str,
+        query_analysis: dict[str, object],
     ) -> dict[str, object]:
         normalized_query = query.strip().lower()
         query_tokens = _tokenize_query(query)
@@ -2003,6 +2023,16 @@ class SQLiteIndexer:
             score += min(len(matched_via) * 1.5, 4.5)
             reasons.append(f"multi_source_match={len(matched_via)}")
 
+        intent_bonus, intent_reasons = _intent_bonus(
+            candidate=candidate,
+            query_analysis=query_analysis,
+            search_text=search_text,
+            matched_text=matched_text,
+            procedure_name=procedure_name,
+        )
+        score += intent_bonus
+        reasons.extend(intent_reasons)
+
         score += max(min(float(candidate.get("source_rank") or 0.0), 12.0), -12.0)
 
         candidate["score"] = round(score, 6)
@@ -2015,6 +2045,7 @@ class SQLiteIndexer:
         ranked: list[dict[str, object]],
         *,
         seed_limit: int,
+        query_analysis: dict[str, object],
     ) -> list[dict[str, object]]:
         if not ranked:
             return ranked
@@ -2029,6 +2060,7 @@ class SQLiteIndexer:
 
         neighbor_cache: dict[str, tuple[set[str], set[str]]] = {}
         reranked: list[dict[str, object]] = []
+        call_chain_multiplier = _call_chain_bonus_multiplier(query_analysis)
         for candidate in ranked:
             procedure_name = str(candidate.get("procedure_name") or "")
             if not procedure_name:
@@ -2043,13 +2075,15 @@ class SQLiteIndexer:
             one_overlap = sorted((one_hop - {procedure_name}) & seed_names)
             two_overlap = sorted((two_hop - one_hop - {procedure_name}) & seed_names)
             if one_overlap or two_overlap:
-                bonus = len(one_overlap) * 3.0 + len(two_overlap) * 1.5
+                bonus = (len(one_overlap) * 3.0 + len(two_overlap) * 1.5) * call_chain_multiplier
                 candidate["score"] = round(float(candidate["score"]) + bonus, 6)
                 reasons = list(candidate.get("reasons", []))
                 if one_overlap:
                     reasons.append(f"call_chain_one_hop={','.join(one_overlap[:3])}")
                 if two_overlap:
                     reasons.append(f"call_chain_two_hop={','.join(two_overlap[:3])}")
+                if call_chain_multiplier != 1.0:
+                    reasons.append(f"call_chain_weight={call_chain_multiplier:.2f}")
                 candidate["reasons"] = reasons
 
             reranked.append(candidate)
@@ -3584,6 +3618,196 @@ def _build_fts_query(query: str) -> str | None:
     if not tokens:
         return None
     return " OR ".join(f"{token}*" if len(token) > 1 else token for token in tokens)
+
+
+def _analyze_query(query: str) -> dict[str, object]:
+    lowered = query.lower()
+    tokens = _tokenize_query(query)
+    token_set = set(tokens)
+    procedure_terms = {match.group(0).lower() for match in QUERY_PROCEDURE_RE.finditer(query)}
+    variable_terms = {match.group(0).lower() for match in QUERY_VARIABLE_RE.finditer(query)}
+    underscored_tokens = {
+        token.lower()
+        for token in QUERY_TOKEN_RE.findall(query)
+        if "_" in token
+    }
+    table_terms = {
+        token
+        for token in underscored_tokens
+        if token.startswith(TABLE_TOKEN_PREFIXES) and token not in procedure_terms
+    }
+
+    wants_variable = bool(variable_terms) or _contains_any(lowered, VARIABLE_INTENT_KEYWORDS)
+    if wants_variable:
+        variable_terms.update(
+            token
+            for token in underscored_tokens
+            if token not in procedure_terms and token not in table_terms
+        )
+
+    wants_table_sql = bool(table_terms) or _contains_any(lowered, TABLE_INTENT_KEYWORDS)
+    wants_table_write = _contains_any(lowered, WRITE_INTENT_KEYWORDS)
+    wants_table_read = _contains_any(lowered, READ_INTENT_KEYWORDS)
+    wants_call_chain = _contains_any(lowered, CALL_CHAIN_INTENT_KEYWORDS)
+    wants_callers = _contains_any(lowered, ("被谁调用", "谁调用", "上游", "入口"))
+    wants_failure_flow = _contains_any(lowered, FAILURE_INTENT_KEYWORDS)
+    wants_procedure = bool(procedure_terms) or _contains_any(lowered, PROCEDURE_INTENT_KEYWORDS)
+
+    intents = []
+    for name, enabled in (
+        ("table_sql", wants_table_sql),
+        ("table_write", wants_table_write),
+        ("table_read", wants_table_read),
+        ("variable", wants_variable),
+        ("call_chain", wants_call_chain),
+        ("failure_flow", wants_failure_flow),
+        ("procedure", wants_procedure),
+    ):
+        if enabled:
+            intents.append(name)
+
+    return {
+        "tokens": tokens,
+        "token_set": token_set,
+        "procedure_terms": sorted(procedure_terms),
+        "variable_terms": sorted(variable_terms),
+        "table_terms": sorted(table_terms),
+        "intents": intents,
+        "wants_table_sql": wants_table_sql,
+        "wants_table_write": wants_table_write,
+        "wants_table_read": wants_table_read,
+        "wants_variable": wants_variable,
+        "wants_call_chain": wants_call_chain,
+        "wants_callers": wants_callers,
+        "wants_failure_flow": wants_failure_flow,
+        "wants_procedure": wants_procedure,
+    }
+
+
+def _contains_any(value: str, keywords: tuple[str, ...]) -> bool:
+    return any(keyword in value for keyword in keywords)
+
+
+def _intent_bonus(
+    *,
+    candidate: dict[str, object],
+    query_analysis: dict[str, object],
+    search_text: str,
+    matched_text: str,
+    procedure_name: str,
+) -> tuple[float, list[str]]:
+    bonus = 0.0
+    reasons: list[str] = []
+    hit_type = str(candidate.get("hit_type") or "")
+    match_source = str(candidate.get("match_source") or "").lower()
+    combined = f"{search_text} {matched_text} {procedure_name}".lower()
+
+    for term in query_analysis["procedure_terms"]:
+        if str(term) and str(term) in combined:
+            bonus += 8.0 if hit_type == "procedure" else 5.0
+            reasons.append(f"procedure_focus={term}")
+            break
+
+    for term in query_analysis["table_terms"]:
+        if str(term) and str(term) in combined:
+            bonus += 9.0
+            reasons.append(f"table_focus={term}")
+            break
+
+    for term in query_analysis["variable_terms"]:
+        if str(term) and str(term) in combined:
+            bonus += 8.0
+            reasons.append(f"variable_focus={term}")
+            break
+
+    if query_analysis["wants_table_sql"]:
+        if hit_type == "edge" and match_source in {"reads_table", "writes_table", "reads_dynamic_table", "writes_dynamic_table"}:
+            bonus += 28.0
+            reasons.append("intent_table_edge")
+        elif hit_type == "block" and _looks_like_sql_evidence(combined):
+            bonus += 20.0
+            reasons.append("intent_sql_block")
+        elif hit_type == "action" and _looks_like_sql_evidence(combined):
+            bonus += 8.0
+            reasons.append("intent_sql_action")
+
+        if query_analysis["wants_table_write"] and _contains_any(combined, SQL_WRITE_HINTS):
+            bonus += 12.0
+            reasons.append("write_operation_match")
+        if query_analysis["wants_table_read"] and _contains_any(combined, SQL_READ_HINTS):
+            bonus += 7.0
+            reasons.append("read_operation_match")
+
+    if query_analysis["wants_variable"]:
+        if hit_type == "variable":
+            bonus += 24.0
+            reasons.append("intent_variable_hit")
+        elif hit_type == "statement" and match_source == "assignment":
+            bonus += 28.0
+            reasons.append("intent_assignment_statement")
+        elif hit_type == "chunk" and "assignment_block" in combined:
+            bonus += 12.0
+            reasons.append("intent_assignment_chunk")
+
+        if "=" in combined or "writes_variable" in combined or match_source == "write":
+            bonus += 8.0
+            reasons.append("variable_write_match")
+
+    if query_analysis["wants_failure_flow"]:
+        if hit_type == "block":
+            bonus += 16.0
+            reasons.append("intent_failure_block")
+        elif hit_type == "chunk" and _contains_any(combined, FAILURE_MATCH_HINTS):
+            bonus += 8.0
+            reasons.append("intent_failure_chunk")
+
+        if _contains_any(combined, FAILURE_MATCH_HINTS):
+            bonus += 8.0
+            reasons.append("failure_flow_match")
+
+    if query_analysis["wants_call_chain"]:
+        if hit_type == "procedure":
+            bonus += 4.0 if query_analysis["wants_callers"] else 8.0
+            reasons.append("intent_call_chain_procedure")
+        if hit_type in {"chunk", "action", "edge", "statement"} and (
+            "call_flow" in combined
+            or "calls_procedure" in combined
+            or any(str(term) in combined for term in query_analysis["procedure_terms"])
+        ):
+            bonus += 14.0 if query_analysis["wants_callers"] else 9.0
+            reasons.append("intent_call_chain")
+
+    if query_analysis["wants_procedure"] and not query_analysis["wants_call_chain"]:
+        if hit_type == "procedure":
+            bonus += 10.0
+            reasons.append("intent_procedure")
+        elif any(str(term) in combined for term in query_analysis["procedure_terms"]):
+            bonus += 5.0
+            reasons.append("intent_procedure_context")
+
+    return bonus, reasons
+
+
+def _looks_like_sql_evidence(value: str) -> bool:
+    return (
+        "sql" in value
+        or " select " in value
+        or " update " in value
+        or " delete " in value
+        or " insert " in value
+        or " merge " in value
+        or "通用sql执行" in value
+    )
+
+
+def _call_chain_bonus_multiplier(query_analysis: dict[str, object]) -> float:
+    if query_analysis["wants_call_chain"]:
+        return 1.5
+    if query_analysis["wants_variable"] or query_analysis["wants_failure_flow"]:
+        return 0.35
+    if query_analysis["wants_table_sql"]:
+        return 0.6
+    return 1.0
 
 
 def _tokenize_query(query: str) -> list[str]:

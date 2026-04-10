@@ -35,6 +35,7 @@
 - 提供 SQL 表访问抽取：从 `select/update/delete/insert/merge` 中恢复真实表名
 - 提供动态 SQL 恢复：支持从 `@sql_str = "..."`、`sprintf/hs_snprintf/hs_strcpy` 这类字符串构造中还原 SQL 文本
 - 提供两跳调用链扩展与重排
+- 提供意图感知重排：对表访问、变量赋值、调用链、失败路径等问题使用不同证据权重
 - 提供块级关系摘要，使证据能带上“在哪个事务/SQL/失败路径里”
 - 提供 Python 层重排能力
 - 提供面向问答的证据组装能力，可直接生成 `llm_context`
@@ -100,6 +101,7 @@
 - `examples/uses_codes_sql_table_example.json`
 - `examples/uses_codes_call_chain_example.json`
 - `examples/uses_codes_dynamic_sql_example.json`
+- `examples/uses_codes_intent_rerank_example.json`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -143,6 +145,7 @@ examples/
   uses_codes_sql_table_example.json
   uses_codes_call_chain_example.json
   uses_codes_dynamic_sql_example.json
+  uses_codes_intent_rerank_example.json
 plugins/
   uses-codebase-plugin/
     .codex-plugin/plugin.json
