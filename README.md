@@ -169,15 +169,27 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_openai.db
 ```
 
+如果外部 embedding 建库中途失败或被中断，可以复用同一个缓存和索引库续建缺失向量：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_openai.db \
+  --resume-vectors
+```
+
 `OPENAI_EMBEDDING_URL` 可以填到 `/v1`，索引器会自动补成 `/v1/embeddings`。
 
 兼容规则：
 
+- 建库会先写入 `files / procedures / statements / chunks`，再全局批量补齐缺失的 `chunk_vectors`
+- 每完成一个向量 batch 就会提交事务，降低长时间建库中断后的损失
 - 建库时会把 `provider / model / dimension` 写入 SQLite 元数据
 - 查询时会校验当前 embedding 配置是否和索引库一致
 - 如果不一致，会自动禁用向量召回，并在返回结果里输出 `vector_status`
 - 如果切换了 embedding 模型，应该重新执行一次 `build-index`
 - 如果配置了 `*_EMBEDDING_CACHE_DB`，外部 embedding 会先查本地 SQLite 缓存，未命中才请求接口；缓存文件建议放在 `examples/*.db` 或其他不纳入版本控制的位置
+- `--resume-vectors` 只补齐已有索引库中缺失的向量，会自动跳过已经存在的 `chunk_vectors`
 
 ## 目录结构
 
@@ -270,6 +282,15 @@ python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code/uses_codes \
   --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
   --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_summary.json
+```
+
+只补齐已有索引库中缺失的向量：
+
+```bash
+python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --resume-vectors
 ```
 
 查看数据库摘要：

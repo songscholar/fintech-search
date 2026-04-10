@@ -10,6 +10,8 @@ from pathlib import Path
 
 from .embeddings import (
     Embedder,
+    EmbeddingConfigError,
+    EmbeddingInfo,
     EmbeddingRequestError,
     create_embedder_from_env,
     dot_similarity,
@@ -353,10 +355,13 @@ class SQLiteIndexer:
         self.embedder = embedder or create_embedder_from_env()
         self._vector_cache: dict[tuple[str, int, int, str, str], list[dict[str, object]]] = {}
 
-    def build_index(self, source_root: str | Path, db_path: str | Path) -> dict[str, object]:
+    def build_index(self, source_root: str | Path, db_path: str | Path, *, resume_vectors: bool = False) -> dict[str, object]:
         root = Path(source_root)
         db_file = Path(db_path)
         db_file.parent.mkdir(parents=True, exist_ok=True)
+
+        if resume_vectors:
+            return self.resume_chunk_vectors(root, db_file)
 
         if db_file.exists():
             db_file.unlink()
@@ -382,41 +387,37 @@ class SQLiteIndexer:
         block_edge_counter: Counter[str] = Counter()
         initial_embedder_info = self.embedder.info
 
-        with conn:
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(len(files))))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "6"))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", initial_embedder_info.provider))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", initial_embedder_info.model))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(initial_embedder_info.dimension)))
+        try:
+            with conn:
+                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
+                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(len(files))))
+                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "6"))
+                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
+                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
+                self._store_embedding_metadata(conn, initial_embedder_info)
 
-            for path in files:
-                unit = self.parser.parse_path(path)
-                file_id, procedure_id = self._insert_unit(conn, unit)
+                for path in files:
+                    unit = self.parser.parse_path(path)
+                    file_id, procedure_id = self._insert_unit(conn, unit)
 
-                unit_kind_counter[unit.unit_kind] += 1
-                prefix_counter[unit.prefix] += 1
+                    unit_kind_counter[unit.unit_kind] += 1
+                    prefix_counter[unit.prefix] += 1
 
-                for statement in unit.statements:
-                    statement_counter[statement.kind] += 1
+                    for statement in unit.statements:
+                        statement_counter[statement.kind] += 1
 
-                local_edges, local_var_refs, local_actions, local_chunks, local_vectors, local_blocks, local_block_edges = self._insert_statements(conn, file_id, procedure_id, unit)
-                edge_counter.update(local_edges)
-                variable_ref_counter.update(local_var_refs)
-                action_counter.update(local_actions)
-                chunk_counter.update(local_chunks)
-                vector_counter.update(local_vectors)
-                block_counter.update(local_blocks)
-                block_edge_counter.update(local_block_edges)
+                    local_edges, local_var_refs, local_actions, local_chunks, local_vectors, local_blocks, local_block_edges = self._insert_statements(conn, file_id, procedure_id, unit)
+                    edge_counter.update(local_edges)
+                    variable_ref_counter.update(local_var_refs)
+                    action_counter.update(local_actions)
+                    chunk_counter.update(local_chunks)
+                    vector_counter.update(local_vectors)
+                    block_counter.update(local_blocks)
+                    block_edge_counter.update(local_block_edges)
 
-            final_embedder_info = self.embedder.info
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", final_embedder_info.provider))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", final_embedder_info.model))
-            conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(final_embedder_info.dimension)))
-
-        conn.close()
+            vector_stats = self._populate_missing_chunk_vectors(conn)
+        finally:
+            conn.close()
         self._vector_cache.clear()
 
         db_summary = self.summarize_db(db_file)
@@ -436,6 +437,38 @@ class SQLiteIndexer:
             "block_counts": db_summary["block_type_counts"],
             "block_edge_counts": db_summary["block_edge_type_counts"],
             "fts_counts": db_summary["fts_counts"],
+            "vector_stats": vector_stats,
+            "embedding": {
+                "provider": db_summary["embedding"]["provider"],
+                "model": db_summary["embedding"]["model"],
+                "dimension": int(db_summary["embedding"]["dimension"] or 0),
+            },
+        }
+
+    def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path) -> dict[str, object]:
+        root = Path(source_root)
+        db_file = Path(db_path)
+        if not db_file.exists():
+            raise FileNotFoundError(f"Cannot resume vectors because database does not exist: {db_file}")
+
+        conn = sqlite3.connect(db_file)
+        conn.execute("PRAGMA foreign_keys=ON")
+        try:
+            self._validate_resume_source(conn, root)
+            vector_stats = self._populate_missing_chunk_vectors(conn)
+        finally:
+            conn.close()
+        self._vector_cache.clear()
+
+        db_summary = self.summarize_db(db_file)
+        return {
+            "source_root": str(root),
+            "db_path": str(db_file),
+            "resume_vectors": True,
+            "file_count": int(db_summary["files"]),
+            "chunk_counts": db_summary["chunk_type_counts"],
+            "vector_counts": db_summary["vector_provider_counts"],
+            "vector_stats": vector_stats,
             "embedding": {
                 "provider": db_summary["embedding"]["provider"],
                 "model": db_summary["embedding"]["model"],
@@ -812,11 +845,7 @@ class SQLiteIndexer:
         if not semantic_chunks:
             return counter, vector_counter
 
-        embedding_inputs = [f"{chunk['summary_text']}\n{chunk['content']}" for chunk in semantic_chunks]
-        vectors = self.embedder.embed_texts(embedding_inputs)
-        embedder_info = self.embedder.info
-
-        for seq, (chunk, vector) in enumerate(zip(semantic_chunks, vectors, strict=True), start=1):
+        for seq, chunk in enumerate(semantic_chunks, start=1):
             cursor = conn.execute(
                 """
                 INSERT INTO chunks(
@@ -871,23 +900,116 @@ class SQLiteIndexer:
                     chunk["content"],
                 ),
             )
-            conn.execute(
-                """
-                INSERT INTO chunk_vectors(chunk_id, provider, model, dimension, vector_json)
-                VALUES(?, ?, ?, ?, ?)
-                """,
-                (
-                    chunk_id,
-                    embedder_info.provider,
-                    embedder_info.model,
-                    len(vector),
-                    _json(vector),
-                ),
-            )
             counter[str(chunk["chunk_type"])] += 1
-            vector_counter[embedder_info.provider] += 1
 
         return counter, vector_counter
+
+    def _populate_missing_chunk_vectors(self, conn: sqlite3.Connection) -> dict[str, object]:
+        self._validate_vector_space_for_population(conn)
+        batch_size = _embedder_batch_size(self.embedder)
+        missing_before = self._missing_chunk_vector_count(conn)
+        inserted = 0
+        batches = 0
+        provider_counts: Counter[str] = Counter()
+
+        while True:
+            rows = conn.execute(
+                """
+                SELECT c.id, c.summary_text, c.content
+                FROM chunks c
+                LEFT JOIN chunk_vectors cv ON cv.chunk_id = c.id
+                WHERE cv.chunk_id IS NULL
+                ORDER BY c.id
+                LIMIT ?
+                """,
+                (batch_size,),
+            ).fetchall()
+            if not rows:
+                break
+
+            embedding_inputs = [f"{row[1]}\n{row[2]}" for row in rows]
+            vectors = self.embedder.embed_texts(embedding_inputs)
+            embedder_info = self.embedder.info
+
+            with conn:
+                for row, vector in zip(rows, vectors, strict=True):
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO chunk_vectors(chunk_id, provider, model, dimension, vector_json)
+                        VALUES(?, ?, ?, ?, ?)
+                        """,
+                        (
+                            int(row[0]),
+                            embedder_info.provider,
+                            embedder_info.model,
+                            len(vector),
+                            _json(vector),
+                        ),
+                    )
+                    provider_counts[embedder_info.provider] += 1
+                self._store_embedding_metadata(conn, embedder_info)
+
+            inserted += len(rows)
+            batches += 1
+
+        final_info = self.embedder.info
+        with conn:
+            self._store_embedding_metadata(conn, final_info)
+
+        return {
+            "batch_size": batch_size,
+            "missing_before": missing_before,
+            "inserted": inserted,
+            "batches": batches,
+            "missing_after": self._missing_chunk_vector_count(conn),
+            "provider_counts": dict(provider_counts),
+        }
+
+    def _validate_resume_source(self, conn: sqlite3.Connection, root: Path) -> None:
+        source_root = self._metadata(conn, "source_root")
+        if source_root is None:
+            raise EmbeddingConfigError("Cannot resume vectors because source_root metadata is missing")
+        if not _paths_match(source_root, root):
+            raise EmbeddingConfigError(f"Cannot resume vectors for {root}; index source_root is {source_root}")
+
+    def _validate_vector_space_for_population(self, conn: sqlite3.Connection) -> None:
+        current_info = self.embedder.info
+        db_provider = self._metadata(conn, "embedding_provider")
+        db_model = self._metadata(conn, "embedding_model")
+        db_dimension = _maybe_int(self._metadata(conn, "embedding_dimension"))
+
+        if db_provider and current_info.provider != db_provider:
+            raise EmbeddingConfigError(
+                f"Embedding provider mismatch: index has {db_provider}, current config has {current_info.provider}"
+            )
+        if db_model and current_info.model != db_model:
+            raise EmbeddingConfigError(
+                f"Embedding model mismatch: index has {db_model}, current config has {current_info.model}"
+            )
+        if db_dimension and current_info.dimension and current_info.dimension != db_dimension:
+            raise EmbeddingConfigError(
+                f"Embedding dimension mismatch: index has {db_dimension}, current config has {current_info.dimension}"
+            )
+
+    def _store_embedding_metadata(self, conn: sqlite3.Connection, info: EmbeddingInfo) -> None:
+        dimension = info.dimension
+        if dimension == 0:
+            dimension = _maybe_int(self._metadata(conn, "embedding_dimension")) or 0
+        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", info.provider))
+        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", info.model))
+        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(dimension)))
+
+    def _missing_chunk_vector_count(self, conn: sqlite3.Connection) -> int:
+        return int(
+            conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM chunks c
+                LEFT JOIN chunk_vectors cv ON cv.chunk_id = c.id
+                WHERE cv.chunk_id IS NULL
+                """
+            ).fetchone()[0]
+        )
 
     def _insert_blocks(
         self,
@@ -3909,6 +4031,23 @@ def _maybe_int(value: object) -> int | None:
     if value is None:
         return None
     return int(value)
+
+
+def _embedder_batch_size(embedder: Embedder) -> int:
+    config = getattr(embedder, "config", None)
+    raw_batch_size = getattr(config, "batch_size", 512)
+    try:
+        batch_size = int(raw_batch_size)
+    except (TypeError, ValueError):
+        return 512
+    return max(batch_size, 1)
+
+
+def _paths_match(left: str | Path, right: str | Path) -> bool:
+    try:
+        return Path(left).expanduser().resolve() == Path(right).expanduser().resolve()
+    except OSError:
+        return str(left) == str(right)
 
 
 def _json(value: object) -> str:

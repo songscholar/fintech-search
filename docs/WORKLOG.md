@@ -441,10 +441,37 @@
   - SQLite cache 跨 embedder 实例复用
   - 命中缓存时不重复请求外部接口
 
+### 阶段 26：全局向量批处理与断点续建
+
+- 调整建库流程：
+  - 先解析并写入 `files / procedures / statements / chunks`
+  - 再统一扫描缺失 `chunk_vectors` 的 chunk
+  - 按全局 batch size 调用当前 embedder
+  - 每完成一个向量 batch 就写入 `chunk_vectors` 并提交事务
+- `_insert_chunks` 现在只负责写入 chunk 和 `chunks_fts`，不再逐文件请求 embedding
+- 新增 `resume_chunk_vectors`
+- `build-index` 新增参数：
+  - `--resume-vectors`
+- 续建模式会：
+  - 校验命令传入的 source root 是否和索引库 metadata 一致
+  - 校验当前 embedding provider / model / dimension 是否和索引库兼容
+  - 自动跳过已有 `chunk_vectors`
+  - 只为缺失向量的 chunk 发起 embedding 请求
+- 建库结果新增 `vector_stats`，记录：
+  - batch size
+  - 续建前缺失向量数
+  - 本轮插入向量数
+  - batch 数
+  - 续建后缺失向量数
+- 补充测试，覆盖：
+  - 全局批处理不再按文件逐个请求 embedding
+  - 向量 batch 失败前已完成的 batch 会落库
+  - `--resume-vectors` 只补齐缺失向量并跳过已有向量
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题
-- 增加外部 embedding 全局批处理和断点续建
+- 调优真实 embedding 与 FTS / 结构化召回的融合权重
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精细的 goto / label 路径恢复

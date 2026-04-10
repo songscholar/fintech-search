@@ -32,6 +32,11 @@ def main() -> int:
     build_index_parser.add_argument("path", help="Directory containing UFT files.")
     build_index_parser.add_argument("--db", required=True, help="SQLite database path.")
     build_index_parser.add_argument("--output", help="Optional JSON summary output path.")
+    build_index_parser.add_argument(
+        "--resume-vectors",
+        action="store_true",
+        help="Reuse an existing index and only populate missing chunk vectors.",
+    )
 
     db_summary_parser = subparsers.add_parser("db-summary", help="Show SQLite index summary.")
     db_summary_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -119,7 +124,7 @@ def main() -> int:
     elif args.command == "scan-dir":
         data = _scan_dir(parser_impl, Path(args.path), args.limit)
     elif args.command == "build-index":
-        data = indexer.build_index(args.path, args.db)
+        data = indexer.build_index(args.path, args.db, resume_vectors=args.resume_vectors)
     elif args.command == "query-index":
         data = indexer.query_index(args.db, args.query, limit=args.limit)
     elif args.command == "eval-retrieval":

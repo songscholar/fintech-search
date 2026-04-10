@@ -153,6 +153,15 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   --db examples/uses_codes_index_openai.db
 ```
 
+如果真实 embedding 建库中断，可以续建缺失向量：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code/uses_codes \
+  --db examples/uses_codes_index_openai.db \
+  --resume-vectors
+```
+
 然后分别运行 `eval-retrieval`，再用 `compare-eval` 生成对比报告。`examples/uses_codes_eval_report_local_hash.json` 是当前本地 hash 索引的基准报告，真实 embedding 的报告建议输出为 `examples/uses_codes_eval_report_real_embedding.json`。
 
 注意事项：
@@ -160,6 +169,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 密钥只通过环境变量注入，不要写进仓库文件。
 - `OPENAI_EMBEDDING_URL` 可以填到 `/v1`，程序会自动补成 `/v1/embeddings`。
 - `OPENAI_EMBEDDING_CACHE_DB` 是可选的本地 SQLite 缓存；开启后，相同模型、地址、维度和文本 hash 的 embedding 会复用缓存。
+- `--resume-vectors` 会复用已有索引库，只扫描缺失 `chunk_vectors` 的 chunk，并自动跳过已有向量。
 - 当前对 `https://oapi.aivue.cn/v1` 的 smoke test 中，batch size `1`、`4`、`16` 均可返回 `3072` 维向量；完整大仓建库建议先从 `OPENAI_EMBEDDING_BATCH_SIZE=16` 开始。
 - `examples/uses_codes_index_openai.db` 和 `examples/uses_codes_embedding_cache.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
 
@@ -186,9 +196,9 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 全量建库风险：
 
 - 全量索引当前有 `28748` 个语义块、`2553` 个含 chunk 的文件
-- 当前实现按文件内 chunk 分批，batch size `16` 估算约 `3620` 次请求
-- 代表性 16 条真实语义块请求耗时约 `13.45` 秒
-- 目前已经加入 embedding cache；在继续加入全局批处理或断点续建前，仍不建议把全量真实 embedding 建库当作常规短测试
+- 旧实现按文件内 chunk 分批，batch size `16` 曾估算约 `3620` 次请求
+- 当前实现已经改成全局批量补齐缺失向量，并支持 `--resume-vectors`
+- 代表性 16 条真实语义块请求耗时约 `13.45` 秒；在继续调优 batch size 和接口稳定性前，仍不建议把全量真实 embedding 建库当作普通短测试
 
 ## 后续扩展
 

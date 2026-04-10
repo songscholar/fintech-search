@@ -238,6 +238,8 @@ SQL 恢复这边也有一个仓库特性要处理：
 
 外部 embedding 缓存的 key 会绑定 `provider / model / base_url / dimensions / text_sha256`，所以切换模型、端点或维度时不会误用旧向量。缓存只保存文本 hash 和向量 JSON，不保存原始代码文本。
 
+建库流程现在分成两段：先解析并写入 `files / procedures / statements / chunks`，再全局扫描缺失 `chunk_vectors` 的 chunk 做批量 embedding。每个向量 batch 都会独立提交事务；如果中途失败，可以用 `build-index --resume-vectors` 复用已有结构索引，只补齐缺失向量。
+
 `ask-codebase` 则再向前走一步：
 
 - 调用 `assemble-evidence`

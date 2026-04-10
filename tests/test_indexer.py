@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from types import SimpleNamespace
 from pathlib import Path
 
 from uses_indexer.embeddings import EmbeddingInfo, EmbeddingRequestError
@@ -61,13 +62,17 @@ DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def _build_sample_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
+def _write_sample_sources(tmp_path: Path) -> Path:
     source_dir = tmp_path / "src"
     source_dir.mkdir()
     (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
     (source_dir / "AF_DEEP.uftatomfunction").write_text(DEEP_XML, encoding="utf-8")
+    return source_dir
 
+
+def _build_sample_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
+    source_dir = _write_sample_sources(tmp_path)
     db_path = tmp_path / "index.db"
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
@@ -90,6 +95,24 @@ class FailingEmbedder:
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         raise EmbeddingRequestError("boom")
+
+
+class RecordingBatchEmbedder:
+    def __init__(self, batch_size: int = 1000, fail_after_batches: int | None = None, dimension: int = 2) -> None:
+        self.config = SimpleNamespace(batch_size=batch_size)
+        self.fail_after_batches = fail_after_batches
+        self.dimension = dimension
+        self.calls: list[list[str]] = []
+
+    @property
+    def info(self) -> EmbeddingInfo:
+        return EmbeddingInfo(provider="recording", model="recording-v1", dimension=self.dimension)
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        if self.fail_after_batches is not None and len(self.calls) > self.fail_after_batches:
+            raise EmbeddingRequestError("planned failure")
+        return [[float(index + 1), float(len(text))] for index, text in enumerate(texts)]
 
 
 def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
@@ -116,6 +139,93 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     assert conn.execute("SELECT COUNT(*) FROM chunks_fts").fetchone()[0] >= 2
     assert conn.execute("SELECT COUNT(*) FROM blocks_fts").fetchone()[0] >= 3
     conn.close()
+
+
+def test_build_index_populates_vectors_in_global_batches(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "index.db"
+    embedder = RecordingBatchEmbedder(batch_size=1000)
+    indexer = SQLiteIndexer(embedder=embedder)
+
+    result = indexer.build_index(source_dir, db_path)
+
+    conn = sqlite3.connect(db_path)
+    chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    vector_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0]
+    conn.close()
+
+    assert chunk_count > 1
+    assert vector_count == chunk_count
+    assert len(embedder.calls) == 1
+    assert len(embedder.calls[0]) == chunk_count
+    assert result["vector_stats"]["batches"] == 1
+    assert result["vector_stats"]["missing_after"] == 0
+
+
+def test_build_index_commits_vector_batches_before_failure(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "index.db"
+    embedder = RecordingBatchEmbedder(batch_size=1, fail_after_batches=1)
+    indexer = SQLiteIndexer(embedder=embedder)
+
+    try:
+        indexer.build_index(source_dir, db_path)
+    except EmbeddingRequestError as exc:
+        assert "planned failure" in str(exc)
+    else:
+        raise AssertionError("Expected EmbeddingRequestError")
+
+    conn = sqlite3.connect(db_path)
+    chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    vector_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0]
+    conn.close()
+
+    assert chunk_count > 1
+    assert vector_count == 1
+
+
+def test_build_index_resume_vectors_skips_existing_vectors(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "index.db"
+    SQLiteIndexer(embedder=RecordingBatchEmbedder(batch_size=1000)).build_index(source_dir, db_path)
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("DELETE FROM chunk_vectors WHERE chunk_id = (SELECT MIN(chunk_id) FROM chunk_vectors)")
+    conn.commit()
+    chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    conn.close()
+
+    resume_embedder = RecordingBatchEmbedder(batch_size=1000)
+    result = SQLiteIndexer(embedder=resume_embedder).build_index(source_dir, db_path, resume_vectors=True)
+
+    conn = sqlite3.connect(db_path)
+    vector_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0]
+    conn.close()
+
+    assert vector_count == chunk_count
+    assert len(resume_embedder.calls) == 1
+    assert len(resume_embedder.calls[0]) == 1
+    assert result["resume_vectors"] is True
+    assert result["vector_stats"]["missing_before"] == 1
+    assert result["vector_stats"]["missing_after"] == 0
+
+
+def test_build_index_resume_vectors_preserves_known_db_dimension(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "index.db"
+    SQLiteIndexer(embedder=RecordingBatchEmbedder(batch_size=1000, dimension=2)).build_index(source_dir, db_path)
+
+    resume_embedder = RecordingBatchEmbedder(batch_size=1000, dimension=0)
+    result = SQLiteIndexer(embedder=resume_embedder).build_index(source_dir, db_path, resume_vectors=True)
+
+    conn = sqlite3.connect(db_path)
+    dimension = conn.execute("SELECT value FROM metadata WHERE key = 'embedding_dimension'").fetchone()[0]
+    conn.close()
+
+    assert resume_embedder.calls == []
+    assert result["vector_stats"]["missing_before"] == 0
+    assert result["embedding"]["dimension"] == 2
+    assert dimension == "2"
 
 
 def test_query_index_uses_fts_and_rerank(tmp_path: Path) -> None:
