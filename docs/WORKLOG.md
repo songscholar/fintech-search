@@ -311,8 +311,43 @@
   - 被调用意图
   - 失败处理意图
 
+### 阶段 21：检索评测闭环
+
+- 新增 `RetrievalEvaluator`
+- 新增 CLI：
+  - `eval-retrieval`
+- 新增评测用例文件：
+  - `eval/uses_codes_cases.json`
+- 新增评测报告样例：
+  - `examples/uses_codes_eval_report.json`
+- 当前评测用例覆盖：
+  - 动态 SQL 表写入
+  - 错误码报错路径
+  - 表读取
+  - 过程调用引用
+  - SQL 变量执行
+- 当前报告指标包括：
+  - `pass@k`
+  - `expectation_recall@k`
+  - `mean_first_relevant_rank`
+  - 每个期望项的命中详情
+  - 每个问题的 top hits
+- 当前 5 条 baseline case 的样例结果：
+  - `pass@1 = 1.0`
+  - `pass@3 = 1.0`
+  - `pass@5 = 1.0`
+  - `pass@10 = 1.0`
+  - `expectation_recall@10 = 0.9`
+- 新增文档：
+  - `docs/EVALUATION.md`
+- 补充测试，覆盖：
+  - 对象形式和数组形式的用例文件
+  - 多类 expected 匹配
+  - 汇总指标计算
+
 ### 后续计划
 
+- 扩充评测集到 30 到 50 条真实业务问题
 - 继续增强块级结构恢复
 - 增加更深的事务块 / SQL 块 / 异常块恢复
 - 增加更精细的 goto / label 路径恢复

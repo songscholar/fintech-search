@@ -1,0 +1,887 @@
+{
+  "db_path": "examples/uses_codes_index.db",
+  "cases_path": "eval/uses_codes_cases.json",
+  "case_count": 5,
+  "limit": 10,
+  "top_k": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "summary": {
+    "pass_at_k": {
+      "1": 1.0,
+      "3": 1.0,
+      "5": 1.0,
+      "10": 1.0
+    },
+    "expectation_recall_at_k": {
+      "1": 0.9,
+      "3": 0.9,
+      "5": 0.9,
+      "10": 0.9
+    },
+    "mean_first_relevant_rank": 1.0,
+    "matched_cases": 5
+  },
+  "cases": [
+    {
+      "id": "dynamic-sql-reload-fundacct-delete",
+      "question": "reload_fundacct 在哪里被删除",
+      "tags": [
+        "table_write",
+        "dynamic_sql"
+      ],
+      "expected_count": 3,
+      "matched_count": 3,
+      "first_relevant_rank": 1,
+      "pass_at_k": {
+        "1": true,
+        "3": true,
+        "5": true,
+        "10": true
+      },
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "expectations": [
+        {
+          "kind": "procedure",
+          "value": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+            "line_start": 19,
+            "line_end": 157,
+            "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+            "match_source": "block_summary"
+          }
+        },
+        {
+          "kind": "path",
+          "value": "AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+            "line_start": 19,
+            "line_end": 157,
+            "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+            "match_source": "block_summary"
+          }
+        },
+        {
+          "kind": "text",
+          "value": "reload_fundacct",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+            "line_start": 19,
+            "line_end": 157,
+            "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+            "match_source": "block_summary"
+          }
+        }
+      ],
+      "top_hits": [
+        {
+          "rank": 1,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 19,
+          "line_end": 157,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "table_focus=reload_fundacct",
+            "intent_sql_block",
+            "write_operation_match"
+          ]
+        },
+        {
+          "rank": 2,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 67,
+          "line_end": 70,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的事务块，包含 4 条语句 | SQL=@sql_str1 | actions=事务处理开始, 事务处理结束, 通用SQL执行 | targets=@sql_str1",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "table_focus=reload_fundacct",
+            "intent_sql_block"
+          ]
+        },
+        {
+          "rank": 3,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 2,
+          "line_end": 11,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE | action_block | actions: 获取请求分片号, 记录日志, 事务处理开始, 清空记录池 | targets: @partition_no, 2, reload_fundacct | vars: @partition_no | notes: 20250327 zhangxh 1.设置mdb日初状态，二次数据加载不会库；2.reload_fundacct上场前清理，方便二次上场失败后，再次二次上场  修改单：T202503273973, T202503204255",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "multi_source_match=2",
+            "table_focus=reload_fundacct",
+            "write_operation_match"
+          ]
+        },
+        {
+          "rank": 4,
+          "hit_type": "edge",
+          "match_source": "writes_table",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 10,
+          "line_end": 10,
+          "matched_text": "reload_fundacct",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "table_focus=reload_fundacct",
+            "intent_table_edge",
+            "write_operation_match"
+          ]
+        },
+        {
+          "rank": 5,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 9,
+          "line_end": 11,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的事务块，包含 3 条语句 | actions=事务处理开始, 事务处理结束, 清空记录池 | targets=reload_fundacct",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "table_focus=reload_fundacct",
+            "write_operation_match"
+          ]
+        }
+      ],
+      "retrieval": {
+        "candidate_count": 75,
+        "hit_count": 10,
+        "vector_status": {
+          "enabled": true,
+          "reason": "enabled",
+          "index_provider": "local-hash",
+          "index_model": "local-hash-256",
+          "index_dimension": 256,
+          "query_provider": "local-hash",
+          "query_model": "local-hash-256",
+          "query_dimension": 256
+        }
+      }
+    },
+    {
+      "id": "entrust-error-return",
+      "question": "ERR_SECU_QRY_ENTRUST_FAIL 在哪里报错",
+      "tags": [
+        "failure_flow",
+        "error_code"
+      ],
+      "expected_count": 3,
+      "matched_count": 3,
+      "first_relevant_rank": 1,
+      "pass_at_k": {
+        "1": true,
+        "3": true,
+        "5": true,
+        "10": true
+      },
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "expectations": [
+        {
+          "kind": "procedure",
+          "value": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+            "line_start": 226,
+            "line_end": 229,
+            "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | control_block | actions: 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL",
+            "match_source": "chunk_summary"
+          }
+        },
+        {
+          "kind": "path",
+          "value": "LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+            "line_start": 226,
+            "line_end": 229,
+            "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | control_block | actions: 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL",
+            "match_source": "chunk_summary"
+          }
+        },
+        {
+          "kind": "text",
+          "value": "ERR_SECU_QRY_ENTRUST_FAIL",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+            "line_start": 226,
+            "line_end": 229,
+            "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | control_block | actions: 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL",
+            "match_source": "chunk_summary"
+          }
+        }
+      ],
+      "top_hits": [
+        {
+          "rank": 1,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+          "line_start": 226,
+          "line_end": 229,
+          "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | control_block | actions: 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "multi_source_match=2",
+            "intent_failure_chunk",
+            "failure_flow_match",
+            "call_chain_two_hop=AF_SESPUB_BACKDEBT_SET3,LF_INNERSESX_CURRDATE_TRADECHECK",
+            "call_chain_weight=0.35"
+          ]
+        },
+        {
+          "rank": 2,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesoquery/LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction",
+          "line_start": 380,
+          "line_end": 383,
+          "matched_text": "LF_INNERSESOQUERY_QRYACCT_ENTRUST | action_block | actions: 业务报错返回, 手工打包结束 | targets: ERR_SECU_QRY_ENTRUST_FAIL",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "multi_source_match=2",
+            "intent_failure_chunk",
+            "failure_flow_match",
+            "call_chain_two_hop=AF_SESPUB_BACKDEBT_SET3,LF_INNERSESX_CURRDATE_TRADECHECK",
+            "call_chain_weight=0.35"
+          ]
+        },
+        {
+          "rank": 3,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_SESPUB_BACKDEBT_SET3",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_BACKDEBT_SET3.uftatomfunction",
+          "line_start": 98,
+          "line_end": 101,
+          "matched_text": "AF_SESPUB_BACKDEBT_SET3 | action_block | actions: EXCEPTION, WHEN_OTHERS, 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL | vars: @fund_account",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "multi_source_match=2",
+            "intent_failure_chunk",
+            "failure_flow_match",
+            "call_chain_two_hop=LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "call_chain_weight=0.35"
+          ]
+        },
+        {
+          "rank": 4,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "LF_INNERSESX_CURRDATE_TRADECHECK",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_CURRDATE_TRADECHECK.uftfunction",
+          "line_start": 69,
+          "line_end": 73,
+          "matched_text": "LF_INNERSESX_CURRDATE_TRADECHECK | control_block | actions: 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL | conditions: @rowcount > 0 | vars: @stock_account, @rowcount",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "multi_source_match=2",
+            "intent_failure_chunk",
+            "failure_flow_match",
+            "call_chain_two_hop=LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "call_chain_weight=0.35"
+          ]
+        },
+        {
+          "rank": 5,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "LF_INNERSESX_CURRDATE_TRADECHECK",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_CURRDATE_TRADECHECK.uftfunction",
+          "line_start": 31,
+          "line_end": 33,
+          "matched_text": "LF_INNERSESX_CURRDATE_TRADECHECK | action_block | actions: WHEN_OTHERS, 业务报错返回 | targets: ERR_SECU_QRY_ENTRUST_FAIL | vars: @exchange_type, @branch_no, @stock_account",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "multi_source_match=2",
+            "intent_failure_chunk",
+            "failure_flow_match",
+            "call_chain_two_hop=LF_INNERSESOQUERY_QRYACCT_ENTRUST",
+            "call_chain_weight=0.35"
+          ]
+        }
+      ],
+      "retrieval": {
+        "candidate_count": 346,
+        "hit_count": 10,
+        "vector_status": {
+          "enabled": true,
+          "reason": "enabled",
+          "index_provider": "local-hash",
+          "index_model": "local-hash-256",
+          "index_dimension": 256,
+          "query_provider": "local-hash",
+          "query_model": "local-hash-256",
+          "query_dimension": 256
+        }
+      }
+    },
+    {
+      "id": "uses-entrust-read",
+      "question": "uses_entrust 在哪里查询",
+      "tags": [
+        "table_read",
+        "sql"
+      ],
+      "expected_count": 3,
+      "matched_count": 3,
+      "first_relevant_rank": 1,
+      "pass_at_k": {
+        "1": true,
+        "3": true,
+        "5": true,
+        "10": true
+      },
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "expectations": [
+        {
+          "kind": "procedure",
+          "value": "AF_LF_3103219",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_LF_3103219",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+            "line_start": 61,
+            "line_end": 132,
+            "matched_text": "AF_LF_3103219 的 SQL 查询块 | SQL=select exchange_type,stock_code,current_amount,imp_flag from ( select a.exchange_type as exchange_type, a.stock_code... | actions=手工打包体, 查询SQL语句开始, 查询SQL语句结束 | targets=@exchange_type_t,@stock_code_t,@current_amount,@imp_flag_t, select exchange_type,stock_code,current_amount,imp_flag\n                  from (\n                     select a.exchange_type as exchange_type,\n                            a.stock_code as stock_code,\n                            (a.current_amount + a.correct_amount + a.real_buy_amount - a.real_sell_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_stock_real a\n                      where (trim(@exchange_type_tmp) = '' or a.exchange_type = @exchange_type_tmp)\n                        and a.stock_code not in ('131990', '131991', '888880')\n                        and a.money_type = @money_type\n                        and (trim(@stock_account_tmp) = '' or a.stock_account = @stock_account_tmp)\n                        and a.fund_account = @fund_account\n                  union all\n                     select b.exchange_type as exchange_type,\n                            b.stock_code as stock_code,\n                            nvl(sum(case b.entrust_bs\n                                         when '2' then b.business_amount\n                                         else -1*b.business_amount end)  ,0.00) as current_amount,\n                            '0' as imp_flag\n                       from secu_unfinished b\n                      where (trim(@exchange_type_tmp) = '' or b.exchange_type = @exchange_type_tmp)\n                        and init_date <> @sys_init_date\n                        and b.fund_account = @fund_account\n                        and (trim(@stock_account_tmp) = '' or b.stock_account = @stock_account_tmp)\n                        and b.unfinished_type = '0'\n                        and b.deli_status = '0'\n                   group by b.exchange_type, b.stock_code\n                  union all\n                     select c.exchange_type as exchange_type,\n                            c.stock_code as stock_code,\n                            nvl(sum(case c.entrust_bs when '2' then c.business_amount\n                                                      else 0 - c.business_amount end), 0.00) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust c\n                      where (trim(@exchange_type_tmp) = '' or c.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or c.stock_account = @stock_account_tmp)\n                        and c.fund_account = @fund_account\n                        and c.entrust_status in ('4', '5', '7', '8')\n                        and c.entrust_prop = '4'\n                        and c.entrust_type = '0'\n                   group by c.exchange_type, c.stock_code\n                  union all\n                     select d.exchange_type as exchange_type,\n                            d.stock_code as stock_code,\n                            (d.store_amount + d.pre_in_amount) as current_amount,\n                            '1' as imp_flag\n                       from impawn_stock d\n                      where (trim(@exchange_type_tmp) = '' or d.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or d.stock_account = @stock_account_tmp) \n                        and d.fund_account = @fund_account\n                  union all\n                     select e.exchange_type as exchange_type,\n                            e.stock_code as stock_code,\n                            sum(-1 * e.entrust_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust e\n                      where (trim(@exchange_type_tmp) = '' or e.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or e.stock_account = @stock_account_tmp)\n                        and e.fund_account = @fund_account\n                        and e.entrust_prop = 'f'\n                        and e.entrust_bs = '1'\n                        and e.entrust_type = '0'\n                        and e.entrust_status = '8'\n                   group by e.exchange_type, e.stock_code\n                       )",
+            "match_source": "block_summary"
+          }
+        },
+        {
+          "kind": "path",
+          "value": "AF_LF_3103219.uftatomfunction",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_LF_3103219",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+            "line_start": 61,
+            "line_end": 132,
+            "matched_text": "AF_LF_3103219 的 SQL 查询块 | SQL=select exchange_type,stock_code,current_amount,imp_flag from ( select a.exchange_type as exchange_type, a.stock_code... | actions=手工打包体, 查询SQL语句开始, 查询SQL语句结束 | targets=@exchange_type_t,@stock_code_t,@current_amount,@imp_flag_t, select exchange_type,stock_code,current_amount,imp_flag\n                  from (\n                     select a.exchange_type as exchange_type,\n                            a.stock_code as stock_code,\n                            (a.current_amount + a.correct_amount + a.real_buy_amount - a.real_sell_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_stock_real a\n                      where (trim(@exchange_type_tmp) = '' or a.exchange_type = @exchange_type_tmp)\n                        and a.stock_code not in ('131990', '131991', '888880')\n                        and a.money_type = @money_type\n                        and (trim(@stock_account_tmp) = '' or a.stock_account = @stock_account_tmp)\n                        and a.fund_account = @fund_account\n                  union all\n                     select b.exchange_type as exchange_type,\n                            b.stock_code as stock_code,\n                            nvl(sum(case b.entrust_bs\n                                         when '2' then b.business_amount\n                                         else -1*b.business_amount end)  ,0.00) as current_amount,\n                            '0' as imp_flag\n                       from secu_unfinished b\n                      where (trim(@exchange_type_tmp) = '' or b.exchange_type = @exchange_type_tmp)\n                        and init_date <> @sys_init_date\n                        and b.fund_account = @fund_account\n                        and (trim(@stock_account_tmp) = '' or b.stock_account = @stock_account_tmp)\n                        and b.unfinished_type = '0'\n                        and b.deli_status = '0'\n                   group by b.exchange_type, b.stock_code\n                  union all\n                     select c.exchange_type as exchange_type,\n                            c.stock_code as stock_code,\n                            nvl(sum(case c.entrust_bs when '2' then c.business_amount\n                                                      else 0 - c.business_amount end), 0.00) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust c\n                      where (trim(@exchange_type_tmp) = '' or c.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or c.stock_account = @stock_account_tmp)\n                        and c.fund_account = @fund_account\n                        and c.entrust_status in ('4', '5', '7', '8')\n                        and c.entrust_prop = '4'\n                        and c.entrust_type = '0'\n                   group by c.exchange_type, c.stock_code\n                  union all\n                     select d.exchange_type as exchange_type,\n                            d.stock_code as stock_code,\n                            (d.store_amount + d.pre_in_amount) as current_amount,\n                            '1' as imp_flag\n                       from impawn_stock d\n                      where (trim(@exchange_type_tmp) = '' or d.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or d.stock_account = @stock_account_tmp) \n                        and d.fund_account = @fund_account\n                  union all\n                     select e.exchange_type as exchange_type,\n                            e.stock_code as stock_code,\n                            sum(-1 * e.entrust_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust e\n                      where (trim(@exchange_type_tmp) = '' or e.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or e.stock_account = @stock_account_tmp)\n                        and e.fund_account = @fund_account\n                        and e.entrust_prop = 'f'\n                        and e.entrust_bs = '1'\n                        and e.entrust_type = '0'\n                        and e.entrust_status = '8'\n                   group by e.exchange_type, e.stock_code\n                       )",
+            "match_source": "block_summary"
+          }
+        },
+        {
+          "kind": "text",
+          "value": "uses_entrust",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_LF_3103219",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+            "line_start": 61,
+            "line_end": 132,
+            "matched_text": "AF_LF_3103219 的 SQL 查询块 | SQL=select exchange_type,stock_code,current_amount,imp_flag from ( select a.exchange_type as exchange_type, a.stock_code... | actions=手工打包体, 查询SQL语句开始, 查询SQL语句结束 | targets=@exchange_type_t,@stock_code_t,@current_amount,@imp_flag_t, select exchange_type,stock_code,current_amount,imp_flag\n                  from (\n                     select a.exchange_type as exchange_type,\n                            a.stock_code as stock_code,\n                            (a.current_amount + a.correct_amount + a.real_buy_amount - a.real_sell_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_stock_real a\n                      where (trim(@exchange_type_tmp) = '' or a.exchange_type = @exchange_type_tmp)\n                        and a.stock_code not in ('131990', '131991', '888880')\n                        and a.money_type = @money_type\n                        and (trim(@stock_account_tmp) = '' or a.stock_account = @stock_account_tmp)\n                        and a.fund_account = @fund_account\n                  union all\n                     select b.exchange_type as exchange_type,\n                            b.stock_code as stock_code,\n                            nvl(sum(case b.entrust_bs\n                                         when '2' then b.business_amount\n                                         else -1*b.business_amount end)  ,0.00) as current_amount,\n                            '0' as imp_flag\n                       from secu_unfinished b\n                      where (trim(@exchange_type_tmp) = '' or b.exchange_type = @exchange_type_tmp)\n                        and init_date <> @sys_init_date\n                        and b.fund_account = @fund_account\n                        and (trim(@stock_account_tmp) = '' or b.stock_account = @stock_account_tmp)\n                        and b.unfinished_type = '0'\n                        and b.deli_status = '0'\n                   group by b.exchange_type, b.stock_code\n                  union all\n                     select c.exchange_type as exchange_type,\n                            c.stock_code as stock_code,\n                            nvl(sum(case c.entrust_bs when '2' then c.business_amount\n                                                      else 0 - c.business_amount end), 0.00) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust c\n                      where (trim(@exchange_type_tmp) = '' or c.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or c.stock_account = @stock_account_tmp)\n                        and c.fund_account = @fund_account\n                        and c.entrust_status in ('4', '5', '7', '8')\n                        and c.entrust_prop = '4'\n                        and c.entrust_type = '0'\n                   group by c.exchange_type, c.stock_code\n                  union all\n                     select d.exchange_type as exchange_type,\n                            d.stock_code as stock_code,\n                            (d.store_amount + d.pre_in_amount) as current_amount,\n                            '1' as imp_flag\n                       from impawn_stock d\n                      where (trim(@exchange_type_tmp) = '' or d.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or d.stock_account = @stock_account_tmp) \n                        and d.fund_account = @fund_account\n                  union all\n                     select e.exchange_type as exchange_type,\n                            e.stock_code as stock_code,\n                            sum(-1 * e.entrust_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust e\n                      where (trim(@exchange_type_tmp) = '' or e.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or e.stock_account = @stock_account_tmp)\n                        and e.fund_account = @fund_account\n                        and e.entrust_prop = 'f'\n                        and e.entrust_bs = '1'\n                        and e.entrust_type = '0'\n                        and e.entrust_status = '8'\n                   group by e.exchange_type, e.stock_code\n                       )",
+            "match_source": "block_summary"
+          }
+        }
+      ],
+      "top_hits": [
+        {
+          "rank": 1,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_LF_3103219",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+          "line_start": 61,
+          "line_end": 132,
+          "matched_text": "AF_LF_3103219 的 SQL 查询块 | SQL=select exchange_type,stock_code,current_amount,imp_flag from ( select a.exchange_type as exchange_type, a.stock_code... | actions=手工打包体, 查询SQL语句开始, 查询SQL语句结束 | targets=@exchange_type_t,@stock_code_t,@current_amount,@imp_flag_t, select exchange_type,stock_code,current_amount,imp_flag\n                  from (\n                     select a.exchange_type as exchange_type,\n                            a.stock_code as stock_code,\n                            (a.current_amount + a.correct_amount + a.real_buy_amount - a.real_sell_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_stock_real a\n                      where (trim(@exchange_type_tmp) = '' or a.exchange_type = @exchange_type_tmp)\n                        and a.stock_code not in ('131990', '131991', '888880')\n                        and a.money_type = @money_type\n                        and (trim(@stock_account_tmp) = '' or a.stock_account = @stock_account_tmp)\n                        and a.fund_account = @fund_account\n                  union all\n                     select b.exchange_type as exchange_type,\n                            b.stock_code as stock_code,\n                            nvl(sum(case b.entrust_bs\n                                         when '2' then b.business_amount\n                                         else -1*b.business_amount end)  ,0.00) as current_amount,\n                            '0' as imp_flag\n                       from secu_unfinished b\n                      where (trim(@exchange_type_tmp) = '' or b.exchange_type = @exchange_type_tmp)\n                        and init_date <> @sys_init_date\n                        and b.fund_account = @fund_account\n                        and (trim(@stock_account_tmp) = '' or b.stock_account = @stock_account_tmp)\n                        and b.unfinished_type = '0'\n                        and b.deli_status = '0'\n                   group by b.exchange_type, b.stock_code\n                  union all\n                     select c.exchange_type as exchange_type,\n                            c.stock_code as stock_code,\n                            nvl(sum(case c.entrust_bs when '2' then c.business_amount\n                                                      else 0 - c.business_amount end), 0.00) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust c\n                      where (trim(@exchange_type_tmp) = '' or c.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or c.stock_account = @stock_account_tmp)\n                        and c.fund_account = @fund_account\n                        and c.entrust_status in ('4', '5', '7', '8')\n                        and c.entrust_prop = '4'\n                        and c.entrust_type = '0'\n                   group by c.exchange_type, c.stock_code\n                  union all\n                     select d.exchange_type as exchange_type,\n                            d.stock_code as stock_code,\n                            (d.store_amount + d.pre_in_amount) as current_amount,\n                            '1' as imp_flag\n                       from impawn_stock d\n                      where (trim(@exchange_type_tmp) = '' or d.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or d.stock_account = @stock_account_tmp) \n                        and d.fund_account = @fund_account\n                  union all\n                     select e.exchange_type as exchange_type,\n                            e.stock_code as stock_code,\n                            sum(-1 * e.entrust_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust e\n                      where (trim(@exchange_type_tmp) = '' or e.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or e.stock_account = @stock_account_tmp)\n                        and e.fund_account = @fund_account\n                        and e.entrust_prop = 'f'\n                        and e.entrust_bs = '1'\n                        and e.entrust_type = '0'\n                        and e.entrust_status = '8'\n                   group by e.exchange_type, e.stock_code\n                       )",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "table_focus=uses_entrust",
+            "intent_sql_block",
+            "read_operation_match",
+            "call_chain_two_hop=AF_ASSETSEPUB_ACODEACCOUNT_GET3,AF_SECUPUB_FINEXE_MARKETVALUE_GET",
+            "call_chain_weight=0.60"
+          ]
+        },
+        {
+          "rank": 2,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_LF_3103219",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+          "line_start": 59,
+          "line_end": 134,
+          "matched_text": "AF_LF_3103219 | action_block | actions: 手工打包头, 查询SQL语句开始, 手工打包体, 查询SQL语句结束 | targets: exchange_type,stock_code,current_amount,imp_flag, select exchange_type,stock_code,current_amount,imp_flag\n                  from (\n                     select a.exchange_type as exchange_type,\n                            a.stock_code as stock_code,\n                            (a.current_amount + a.correct_amount + a.real_buy_amount - a.real_sell_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_stock_real a\n                      where (trim(@exchange_type_tmp) = '' or a.exchange_type = @exchange_type_tmp)\n                        and a.stock_code not in ('131990', '131991', '888880')\n                        and a.money_type = @money_type\n                        and (trim(@stock_account_tmp) = '' or a.stock_account = @stock_account_tmp)\n                        and a.fund_account = @fund_account\n                  union all\n                     select b.exchange_type as exchange_type,\n                            b.stock_code as stock_code,\n                            nvl(sum(case b.entrust_bs\n                                         when '2' then b.business_amount\n                                         else -1*b.business_amount end)  ,0.00) as current_amount,\n                            '0' as imp_flag\n                       from secu_unfinished b\n                      where (trim(@exchange_type_tmp) = '' or b.exchange_type = @exchange_type_tmp)\n                        and init_date <> @sys_init_date\n                        and b.fund_account = @fund_account\n                        and (trim(@stock_account_tmp) = '' or b.stock_account = @stock_account_tmp)\n                        and b.unfinished_type = '0'\n                        and b.deli_status = '0'\n                   group by b.exchange_type, b.stock_code\n                  union all\n                     select c.exchange_type as exchange_type,\n                            c.stock_code as stock_code,\n                            nvl(sum(case c.entrust_bs when '2' then c.business_amount\n                                                      else 0 - c.business_amount end), 0.00) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust c\n                      where (trim(@exchange_type_tmp) = '' or c.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or c.stock_account = @stock_account_tmp)\n                        and c.fund_account = @fund_account\n                        and c.entrust_status in ('4', '5', '7', '8')\n                        and c.entrust_prop = '4'\n                        and c.entrust_type = '0'\n                   group by c.exchange_type, c.stock_code\n                  union all\n                     select d.exchange_type as exchange_type,\n                            d.stock_code as stock_code,\n                            (d.store_amount + d.pre_in_amount) as current_amount,\n                            '1' as imp_flag\n                       from impawn_stock d\n                      where (trim(@exchange_type_tmp) = '' or d.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or d.stock_account = @stock_account_tmp) \n                        and d.fund_account = @fund_account\n                  union all\n                     select e.exchange_type as exchange_type,\n                            e.stock_code as stock_code,\n                            sum(-1 * e.entrust_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust e\n                      where (trim(@exchange_type_tmp) = '' or e.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or e.stock_account = @stock_account_tmp)\n                        and e.fund_account = @fund_account\n                        and e.entrust_prop = 'f'\n                        and e.entrust_bs = '1'\n                        and e.entrust_type = '0'\n                        and e.entrust_status = '8'\n                   group by e.exchange_type, e.stock_code\n                       ), @exchange_type_t,@stock_code_t,@current_amount,@imp_flag_t, @result_packer | vars: @result_packer, @exchange_type_tmp, @money_type, @stock_account_tmp, @fund_account, @sys_init_date | notes: 20240821 zhangyt mod 修复is null无用的缺陷",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "table_focus=uses_entrust",
+            "read_operation_match",
+            "call_chain_two_hop=AF_ASSETSEPUB_ACODEACCOUNT_GET3,AF_SECUPUB_FINEXE_MARKETVALUE_GET",
+            "call_chain_weight=0.60"
+          ]
+        },
+        {
+          "rank": 3,
+          "hit_type": "action",
+          "match_source": "action_fts",
+          "procedure_name": "AF_LF_3103219",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_LF_3103219.uftatomfunction",
+          "line_start": 61,
+          "line_end": 128,
+          "matched_text": "select exchange_type,stock_code,current_amount,imp_flag\n                  from (\n                     select a.exchange_type as exchange_type,\n                            a.stock_code as stock_code,\n                            (a.current_amount + a.correct_amount + a.real_buy_amount - a.real_sell_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_stock_real a\n                      where (trim(@exchange_type_tmp) = '' or a.exchange_type = @exchange_type_tmp)\n                        and a.stock_code not in ('131990', '131991', '888880')\n                        and a.money_type = @money_type\n                        and (trim(@stock_account_tmp) = '' or a.stock_account = @stock_account_tmp)\n                        and a.fund_account = @fund_account\n                  union all\n                     select b.exchange_type as exchange_type,\n                            b.stock_code as stock_code,\n                            nvl(sum(case b.entrust_bs\n                                         when '2' then b.business_amount\n                                         else -1*b.business_amount end)  ,0.00) as current_amount,\n                            '0' as imp_flag\n                       from secu_unfinished b\n                      where (trim(@exchange_type_tmp) = '' or b.exchange_type = @exchange_type_tmp)\n                        and init_date <> @sys_init_date\n                        and b.fund_account = @fund_account\n                        and (trim(@stock_account_tmp) = '' or b.stock_account = @stock_account_tmp)\n                        and b.unfinished_type = '0'\n                        and b.deli_status = '0'\n                   group by b.exchange_type, b.stock_code\n                  union all\n                     select c.exchange_type as exchange_type,\n                            c.stock_code as stock_code,\n                            nvl(sum(case c.entrust_bs when '2' then c.business_amount\n                                                      else 0 - c.business_amount end), 0.00) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust c\n                      where (trim(@exchange_type_tmp) = '' or c.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or c.stock_account = @stock_account_tmp)\n                        and c.fund_account = @fund_account\n                        and c.entrust_status in ('4', '5', '7', '8')\n                        and c.entrust_prop = '4'\n                        and c.entrust_type = '0'\n                   group by c.exchange_type, c.stock_code\n                  union all\n                     select d.exchange_type as exchange_type,\n                            d.stock_code as stock_code,\n                            (d.store_amount + d.pre_in_amount) as current_amount,\n                            '1' as imp_flag\n                       from impawn_stock d\n                      where (trim(@exchange_type_tmp) = '' or d.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or d.stock_account = @stock_account_tmp) \n                        and d.fund_account = @fund_account\n                  union all\n                     select e.exchange_type as exchange_type,\n                            e.stock_code as stock_code,\n                            sum(-1 * e.entrust_amount) as current_amount,\n                            '0' as imp_flag\n                       from uses_entrust e\n                      where (trim(@exchange_type_tmp) = '' or e.exchange_type = @exchange_type_tmp)\n                        and (trim(@stock_account_tmp) = '' or e.stock_account = @stock_account_tmp)\n                        and e.fund_account = @fund_account\n                        and e.entrust_prop = 'f'\n                        and e.entrust_bs = '1'\n                        and e.entrust_type = '0'\n                        and e.entrust_status = '8'\n                   group by e.exchange_type, e.stock_code\n                       )",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=2/2",
+            "table_focus=uses_entrust",
+            "intent_sql_action",
+            "read_operation_match",
+            "call_chain_two_hop=AF_ASSETSEPUB_ACODEACCOUNT_GET3,AF_SECUPUB_FINEXE_MARKETVALUE_GET",
+            "call_chain_weight=0.60"
+          ]
+        },
+        {
+          "rank": 4,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_SECUPUB_GET_BUYAMOUNTRISK3",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_GET_BUYAMOUNTRISK3.uftatomfunction",
+          "line_start": 52,
+          "line_end": 62,
+          "matched_text": "AF_SECUPUB_GET_BUYAMOUNTRISK3 的 SQL 执行语句 | SQL=select nvl(sum(entrust_amount),0) into @uncome_amount from uses_entrust where init_date = @init_date and report_micro... | actions=通用SQL执行 | targets=select nvl(sum(entrust_amount),0)\n                   into @uncome_amount\n                   from uses_entrust\n                   where init_date = @init_date\n                   and report_microtime <> 0\n                   and entrust_status <> '9'\n                   and entrust_type = CNST_FUTUENTRUSTTYPE_ENTRUST\n                   and entrust_bs = CNST_ENTRUSTBS_BUY\n                   and exchange_type = @exchange_type\n                   and stock_code = @stock_code\n                   and fund_account = @fund_account",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "table_focus=uses_entrust",
+            "intent_sql_block",
+            "read_operation_match",
+            "call_chain_two_hop=AF_ASSETSEPUB_ACODEACCOUNT_GET3,AF_SECUPUB_GET_BUYAMOUNT3",
+            "call_chain_weight=0.60"
+          ]
+        },
+        {
+          "rank": 5,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_SECUPUB_GET_BUYAMOUNTRISK3",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_GET_BUYAMOUNTRISK3.uftatomfunction",
+          "line_start": 12,
+          "line_end": 21,
+          "matched_text": "AF_SECUPUB_GET_BUYAMOUNTRISK3 的 SQL 执行语句 | SQL=select nvl(sum(entrust_amount - withdraw_amount),0) into @uncome_amount from uses_entrust where init_date = @init_dat... | actions=通用SQL执行 | targets=select nvl(sum(entrust_amount - withdraw_amount),0)\n                     into @uncome_amount\n                     from uses_entrust\n                     where init_date = @init_date\n                     and entrust_status not in ('6', '9')\n                     and entrust_type = CNST_FUTUENTRUSTTYPE_ENTRUST\n                     and entrust_bs = CNST_ENTRUSTBS_BUY\n                     and exchange_type = @exchange_type\n                     and stock_code = @stock_code\n                     and fund_account = @fund_account",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=1/2",
+            "table_focus=uses_entrust",
+            "intent_sql_block",
+            "read_operation_match",
+            "call_chain_two_hop=AF_ASSETSEPUB_ACODEACCOUNT_GET3,AF_SECUPUB_GET_BUYAMOUNT3",
+            "call_chain_weight=0.60"
+          ]
+        }
+      ],
+      "retrieval": {
+        "candidate_count": 394,
+        "hit_count": 10,
+        "vector_status": {
+          "enabled": true,
+          "reason": "enabled",
+          "index_provider": "local-hash",
+          "index_model": "local-hash-256",
+          "index_dimension": 256,
+          "query_provider": "local-hash",
+          "query_model": "local-hash-256",
+          "query_dimension": 256
+        }
+      }
+    },
+    {
+      "id": "stock-code-get-callers",
+      "question": "哪些流程调用证券代码获取",
+      "tags": [
+        "call_reference",
+        "procedure"
+      ],
+      "expected_count": 2,
+      "matched_count": 1,
+      "first_relevant_rank": 1,
+      "pass_at_k": {
+        "1": true,
+        "3": true,
+        "5": true,
+        "10": true
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5,
+        "10": 0.5
+      },
+      "expectations": [
+        {
+          "kind": "procedure",
+          "value": "AF_SESBIDPUB_ADV_TAKE_CHECK",
+          "matched": false,
+          "first_rank": null,
+          "matched_hit": null
+        },
+        {
+          "kind": "text",
+          "value": "AF_系统参数公用_证券代码获取",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "LF_INNERSESX_ASSUREFROZEN_CANCEL",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_ASSUREFROZEN_CANCEL.uftfunction",
+            "line_start": 17,
+            "line_end": 23,
+            "matched_text": "LF_INNERSESX_ASSUREFROZEN_CANCEL | call_flow | actions: AF_系统参数公用_证券代码获取, 处理失败 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_name, @stock_code, @stock_type, @sub_stock_type, @money_type",
+            "match_source": "chunk_vector"
+          }
+        }
+      ],
+      "top_hits": [
+        {
+          "rank": 1,
+          "hit_type": "chunk",
+          "match_source": "chunk_vector",
+          "procedure_name": "LF_INNERSESX_ASSUREFROZEN_CANCEL",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_ASSUREFROZEN_CANCEL.uftfunction",
+          "line_start": 17,
+          "line_end": 23,
+          "matched_text": "LF_INNERSESX_ASSUREFROZEN_CANCEL | call_flow | actions: AF_系统参数公用_证券代码获取, 处理失败 | targets: AF_系统参数公用_证券代码获取 | vars: @usps_stkcode, @stock_name, @stock_code, @stock_type, @sub_stock_type, @money_type",
+          "reasons": [
+            "vector_similarity=0.204",
+            "intent_call_chain",
+            "call_chain_one_hop=LF_INNERSESX_SECUASSURE_FROZEN_UNFROZEN_DOCANCEL,LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN",
+            "call_chain_two_hop=AF_SESBIDPUB_MARKETVALUE_GET,AF_SESBIDPUB_OPTSTOCK_UPDATE,AF_SESBIDPUB_STOCK_REAL_GET",
+            "call_chain_weight=1.50"
+          ]
+        },
+        {
+          "rank": 2,
+          "hit_type": "chunk",
+          "match_source": "chunk_vector",
+          "procedure_name": "LF_INNERSESX_SECUASSURE_FROZEN_UNFROZEN_DOCANCEL",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_SECUASSURE_FROZEN_UNFROZEN_DOCANCEL.uftfunction",
+          "line_start": 84,
+          "line_end": 87,
+          "matched_text": "LF_INNERSESX_SECUASSURE_FROZEN_UNFROZEN_DOCANCEL | call_flow | actions: AF_系统参数公用_证券代码获取, 记录为空 | targets: AF_系统参数公用_证券代码获取, usps_stkcode | vars: @usps_stkcode, @stock_type",
+          "reasons": [
+            "vector_similarity=0.235",
+            "intent_call_chain",
+            "call_chain_one_hop=LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN",
+            "call_chain_two_hop=AF_SESBIDPUB_MARKETVALUE_GET,AF_SESBIDPUB_OPTSTOCK_UPDATE,AF_SESBIDPUB_STOCK_REAL_GET",
+            "call_chain_weight=1.50"
+          ]
+        },
+        {
+          "rank": 3,
+          "hit_type": "chunk",
+          "match_source": "chunk_vector",
+          "procedure_name": "LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN.uftfunction",
+          "line_start": 38,
+          "line_end": 44,
+          "matched_text": "LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN | call_flow | actions: 正常返回, AF_系统参数公用_证券代码获取, 记录为空 | targets: AF_系统参数公用_证券代码获取, usps_stkcode | vars: @usps_stkcode, @stock_type",
+          "reasons": [
+            "vector_similarity=0.220",
+            "intent_call_chain",
+            "call_chain_one_hop=LF_INNERSESX_SECUASSURE_FROZEN_UNFROZEN_DOCANCEL",
+            "call_chain_two_hop=AF_SESBIDPUB_MARKETVALUE_GET,AF_SESBIDPUB_OPTSTOCK_UPDATE,AF_SESBIDPUB_STOCK_REAL_GET",
+            "call_chain_weight=1.50"
+          ]
+        },
+        {
+          "rank": 4,
+          "hit_type": "chunk",
+          "match_source": "chunk_vector",
+          "procedure_name": "LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN.uftfunction",
+          "line_start": 81,
+          "line_end": 87,
+          "matched_text": "LF_INNERSESX_VIPASSURE_FROZEN_UNFROZEN | call_flow | actions: 正常返回, AF_系统参数公用_证券代码获取, 记录为空 | targets: AF_系统参数公用_证券代码获取, usps_stkcode | vars: @usps_stkcode, @stock_type",
+          "reasons": [
+            "vector_similarity=0.220",
+            "intent_call_chain",
+            "call_chain_one_hop=LF_INNERSESX_SECUASSURE_FROZEN_UNFROZEN_DOCANCEL",
+            "call_chain_two_hop=AF_SESBIDPUB_MARKETVALUE_GET,AF_SESBIDPUB_OPTSTOCK_UPDATE,AF_SESBIDPUB_STOCK_REAL_GET",
+            "call_chain_weight=1.50"
+          ]
+        },
+        {
+          "rank": 5,
+          "hit_type": "chunk",
+          "match_source": "chunk_vector",
+          "procedure_name": "LF_INNERSESX_FUNDACCOUNTINFO_CHECK",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/inner/innersesx/LF_INNERSESX_FUNDACCOUNTINFO_CHECK.uftfunction",
+          "line_start": 62,
+          "line_end": 68,
+          "matched_text": "LF_INNERSESX_FUNDACCOUNTINFO_CHECK | call_flow | actions: 业务报错返回, AF_系统参数公用_证券代码获取, 获取字段 | targets: default, ERR_SECU_FUNDACCOUNT_ABNORMAL, AF_系统参数公用_证券代码获取, usps_stkcode | vars: @fund_account, @fundacct_status, @usps_stkcode, @stock_type",
+          "reasons": [
+            "vector_similarity=0.215",
+            "intent_call_chain",
+            "call_chain_two_hop=AF_SESBIDPUB_MARKETVALUE_GET,AF_SESBIDPUB_OPTSTOCK_UPDATE,AF_SESBIDPUB_STOCK_REAL_GET",
+            "call_chain_weight=1.50"
+          ]
+        }
+      ],
+      "retrieval": {
+        "candidate_count": 60,
+        "hit_count": 10,
+        "vector_status": {
+          "enabled": true,
+          "reason": "enabled",
+          "index_provider": "local-hash",
+          "index_model": "local-hash-256",
+          "index_dimension": 256,
+          "query_provider": "local-hash",
+          "query_model": "local-hash-256",
+          "query_dimension": 256
+        }
+      }
+    },
+    {
+      "id": "secondload-sql-str1-execute",
+      "question": "AF_DATASEINIT_SECONDLOADUSESTABLE 中 @sql_str1 在哪里执行",
+      "tags": [
+        "variable",
+        "sql_execute"
+      ],
+      "expected_count": 3,
+      "matched_count": 3,
+      "first_relevant_rank": 1,
+      "pass_at_k": {
+        "1": true,
+        "3": true,
+        "5": true,
+        "10": true
+      },
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "expectations": [
+        {
+          "kind": "procedure",
+          "value": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+            "line_start": 19,
+            "line_end": 157,
+            "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+            "match_source": "block_summary"
+          }
+        },
+        {
+          "kind": "path",
+          "value": "AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+            "line_start": 19,
+            "line_end": 157,
+            "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+            "match_source": "block_summary"
+          }
+        },
+        {
+          "kind": "text",
+          "value": "@sql_str1",
+          "matched": true,
+          "first_rank": 1,
+          "matched_hit": {
+            "rank": 1,
+            "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+            "line_start": 19,
+            "line_end": 157,
+            "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+            "match_source": "block_summary"
+          }
+        }
+      ],
+      "top_hits": [
+        {
+          "rank": 1,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 19,
+          "line_end": 157,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 遍历记录池开始 代码块 | SQL=@sql_str1 | actions=AF_数据准备公用_SQL转换, continue, else, else if | targets=@sql_str1, @table_name, @table_name, @sql_str, @load_mode",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=4/4",
+            "procedure_focus=af_dataseinit_secondloadusestable",
+            "variable_focus=@sql_str1",
+            "intent_sql_block",
+            "variable_write_match",
+            "intent_procedure_context"
+          ]
+        },
+        {
+          "rank": 2,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 67,
+          "line_end": 70,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的事务块，包含 4 条语句 | SQL=@sql_str1 | actions=事务处理开始, 事务处理结束, 通用SQL执行 | targets=@sql_str1",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=3/4",
+            "procedure_focus=af_dataseinit_secondloadusestable",
+            "variable_focus=@sql_str1",
+            "intent_sql_block",
+            "variable_write_match",
+            "intent_procedure_context"
+          ]
+        },
+        {
+          "rank": 3,
+          "hit_type": "block",
+          "match_source": "block_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 69,
+          "line_end": 69,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE 的 SQL 执行语句 | SQL=@sql_str1 | actions=通用SQL执行 | targets=@sql_str1",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=3/4",
+            "procedure_focus=af_dataseinit_secondloadusestable",
+            "variable_focus=@sql_str1",
+            "intent_sql_block",
+            "variable_write_match",
+            "intent_procedure_context"
+          ]
+        },
+        {
+          "rank": 4,
+          "hit_type": "chunk",
+          "match_source": "chunk_summary",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 67,
+          "line_end": 75,
+          "matched_text": "AF_DATASEINIT_SECONDLOADUSESTABLE | action_block | actions: 事务处理开始, 通用SQL执行, 事务处理结束 | targets: @sql_str1 | vars: @sql_str1, @table_name, @load_mode | notes: 逐个账户加载数据; 20250915 wangyq mod 支持按照表中配置sql加载数据 修改单：T202509133306",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=4/4",
+            "multi_source_match=2",
+            "procedure_focus=af_dataseinit_secondloadusestable",
+            "variable_focus=@sql_str1",
+            "variable_write_match",
+            "intent_procedure_context"
+          ]
+        },
+        {
+          "rank": 5,
+          "hit_type": "action",
+          "match_source": "action_fts",
+          "procedure_name": "AF_DATASEINIT_SECONDLOADUSESTABLE",
+          "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/datainit/dataseinit/AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction",
+          "line_start": 69,
+          "line_end": 69,
+          "matched_text": "@sql_str1",
+          "reasons": [
+            "fts_hit",
+            "token_overlap=3/4",
+            "procedure_focus=af_dataseinit_secondloadusestable",
+            "variable_focus=@sql_str1",
+            "intent_sql_action",
+            "intent_procedure_context"
+          ]
+        }
+      ],
+      "retrieval": {
+        "candidate_count": 337,
+        "hit_count": 10,
+        "vector_status": {
+          "enabled": true,
+          "reason": "enabled",
+          "index_provider": "local-hash",
+          "index_model": "local-hash-256",
+          "index_dimension": 256,
+          "query_provider": "local-hash",
+          "query_model": "local-hash-256",
+          "query_dimension": 256
+        }
+      }
+    }
+  ]
+}

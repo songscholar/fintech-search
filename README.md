@@ -43,6 +43,7 @@
 - 提供本地 `answer-codebase` 回答入口
 - 提供本地 HTTP API，包括最终回答接口 `POST /answer`
 - 提供本地 stdio MCP server，包括 `db_summary / query_codebase / assemble_evidence / ask_codebase / answer_codebase`
+- 提供检索评测命令 `eval-retrieval`，可用固定问题集跟踪检索质量
 - 提供可安装的 Codex 技能定义 `skills/uses-codebase-search`
 - 提供 repo-local Codex 插件定义 `plugins/uses-codebase-plugin`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 上完成一次全量扫描和索引验证
@@ -102,6 +103,20 @@
 - `examples/uses_codes_call_chain_example.json`
 - `examples/uses_codes_dynamic_sql_example.json`
 - `examples/uses_codes_intent_rerank_example.json`
+- `examples/uses_codes_eval_report.json`
+
+### 检索评测摘要
+
+当前初始评测集位于 `eval/uses_codes_cases.json`，覆盖动态 SQL 表写入、错误码报错、表读取、过程调用引用和变量 SQL 执行等场景。
+
+当前样例报告：
+
+- `examples/uses_codes_eval_report.json`
+- `pass@1`: `1.0`
+- `pass@3`: `1.0`
+- `pass@5`: `1.0`
+- `pass@10`: `1.0`
+- `expectation_recall@10`: `0.9`
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -131,8 +146,11 @@
   plugins/marketplace.json
 docs/
   ARCHITECTURE.md
+  EVALUATION.md
   INDEX_SCHEMA.md
   WORKLOG.md
+eval/
+  uses_codes_cases.json
 examples/
   uses_codes_summary.json
   uses_codes_index_summary.json
@@ -146,6 +164,7 @@ examples/
   uses_codes_call_chain_example.json
   uses_codes_dynamic_sql_example.json
   uses_codes_intent_rerank_example.json
+  uses_codes_eval_report.json
 plugins/
   uses-codebase-plugin/
     .codex-plugin/plugin.json
@@ -159,6 +178,7 @@ src/uses_indexer/
   api.py
   answering.py
   embeddings.py
+  evaluation.py
   __init__.py
   __main__.py
   cli.py
@@ -227,6 +247,25 @@ python3 -m uses_indexer query-index \
   --query "证券代码获取" \
   --limit 10
 ```
+
+运行检索评测：
+
+```bash
+python3 -m uses_indexer eval-retrieval \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --cases /Users/songzuoqiang/Documents/agent/condex/codes/eval/uses_codes_cases.json \
+  --limit 10 \
+  --top-k 1,3,5,10 \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_report.json
+```
+
+这个命令会输出：
+
+- 每个问题的 top hits
+- `pass@k`
+- `expectation_recall@k`
+- 首个相关命中的排名
+- 未命中的期望项，方便后续继续调检索规则
 
 组装可直接给大模型使用的证据上下文：
 

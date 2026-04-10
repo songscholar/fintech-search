@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
+from .evaluation import RetrievalEvaluator
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
 from .mcp_server import CodebaseMcpServer
@@ -41,6 +42,13 @@ def main() -> int:
     query_index_parser.add_argument("--query", required=True, help="Keyword to search for.")
     query_index_parser.add_argument("--limit", type=int, default=20, help="Maximum number of hits.")
     query_index_parser.add_argument("--output", help="Optional JSON output path.")
+
+    eval_parser = subparsers.add_parser("eval-retrieval", help="Evaluate retrieval quality against JSON cases.")
+    eval_parser.add_argument("--db", required=True, help="SQLite database path.")
+    eval_parser.add_argument("--cases", required=True, help="Evaluation cases JSON path.")
+    eval_parser.add_argument("--limit", type=int, default=10, help="Maximum number of hits per case.")
+    eval_parser.add_argument("--top-k", default="1,3,5,10", help="Comma-separated top-k cutoffs to report.")
+    eval_parser.add_argument("--output", help="Optional JSON report output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
     evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -83,6 +91,7 @@ def main() -> int:
     indexer = SQLiteIndexer(parser_impl)
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa)
+    evaluator = RetrievalEvaluator(indexer)
     installer = CodexIntegrationInstaller()
     api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=getattr(args, "db", None))
     default_mcp_db = getattr(args, "db", None) or _discover_default_db(Path.cwd())
@@ -108,6 +117,13 @@ def main() -> int:
         data = indexer.build_index(args.path, args.db)
     elif args.command == "query-index":
         data = indexer.query_index(args.db, args.query, limit=args.limit)
+    elif args.command == "eval-retrieval":
+        data = evaluator.evaluate(
+            args.db,
+            args.cases,
+            limit=args.limit,
+            top_k=_parse_top_k(args.top_k),
+        )
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,
@@ -183,3 +199,13 @@ def _discover_default_db(root: Path) -> str | None:
     if candidate.exists():
         return str(candidate)
     return None
+
+
+def _parse_top_k(raw: str) -> tuple[int, ...]:
+    values = []
+    for item in raw.split(","):
+        stripped = item.strip()
+        if not stripped:
+            continue
+        values.append(int(stripped))
+    return tuple(values)

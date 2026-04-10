@@ -1,0 +1,53 @@
+{
+  "cases": [
+    {
+      "id": "dynamic-sql-reload-fundacct-delete",
+      "question": "reload_fundacct 在哪里被删除",
+      "tags": ["table_write", "dynamic_sql"],
+      "expected": {
+        "procedures": ["AF_DATASEINIT_SECONDLOADUSESTABLE"],
+        "texts": ["reload_fundacct"],
+        "paths": ["AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction"]
+      }
+    },
+    {
+      "id": "entrust-error-return",
+      "question": "ERR_SECU_QRY_ENTRUST_FAIL 在哪里报错",
+      "tags": ["failure_flow", "error_code"],
+      "expected": {
+        "procedures": ["LF_INNERSESOQUERY_QRYACCT_ENTRUST"],
+        "texts": ["ERR_SECU_QRY_ENTRUST_FAIL"],
+        "paths": ["LF_INNERSESOQUERY_QRYACCT_ENTRUST.uftfunction"]
+      }
+    },
+    {
+      "id": "uses-entrust-read",
+      "question": "uses_entrust 在哪里查询",
+      "tags": ["table_read", "sql"],
+      "expected": {
+        "procedures": ["AF_LF_3103219"],
+        "texts": ["uses_entrust"],
+        "paths": ["AF_LF_3103219.uftatomfunction"]
+      }
+    },
+    {
+      "id": "stock-code-get-callers",
+      "question": "哪些流程调用证券代码获取",
+      "tags": ["call_reference", "procedure"],
+      "expected": {
+        "procedures": ["AF_SESBIDPUB_ADV_TAKE_CHECK"],
+        "texts": ["AF_系统参数公用_证券代码获取"]
+      }
+    },
+    {
+      "id": "secondload-sql-str1-execute",
+      "question": "AF_DATASEINIT_SECONDLOADUSESTABLE 中 @sql_str1 在哪里执行",
+      "tags": ["variable", "sql_execute"],
+      "expected": {
+        "procedures": ["AF_DATASEINIT_SECONDLOADUSESTABLE"],
+        "texts": ["@sql_str1"],
+        "paths": ["AF_DATASEINIT_SECONDLOADUSESTABLE.uftatomfunction"]
+      }
+    }
+  ]
+}
