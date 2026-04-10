@@ -345,6 +345,30 @@
   - 多类 expected 匹配
   - 汇总指标计算
 
+### 阶段 22：评测报告 A/B 对比
+
+- 新增评测报告对比函数：
+  - `compare_eval_reports`
+- 新增 CLI：
+  - `compare-eval`
+- 当前支持比较：
+  - `pass@k`
+  - `expectation_recall@k`
+  - `mean_first_relevant_rank`
+  - `matched_cases`
+  - case 级 top hit 和首个相关排名
+- case 级变化分类包括：
+  - `improved`
+  - `regressed`
+  - `unchanged`
+  - `added`
+  - `removed`
+- 新增样例：
+  - `examples/uses_codes_eval_compare.json`
+- 补充测试，覆盖：
+  - 相同报告自比较
+  - 首个相关排名后移时标记为 regression
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题

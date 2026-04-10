@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
-from .evaluation import RetrievalEvaluator
+from .evaluation import RetrievalEvaluator, compare_eval_reports
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
 from .mcp_server import CodebaseMcpServer
@@ -49,6 +49,11 @@ def main() -> int:
     eval_parser.add_argument("--limit", type=int, default=10, help="Maximum number of hits per case.")
     eval_parser.add_argument("--top-k", default="1,3,5,10", help="Comma-separated top-k cutoffs to report.")
     eval_parser.add_argument("--output", help="Optional JSON report output path.")
+
+    compare_eval_parser = subparsers.add_parser("compare-eval", help="Compare two retrieval evaluation reports.")
+    compare_eval_parser.add_argument("--before", required=True, help="Baseline evaluation report JSON path.")
+    compare_eval_parser.add_argument("--after", required=True, help="New evaluation report JSON path.")
+    compare_eval_parser.add_argument("--output", help="Optional JSON comparison output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
     evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -124,6 +129,8 @@ def main() -> int:
             limit=args.limit,
             top_k=_parse_top_k(args.top_k),
         )
+    elif args.command == "compare-eval":
+        data = compare_eval_reports(args.before, args.after)
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,

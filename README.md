@@ -44,6 +44,7 @@
 - 提供本地 HTTP API，包括最终回答接口 `POST /answer`
 - 提供本地 stdio MCP server，包括 `db_summary / query_codebase / assemble_evidence / ask_codebase / answer_codebase`
 - 提供检索评测命令 `eval-retrieval`，可用固定问题集跟踪检索质量
+- 提供评测报告对比命令 `compare-eval`，可比较不同 embedding / 切块 / 重排策略的 A/B 变化
 - 提供可安装的 Codex 技能定义 `skills/uses-codebase-search`
 - 提供 repo-local Codex 插件定义 `plugins/uses-codebase-plugin`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 上完成一次全量扫描和索引验证
@@ -104,6 +105,7 @@
 - `examples/uses_codes_dynamic_sql_example.json`
 - `examples/uses_codes_intent_rerank_example.json`
 - `examples/uses_codes_eval_report.json`
+- `examples/uses_codes_eval_compare.json`
 
 ### 检索评测摘要
 
@@ -117,6 +119,7 @@
 - `pass@5`: `1.0`
 - `pass@10`: `1.0`
 - `expectation_recall@10`: `0.9`
+- 当前自比较样例 `examples/uses_codes_eval_compare.json` 中 `improved/regressed` 都是 `0`，用于展示报告格式
 
 本地构建出的数据库默认路径示例为 `examples/uses_codes_index.db`，该文件体积较大，当前不纳入版本控制。
 
@@ -165,6 +168,7 @@ examples/
   uses_codes_dynamic_sql_example.json
   uses_codes_intent_rerank_example.json
   uses_codes_eval_report.json
+  uses_codes_eval_compare.json
 plugins/
   uses-codebase-plugin/
     .codex-plugin/plugin.json
@@ -266,6 +270,21 @@ python3 -m uses_indexer eval-retrieval \
 - `expectation_recall@k`
 - 首个相关命中的排名
 - 未命中的期望项，方便后续继续调检索规则
+
+对比两份评测报告：
+
+```bash
+python3 -m uses_indexer compare-eval \
+  --before /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_report.json \
+  --after /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_report.json \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_compare.json
+```
+
+这个命令会输出：
+
+- 汇总指标 delta
+- 每个 case 的 `improved / regressed / unchanged / added / removed`
+- before / after 的首个命中排名、召回率和 top hit
 
 组装可直接给大模型使用的证据上下文：
 

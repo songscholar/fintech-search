@@ -75,6 +75,37 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
 - `cases[].expectations`：每个期望项是否命中，以及命中的 hit。
 - `cases[].top_hits`：每个问题的前若干检索结果，方便人工审查。
 
+## 对比报告
+
+如果已经有两份评测报告，可以直接离线比较：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer compare-eval \
+  --before examples/uses_codes_eval_report_local_hash.json \
+  --after examples/uses_codes_eval_report_real_embedding.json \
+  --output examples/uses_codes_eval_compare.json
+```
+
+对比报告会输出：
+
+- `summary_delta.pass_at_k`
+- `summary_delta.expectation_recall_at_k`
+- `summary_delta.mean_first_relevant_rank`
+- `case_change_counts`
+- `cases[].change`
+- `cases[].before`
+- `cases[].after`
+
+`cases[].change` 当前可能是：
+
+- `improved`
+- `regressed`
+- `unchanged`
+- `added`
+- `removed`
+
+判断规则优先看最大 top-k 下是否从未命中变为命中或反过来；其次看期望项召回率；最后看首个相关命中的排名是否提前或后移。
+
 ## 当前基准
 
 当前初始评测集有 5 个 case，覆盖：
@@ -88,6 +119,7 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
 当前样例报告：
 
 - `examples/uses_codes_eval_report.json`
+- `examples/uses_codes_eval_compare.json`
 
 当前样例结果：
 

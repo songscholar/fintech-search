@@ -108,6 +108,39 @@ class RetrievalEvaluator:
         }
 
 
+def compare_eval_reports(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
+    before = _load_report(before_path)
+    after = _load_report(after_path)
+    before_cases = _cases_by_id(before)
+    after_cases = _cases_by_id(after)
+    case_ids = sorted(set(before_cases) | set(after_cases))
+    top_k = _report_top_k(before, after)
+
+    case_deltas = [
+        _compare_case(case_id, before_cases.get(case_id), after_cases.get(case_id), top_k=top_k)
+        for case_id in case_ids
+    ]
+
+    return {
+        "before_path": str(before_path),
+        "after_path": str(after_path),
+        "case_count": {
+            "before": len(before_cases),
+            "after": len(after_cases),
+        },
+        "top_k": list(top_k),
+        "summary_delta": _compare_summaries(before.get("summary", {}), after.get("summary", {}), top_k=top_k),
+        "case_change_counts": {
+            "improved": sum(1 for item in case_deltas if item["change"] == "improved"),
+            "regressed": sum(1 for item in case_deltas if item["change"] == "regressed"),
+            "unchanged": sum(1 for item in case_deltas if item["change"] == "unchanged"),
+            "added": sum(1 for item in case_deltas if item["change"] == "added"),
+            "removed": sum(1 for item in case_deltas if item["change"] == "removed"),
+        },
+        "cases": case_deltas,
+    }
+
+
 def _load_cases(path: str | Path) -> list[dict[str, object]]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict):
@@ -126,6 +159,184 @@ def _load_cases(path: str | Path) -> list[dict[str, object]]:
             raise ValueError(f"Case #{index} is missing 'question'.")
         cases.append(item)
     return cases
+
+
+def _load_report(path: str | Path) -> dict[str, object]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Evaluation report must be a JSON object.")
+    if not isinstance(data.get("cases"), list):
+        raise ValueError("Evaluation report is missing a 'cases' list.")
+    return data
+
+
+def _cases_by_id(report: dict[str, object]) -> dict[str, dict[str, object]]:
+    result: dict[str, dict[str, object]] = {}
+    for item in report.get("cases", []):
+        if not isinstance(item, dict):
+            continue
+        case_id = str(item.get("id") or item.get("question") or "")
+        if case_id:
+            result[case_id] = item
+    return result
+
+
+def _report_top_k(*reports: dict[str, object]) -> tuple[int, ...]:
+    values: set[int] = set()
+    for report in reports:
+        for item in report.get("top_k", []):
+            parsed = _as_int(item)
+            if parsed is not None and parsed > 0:
+                values.add(parsed)
+        summary = report.get("summary", {})
+        if isinstance(summary, dict):
+            for metric_name in ("pass_at_k", "expectation_recall_at_k"):
+                metric = summary.get(metric_name, {})
+                if isinstance(metric, dict):
+                    for key in metric:
+                        parsed = _as_int(key)
+                        if parsed is not None and parsed > 0:
+                            values.add(parsed)
+    return tuple(sorted(values)) or DEFAULT_TOP_K
+
+
+def _compare_summaries(before: object, after: object, *, top_k: tuple[int, ...]) -> dict[str, object]:
+    before_summary = before if isinstance(before, dict) else {}
+    after_summary = after if isinstance(after, dict) else {}
+    result: dict[str, object] = {}
+    for metric_name in ("pass_at_k", "expectation_recall_at_k"):
+        before_metric = before_summary.get(metric_name, {})
+        after_metric = after_summary.get(metric_name, {})
+        result[metric_name] = {
+            str(k): _round_delta(
+                _metric_value(after_metric, k) - _metric_value(before_metric, k)
+            )
+            for k in top_k
+        }
+
+    before_mean_rank = _as_float(before_summary.get("mean_first_relevant_rank"))
+    after_mean_rank = _as_float(after_summary.get("mean_first_relevant_rank"))
+    result["mean_first_relevant_rank"] = {
+        "before": before_mean_rank,
+        "after": after_mean_rank,
+        "delta": _nullable_delta(after_mean_rank, before_mean_rank),
+    }
+    result["matched_cases"] = {
+        "before": _as_int(before_summary.get("matched_cases")),
+        "after": _as_int(after_summary.get("matched_cases")),
+        "delta": _nullable_int_delta(
+            _as_int(after_summary.get("matched_cases")),
+            _as_int(before_summary.get("matched_cases")),
+        ),
+    }
+    return result
+
+
+def _compare_case(
+    case_id: str,
+    before: dict[str, object] | None,
+    after: dict[str, object] | None,
+    *,
+    top_k: tuple[int, ...],
+) -> dict[str, object]:
+    if before is None:
+        return {
+            "id": case_id,
+            "question": after.get("question") if after else None,
+            "change": "added",
+            "before": None,
+            "after": _case_snapshot(after, top_k=top_k),
+        }
+    if after is None:
+        return {
+            "id": case_id,
+            "question": before.get("question"),
+            "change": "removed",
+            "before": _case_snapshot(before, top_k=top_k),
+            "after": None,
+        }
+
+    before_snapshot = _case_snapshot(before, top_k=top_k)
+    after_snapshot = _case_snapshot(after, top_k=top_k)
+    return {
+        "id": case_id,
+        "question": after.get("question") or before.get("question"),
+        "change": _classify_case_change(before_snapshot, after_snapshot, top_k=top_k),
+        "before": before_snapshot,
+        "after": after_snapshot,
+    }
+
+
+def _case_snapshot(case: dict[str, object] | None, *, top_k: tuple[int, ...]) -> dict[str, object] | None:
+    if case is None:
+        return None
+    return {
+        "first_relevant_rank": _as_int(case.get("first_relevant_rank")),
+        "matched_count": _as_int(case.get("matched_count")) or 0,
+        "expected_count": _as_int(case.get("expected_count")) or 0,
+        "pass_at_k": {
+            str(k): bool(_metric_value(case.get("pass_at_k", {}), k))
+            for k in top_k
+        },
+        "recall_at_k": {
+            str(k): _metric_value(case.get("recall_at_k", {}), k)
+            for k in top_k
+        },
+        "top_hit": _top_hit_snapshot(case),
+    }
+
+
+def _top_hit_snapshot(case: dict[str, object]) -> dict[str, object] | None:
+    top_hits = case.get("top_hits", [])
+    if not isinstance(top_hits, list) or not top_hits:
+        return None
+    top_hit = top_hits[0]
+    if not isinstance(top_hit, dict):
+        return None
+    return {
+        "rank": top_hit.get("rank"),
+        "hit_type": top_hit.get("hit_type"),
+        "match_source": top_hit.get("match_source"),
+        "procedure_name": top_hit.get("procedure_name"),
+        "file_path": top_hit.get("file_path"),
+        "matched_text": top_hit.get("matched_text"),
+    }
+
+
+def _classify_case_change(
+    before: dict[str, object] | None,
+    after: dict[str, object] | None,
+    *,
+    top_k: tuple[int, ...],
+) -> str:
+    if before is None:
+        return "added"
+    if after is None:
+        return "removed"
+
+    cutoff = str(max(top_k))
+    before_pass = bool(before["pass_at_k"].get(cutoff))
+    after_pass = bool(after["pass_at_k"].get(cutoff))
+    if after_pass and not before_pass:
+        return "improved"
+    if before_pass and not after_pass:
+        return "regressed"
+
+    before_recall = float(before["recall_at_k"].get(cutoff, 0.0))
+    after_recall = float(after["recall_at_k"].get(cutoff, 0.0))
+    if after_recall > before_recall:
+        return "improved"
+    if after_recall < before_recall:
+        return "regressed"
+
+    before_rank = _case_rank_score(before["first_relevant_rank"])
+    after_rank = _case_rank_score(after["first_relevant_rank"])
+    if after_rank < before_rank:
+        return "improved"
+    if after_rank > before_rank:
+        return "regressed"
+
+    return "unchanged"
 
 
 def _normalize_expected(value: object) -> dict[str, object]:
@@ -236,6 +447,48 @@ def _as_int(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _as_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _metric_value(metric: object, k: int) -> float:
+    if not isinstance(metric, dict):
+        return 0.0
+    value = metric.get(str(k), metric.get(k, 0.0))
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    parsed = _as_float(value)
+    return parsed if parsed is not None else 0.0
+
+
+def _nullable_delta(after: float | None, before: float | None) -> float | None:
+    if after is None or before is None:
+        return None
+    return _round_delta(after - before)
+
+
+def _nullable_int_delta(after: int | None, before: int | None) -> int | None:
+    if after is None or before is None:
+        return None
+    return after - before
+
+
+def _round_delta(value: float) -> float:
+    return round(value, 6)
+
+
+def _case_rank_score(value: object) -> int:
+    parsed = _as_int(value)
+    if parsed is None:
+        return 1_000_000
+    return parsed
 
 
 def _matched_count_at_k(match_details: list[dict[str, object]], k: int) -> int:

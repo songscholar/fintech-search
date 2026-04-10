@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from tests.test_indexer import _build_sample_index
-from uses_indexer.evaluation import RetrievalEvaluator
+from uses_indexer.evaluation import RetrievalEvaluator, compare_eval_reports
 
 
 def test_retrieval_evaluator_reports_pass_at_k_and_recall(tmp_path: Path) -> None:
@@ -98,3 +98,91 @@ def test_retrieval_evaluator_accepts_plain_case_list(tmp_path: Path) -> None:
 
     assert report["case_count"] == 1
     assert report["summary"]["pass_at_k"]["5"] == 1.0
+
+
+def test_compare_eval_reports_marks_unchanged_cases(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "dynamic-table",
+                    "question": "uses_dynamic_table 在哪里删除",
+                    "expected": {
+                        "procedures": ["AF_DEEP"],
+                        "texts": ["uses_dynamic_table"],
+                    },
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    report = RetrievalEvaluator(indexer).evaluate(db_path, cases_path, limit=5, top_k=(1, 3, 5))
+    before_path = tmp_path / "before.json"
+    after_path = tmp_path / "after.json"
+    before_path.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    after_path.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+
+    comparison = compare_eval_reports(before_path, after_path)
+
+    assert comparison["case_change_counts"]["unchanged"] == 1
+    assert comparison["case_change_counts"]["improved"] == 0
+    assert comparison["summary_delta"]["pass_at_k"]["5"] == 0.0
+
+
+def test_compare_eval_reports_marks_case_regressions(tmp_path: Path) -> None:
+    before = {
+        "top_k": [1, 3, 5],
+        "summary": {
+            "pass_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+            "expectation_recall_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+            "mean_first_relevant_rank": 1.0,
+            "matched_cases": 1,
+        },
+        "cases": [
+            {
+                "id": "case-1",
+                "question": "q",
+                "first_relevant_rank": 1,
+                "matched_count": 1,
+                "expected_count": 1,
+                "pass_at_k": {"1": True, "3": True, "5": True},
+                "recall_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+                "top_hits": [{"rank": 1, "procedure_name": "AF_BEFORE"}],
+            }
+        ],
+    }
+    after = {
+        "top_k": [1, 3, 5],
+        "summary": {
+            "pass_at_k": {"1": 0.0, "3": 1.0, "5": 1.0},
+            "expectation_recall_at_k": {"1": 0.0, "3": 1.0, "5": 1.0},
+            "mean_first_relevant_rank": 3.0,
+            "matched_cases": 1,
+        },
+        "cases": [
+            {
+                "id": "case-1",
+                "question": "q",
+                "first_relevant_rank": 3,
+                "matched_count": 1,
+                "expected_count": 1,
+                "pass_at_k": {"1": False, "3": True, "5": True},
+                "recall_at_k": {"1": 0.0, "3": 1.0, "5": 1.0},
+                "top_hits": [{"rank": 1, "procedure_name": "AF_AFTER"}],
+            }
+        ],
+    }
+    before_path = tmp_path / "before.json"
+    after_path = tmp_path / "after.json"
+    before_path.write_text(json.dumps(before, ensure_ascii=False), encoding="utf-8")
+    after_path.write_text(json.dumps(after, ensure_ascii=False), encoding="utf-8")
+
+    comparison = compare_eval_reports(before_path, after_path)
+
+    assert comparison["case_change_counts"]["regressed"] == 1
+    assert comparison["cases"][0]["change"] == "regressed"
+    assert comparison["summary_delta"]["pass_at_k"]["1"] == -1.0
+    assert comparison["summary_delta"]["mean_first_relevant_rank"]["delta"] == 2.0

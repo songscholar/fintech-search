@@ -335,6 +335,8 @@ SQL 恢复这边也有一个仓库特性要处理：
 
 这一步的目标是把“检索规则调优”变成可回归验证的工程过程。后续接入真实 embedding 或继续增强结构关系时，可以用同一份 `eval/uses_codes_cases.json` 对比效果变化。
 
+当前也提供 `compare-eval` 离线对比能力。它不访问数据库，只比较两份评测报告，输出汇总指标 delta 和 case 级 `improved / regressed / unchanged / added / removed`。这样后续在本地 hash embedding、真实 embedding、不同重排策略之间切换时，可以快速判断改动收益和回归点。
+
 ## 检索质量增强
 
 这一轮检索增强主要覆盖了 4 个维度：
