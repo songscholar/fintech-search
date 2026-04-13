@@ -13,6 +13,14 @@
 
 完整架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
+相关文档：
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：看整体分层、数据流和问答链路
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：看怎么本地部署、怎么接 HTTP/MCP/Codex
+- [docs/USAGE.md](docs/USAGE.md)：看平时该怎么提问、怎么看返回结果
+- [docs/INDEX_SCHEMA.md](docs/INDEX_SCHEMA.md)：看 SQLite 里到底存了什么
+- [docs/EVALUATION.md](docs/EVALUATION.md)：看评测怎么跑、怎么做 A/B 对比
+
 当前项目可以理解成一条固定链路：
 
 `源码目录 -> 解析 -> SQLite 索引 -> 混合检索 -> 证据组装 -> 问答包 -> 最终回答 -> HTTP/MCP/Codex 接入`
@@ -227,8 +235,10 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   plugins/marketplace.json
 docs/
   ARCHITECTURE.md
+  DEPLOYMENT.md
   EVALUATION.md
   INDEX_SCHEMA.md
+  USAGE.md
   WORKLOG.md
 eval/
   uses_codes_cases.json
