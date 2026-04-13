@@ -9,6 +9,33 @@
 
 这还不是最终版问答系统，但已经具备了“理解仓库结构并沉淀索引”的第一版基础设施。
 
+## 架构总览
+
+完整架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+当前项目可以理解成一条固定链路：
+
+`源码目录 -> 解析 -> SQLite 索引 -> 混合检索 -> 证据组装 -> 问答包 -> 最终回答 -> HTTP/MCP/Codex 接入`
+
+```mermaid
+flowchart LR
+    SRC["源码目录"]
+    PARSER["Parser"]
+    DB[("SQLite 索引")]
+    RETRIEVE["混合检索"]
+    EVIDENCE["证据组装"]
+    ANSWER["最终回答"]
+    ENTRY["CLI HTTP MCP Codex"]
+
+    SRC --> PARSER --> DB --> RETRIEVE --> EVIDENCE --> ANSWER --> ENTRY
+```
+
+如果你第一次接触这个仓库，建议按下面顺序理解：
+
+1. 先看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 里的总览图和端到端调用链
+2. 再看 [docs/INDEX_SCHEMA.md](docs/INDEX_SCHEMA.md) 理解 SQLite 里到底存了什么
+3. 最后用 README 里的 `query-index / assemble-evidence / answer-codebase` 跑一遍真实问题
+
 ## 当前已实现
 
 - 解析 `LF / LS / AF / RS` 文件

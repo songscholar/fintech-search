@@ -41,6 +41,127 @@
 - 深层事务块 / SQL 块 / 异常块恢复
 - 更精确的跨过程关系图
 
+## 一图总览
+
+```mermaid
+flowchart LR
+    SRC["USES/UFT 源码目录"]
+    PARSER["Parser 解析 XML 与 CDATA DSL"]
+    IR["结构化中间表示 ParsedUnit"]
+    INDEXER["Indexer 建库与关系恢复"]
+    DB[("SQLite 索引库")]
+    EMB["Embedding 层 local-hash 或 OpenAI-compatible"]
+    RETRIEVE["query-index 混合检索与重排"]
+    EVIDENCE["assemble-evidence 证据组装"]
+    QA["ask-codebase 问答包"]
+    ANSWER["answer-codebase 最终回答"]
+    HTTP["HTTP API"]
+    MCP["stdio MCP server"]
+    CODEX["Codex skill 与 plugin"]
+    EVAL["评测层 eval-retrieval compare-eval"]
+
+    SRC --> PARSER --> IR --> INDEXER --> DB
+    EMB --> INDEXER
+    DB --> RETRIEVE --> EVIDENCE --> QA --> ANSWER
+    EMB --> RETRIEVE
+    DB --> EVAL
+    RETRIEVE --> EVAL
+    RETRIEVE --> HTTP
+    EVIDENCE --> HTTP
+    QA --> HTTP
+    ANSWER --> HTTP
+    RETRIEVE --> MCP
+    EVIDENCE --> MCP
+    QA --> MCP
+    ANSWER --> MCP
+    MCP --> CODEX
+```
+
+这个图表达的不是“未来设想”，而是当前仓库已经落地的结构：
+
+- 左侧是源码输入与解析建库链路
+- 中间是 SQLite 索引、embedding 与混合检索核心
+- 右侧是问答输出、HTTP 服务、MCP 与 Codex 接入层
+- 下方是独立的评测闭环，用于验证每次检索调优是否真的变好
+
+## 端到端问答链路
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as CLI HTTP MCP
+    participant A as CodebaseAnswerer
+    participant Q as CodebaseQA
+    participant I as SQLiteIndexer
+    participant D as SQLite DB
+    participant L as External LLM Optional
+
+    U->>C: 提问
+    C->>A: answer-codebase 或 POST /answer
+    A->>Q: ask
+    Q->>I: assemble-evidence
+    I->>D: FTS LIKE chunk vector 查询
+    D-->>I: 候选结果
+    I-->>Q: evidence 与 llm_context
+    Q-->>A: prompt_package 与 draft_answer
+    alt 配置了外部模型
+        A->>L: 发送 prompt 与证据
+        L-->>A: 最终回答
+    else 未配置外部模型
+        A-->>A: 使用 draft_answer
+    end
+    A-->>C: final_answer
+    C-->>U: 返回 grounded answer
+```
+
+这条链路说明当前系统的核心设计取舍：
+
+- 外部模型不是直接看仓库，而是只看索引层筛选出来的证据
+- `draft_answer` 始终存在，所以即使没有外部模型也能完成一次可解释回答
+- CLI、HTTP API、MCP 只是不同入口，底层复用的是同一套索引与问答逻辑
+
+## 运行形态
+
+当前项目支持 4 种运行形态：
+
+- 离线建库：`build-index`、`db-summary`、`eval-retrieval`
+- 本地查询：`query-index`、`assemble-evidence`、`ask-codebase`
+- 本地服务：`serve-api`
+- 对话式工具接入：`serve-mcp`、Codex skill、repo-local plugin
+
+这 4 种形态共用一套核心模块，没有额外的“第二套服务实现”。
+
+## 模块职责与源码映射
+
+| 层级 | 主要职责 | 对应文件 |
+| --- | --- | --- |
+| 解析层 | 解析 XML 外壳、CDATA DSL、语句流、参数与元信息 | `src/uses_indexer/parser.py` |
+| 索引层 | 建库、写入 SQLite、恢复关系、切块、块恢复、向量入库 | `src/uses_indexer/indexer.py` |
+| Embedding 层 | 本地 hash 向量、外部 embedding、缓存与兼容校验 | `src/uses_indexer/embeddings.py` |
+| 问答包层 | 生成 `system_prompt`、`user_prompt`、`draft_answer` | `src/uses_indexer/qa.py` |
+| 回答层 | 调用外部模型或回退到 `draft_answer` | `src/uses_indexer/answering.py`, `src/uses_indexer/llm.py` |
+| HTTP 层 | 暴露 `/query /evidence /ask /answer` | `src/uses_indexer/api.py` |
+| MCP 层 | 暴露 `query_codebase / assemble_evidence / answer_codebase` 等工具 | `src/uses_indexer/mcp_server.py` |
+| CLI 层 | 命令行入口与参数编排 | `src/uses_indexer/cli.py` |
+| 评测层 | 检索评测与 A/B 对比 | `src/uses_indexer/evaluation.py` |
+| 集成层 | 安装 Codex skill 与 plugin | `src/uses_indexer/integration.py`, `plugins/uses-codebase-plugin/`, `skills/uses-codebase-search/` |
+
+## 功能边界
+
+当前项目最适合扮演的角色是“面向大模型的本地代码知识后端”，而不是完整 IDE 或编译器。
+
+它当前已经做好的事情：
+
+- 把稳定 DSL 仓库转成可检索、可追踪、可评测的结构化索引
+- 把自然语言问题转换成带证据的回答输入
+- 让外部大模型通过 API 或 MCP 调用本地索引能力
+
+它暂时不追求的事情：
+
+- 100% 精确的编译器级语义还原
+- 完整控制流图和完整跨过程图数据库
+- 直接替代 IDE 的所有导航和重构能力
+
 ## 代码库观察结论
 
 基于完整代码目录的抽样和统计，这个仓库有几个重要特点：
