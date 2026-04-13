@@ -28,7 +28,7 @@ cd /Users/songzuoqiang/Documents/agent/condex/codes
 python3 -m pip install -e .
 
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 10
 ```
@@ -46,7 +46,7 @@ python3 -m uses_indexer query-index \
 ```bash
 cd /Users/songzuoqiang/Documents/agent/condex/codes
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -79,7 +79,7 @@ curl -s http://127.0.0.1:8000/health
 ```bash
 cd /Users/songzuoqiang/Documents/agent/condex/codes
 PYTHONPATH=src python3 -m uses_indexer serve-mcp \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db
 ```
 
 暴露工具：
@@ -98,7 +98,8 @@ PYTHONPATH=src python3 -m uses_indexer serve-mcp \
 
 现成完整索引库：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db` 仅作为子库回归索引保留
 
 优点：
 
@@ -118,9 +119,9 @@ cd /Users/songzuoqiang/Documents/agent/condex/codes
 python3 -m pip install -e .
 
 python3 -m uses_indexer build-index \
-  /Users/songzuoqiang/Documents/agent/code/uses_codes \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_summary.json
+  /Users/songzuoqiang/Documents/agent/code \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index_summary.json
 ```
 
 适合：
@@ -137,20 +138,20 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=8
 export OPENAI_EMBEDDING_TIMEOUT=120
-export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_embedding_cache.db"
+export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_embedding_cache.db"
 
 cd /Users/songzuoqiang/Documents/agent/condex/codes
 PYTHONPATH=src python3 -m uses_indexer build-index \
-  /Users/songzuoqiang/Documents/agent/code/uses_codes \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_openai.db
+  /Users/songzuoqiang/Documents/agent/code \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index_openai.db
 ```
 
 如果中途中断：
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
-  /Users/songzuoqiang/Documents/agent/code/uses_codes \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index_openai.db \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index_openai.db \
   --resume-vectors
 ```
 
@@ -224,7 +225,7 @@ python3 ./plugins/uses-codebase-plugin/scripts/run_mcp_server.py \
 ### 只看效果
 
 1. `pip install -e .`
-2. 直接使用现成的 `examples/uses_codes_index.db`
+2. 直接使用现成的 `examples/agent_code_index.db`
 3. 跑 `query-index`
 4. 跑 `answer-codebase`
 

@@ -2,7 +2,7 @@
 
 ## 目标
 
-这个项目面向 `/Users/songzuoqiang/Documents/agent/code/uses_codes` 这样的 UFT/USES DSL 代码库。
+这个项目面向 `/Users/songzuoqiang/Documents/agent/code` 这样的完整 UFT/USES DSL 代码根目录，也兼容 `uses_codes` 这类单独子目录。
 
 第一阶段目标不是“直接问答”，而是先建立一个可靠的解析层，让后续索引和问答建立在结构化数据上。
 
@@ -165,6 +165,8 @@ sequenceDiagram
 ## 代码库观察结论
 
 基于完整代码目录的抽样和统计，这个仓库有几个重要特点：
+
+- 当前全量索引已经覆盖 `21148` 个 DSL 文件、`201030` 个语义块和 `40887` 个结构块
 
 - 文件格式高度统一，属于稳定 DSL
 - XML 壳固定，逻辑集中在 `CDATA`

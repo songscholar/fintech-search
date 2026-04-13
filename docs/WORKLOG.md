@@ -571,6 +571,40 @@
   - 让仓库从“能跑”进一步变成“别人知道怎么跑、怎么用、怎么排障”
   - 把项目说明拆成首页、架构、部署、使用、评测五层文档
 
+### 阶段 31：完整代码根目录全量索引与默认库切换
+
+- 对完整目录 `/Users/songzuoqiang/Documents/agent/code` 执行全量建库
+- 复核解析器支持后缀后的源码文件数与索引文件数一致：
+  - 源码侧 `21148`
+  - 索引侧 `files = 21148`
+- 复核全量库关键统计：
+  - `procedures = 21148`
+  - `statements = 1122460`
+  - `chunks = 201030`
+  - `chunk_vectors = 201030`
+  - `blocks = 40887`
+- 复核 `uses_codes` 子库索引仍然完整：
+  - 源码侧 `2564`
+  - 索引侧 `files = 2564`
+  - `chunks = chunk_vectors = 28748`
+- 新增完整根目录摘要文件：
+  - `examples/agent_code_index_summary.json`
+  - `examples/agent_code_db_summary.json`
+- 调整默认库发现逻辑：
+  - `serve-mcp`
+  - plugin `run_mcp_server.py`
+  - skill 文档
+  - 都改为优先使用 `examples/agent_code_index.db`
+- 更新文档：
+  - `README.md`
+  - `docs/DEPLOYMENT.md`
+  - `docs/USAGE.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/INDEX_SCHEMA.md`
+- 目标：
+  - 以后默认面向完整代码根目录检索
+  - 避免继续误用只覆盖 `uses_codes` 的子库索引
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题

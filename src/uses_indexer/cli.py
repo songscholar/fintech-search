@@ -14,6 +14,11 @@ from .mcp_server import CodebaseMcpServer
 from .parser import SUPPORTED_SUFFIXES, UftDslParser
 from .qa import CodebaseQA
 
+DEFAULT_DB_CANDIDATES = (
+    "agent_code_index.db",
+    "uses_codes_index.db",
+)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Parse USES UFT DSL files.")
@@ -91,7 +96,13 @@ def main() -> int:
     serve_parser.add_argument("--port", type=int, default=8000, help="Port to bind the local HTTP server.")
 
     mcp_parser = subparsers.add_parser("serve-mcp", help="Run a local stdio MCP server around the index and QA package.")
-    mcp_parser.add_argument("--db", help="Default SQLite database path. If omitted, the server will try examples/uses_codes_index.db.")
+    mcp_parser.add_argument(
+        "--db",
+        help=(
+            "Default SQLite database path. If omitted, the server will try "
+            "examples/agent_code_index.db first, then examples/uses_codes_index.db."
+        ),
+    )
 
     install_parser = subparsers.add_parser("install-codex-integration", help="Install repo-local plugin and skill into the local Codex home via symlinks.")
     install_parser.add_argument("--force", action="store_true", help="Replace an existing local plugin or skill target if needed.")
@@ -207,9 +218,10 @@ def _scan_dir(parser: UftDslParser, root: Path, limit: int) -> dict[str, object]
 
 
 def _discover_default_db(root: Path) -> str | None:
-    candidate = root / "examples" / "uses_codes_index.db"
-    if candidate.exists():
-        return str(candidate)
+    for filename in DEFAULT_DB_CANDIDATES:
+        candidate = root / "examples" / filename
+        if candidate.exists():
+            return str(candidate)
     return None
 
 

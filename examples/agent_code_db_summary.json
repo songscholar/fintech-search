@@ -1,0 +1,111 @@
+{
+  "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db",
+  "files": 21148,
+  "procedures": 21148,
+  "histories": 43647,
+  "params": 474173,
+  "statements": 1122460,
+  "actions": 203772,
+  "variable_refs": 1399488,
+  "edges": 467116,
+  "chunks": 201030,
+  "chunk_vectors": 201030,
+  "blocks": 40887,
+  "block_edges": 261801,
+  "fts_counts": {
+    "procedures_fts": 21148,
+    "statements_fts": 1122460,
+    "actions_fts": 203772,
+    "edges_fts": 467116,
+    "chunks_fts": 201030,
+    "blocks_fts": 40887
+  },
+  "embedding": {
+    "provider": "local-hash",
+    "model": "local-hash-256",
+    "dimension": "256"
+  },
+  "unit_kind_counts": {
+    "Function": 14516,
+    "Service": 6600,
+    "FactorService": 31,
+    "OuterInterface": 1
+  },
+  "file_prefix_counts": {
+    "LF": 13232,
+    "LS": 6529,
+    "AF": 1191,
+    "AS": 136,
+    "RS": 31,
+    "CNST": 13,
+    "CSNT": 8,
+    "ls": 6,
+    "AP": 1,
+    "REF": 1
+  },
+  "statement_kind_counts": {
+    "brace": 329251,
+    "comment": 246509,
+    "assignment": 159099,
+    "action": 148998,
+    "control": 145097,
+    "call": 54774,
+    "raw": 37892,
+    "goto": 602,
+    "label": 238
+  },
+  "variable_ref_type_counts": {
+    "read": 1169557,
+    "write": 229931
+  },
+  "edge_type_counts": {
+    "writes_variable": 161190,
+    "uses_action": 148998,
+    "uses_target": 70112,
+    "calls_procedure": 54774,
+    "reads_table": 19228,
+    "writes_table": 10234,
+    "uses_component": 1237,
+    "jumps_to_label": 602,
+    "jumps_to_exit": 503,
+    "defines_label": 238
+  },
+  "chunk_type_counts": {
+    "control_block": 129064,
+    "action_block": 33600,
+    "call_flow": 18599,
+    "call_block": 13626,
+    "assignment_block": 5412,
+    "raw_block": 670,
+    "statement_block": 59
+  },
+  "vector_provider_counts": {
+    "local-hash": 201030
+  },
+  "block_type_counts": {
+    "sql_execute": 9876,
+    "failure_handler": 9485,
+    "exception_handler": 6680,
+    "when_others_handler": 6592,
+    "transaction": 3668,
+    "record_loop": 2908,
+    "sql_query": 522,
+    "goto_exit": 503,
+    "record_pool_loop": 277,
+    "component_loop": 225,
+    "goto_jump": 99,
+    "exit_label": 52
+  },
+  "block_edge_type_counts": {
+    "uses_action": 137613,
+    "writes_variable": 44489,
+    "uses_target": 44357,
+    "reads_table": 16960,
+    "writes_table": 10869,
+    "calls_procedure": 5744,
+    "jumps_to_label": 728,
+    "jumps_to_exit": 548,
+    "uses_component": 424,
+    "defines_label": 69
+  }
+}

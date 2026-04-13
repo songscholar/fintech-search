@@ -11,6 +11,12 @@
 - 返回结果应该怎么看
 - 什么时候要继续深挖
 
+当前推荐默认库：
+
+- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db`
+
+`examples/uses_codes_index.db` 继续保留，但主要用于较小范围的回归测试和调试。
+
 ## 先选入口
 
 如果你只想知道“应该用哪个命令”，直接看这张表：
@@ -30,7 +36,7 @@
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 10
 ```
@@ -45,7 +51,7 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 3 \
   --context-window 2 \
@@ -62,7 +68,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer ask-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --question "哪些流程调用证券代码获取"
 ```
 
@@ -76,7 +82,7 @@ python3 -m uses_indexer ask-codebase \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --question "哪些流程调用证券代码获取"
 ```
 
@@ -242,7 +248,7 @@ python3 -m uses_indexer answer-codebase \
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```

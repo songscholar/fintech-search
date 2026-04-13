@@ -5,7 +5,9 @@ description: Use when the user asks about the indexed USES/UFT codebase and need
 
 # USES Codebase Search
 
-Use this skill for repository-grounded questions about `/Users/songzuoqiang/Documents/agent/code/uses_codes`.
+Use this skill for repository-grounded questions about `/Users/songzuoqiang/Documents/agent/code`.
+
+默认优先使用完整根目录索引库 `examples/agent_code_index.db`。只有在调用方明确要求只查 `uses_codes` 子目录时，才退回 `examples/uses_codes_index.db`。
 
 ## Preferred workflow
 
