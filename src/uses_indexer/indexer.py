@@ -338,6 +338,17 @@ WRITE_INTENT_KEYWORDS = ("更新", "修改", "删除", "清空", "写入", "upda
 READ_INTENT_KEYWORDS = ("查询", "读取", "获取", "select", "from", "join")
 VARIABLE_INTENT_KEYWORDS = ("变量", "赋值", "写入", "读取", "参数", "字段")
 CALL_CHAIN_INTENT_KEYWORDS = ("调用链", "被谁调用", "谁调用", "调用", "链路", "上游", "下游")
+LOCAL_CALL_RULES = {
+    ("LS", "AF"),
+    ("LS", "LF"),
+    ("LF", "LF"),
+    ("LF", "AF"),
+}
+RPC_CALL_RULES = {
+    ("LS", "LS"),
+    ("LF", "LS"),
+    ("AF", "LS"),
+}
 FAILURE_INTENT_KEYWORDS = ("失败", "报错", "异常", "exception", "when_others", "goto", "svr_end", "退出", "错误")
 PROCEDURE_INTENT_KEYWORDS = ("过程", "函数", "服务", "接口", "原子", "方法")
 SQL_WRITE_HINTS = (" update ", " delete ", " insert ", " merge ", "writes_table", "清空记录池", "修改记录", "插入记录")
@@ -535,8 +546,36 @@ class SQLiteIndexer:
             "block_type_counts": grouped("SELECT block_type, COUNT(*) FROM blocks GROUP BY block_type ORDER BY COUNT(*) DESC"),
             "block_edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM block_edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
         }
+        summary.update(self._summarize_call_semantics(conn))
         conn.close()
         return summary
+
+    def _summarize_call_semantics(self, conn: sqlite3.Connection) -> dict[str, object]:
+        rows = conn.execute(
+            """
+            SELECT source_name, target_name, detail_json
+            FROM edges
+            WHERE edge_type = 'calls_procedure'
+            """
+        ).fetchall()
+        call_kind_counts: Counter[str] = Counter()
+        call_rule_counts: Counter[str] = Counter()
+
+        for row in rows:
+            detail = _json_loads(str(row["detail_json"]))
+            semantic = _coerce_call_semantics(
+                detail,
+                source_name=str(row["source_name"]),
+                target_name=str(row["target_name"]),
+            )
+            call_kind_counts[str(semantic["call_kind"])] += 1
+            if semantic["call_rule"]:
+                call_rule_counts[str(semantic["call_rule"])] += 1
+
+        return {
+            "call_kind_counts": dict(call_kind_counts),
+            "call_rule_counts": dict(call_rule_counts),
+        }
 
     def _metadata(self, conn: sqlite3.Connection, key: str) -> str | None:
         row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
@@ -1285,6 +1324,12 @@ class SQLiteIndexer:
             )
 
         if statement.kind == "call" and statement.name:
+            call_detail = {
+                "tag": statement.tag,
+                "line_start": statement.line_start,
+                "line_end": statement.line_end,
+                **_classify_call_semantics(unit.name, statement.name),
+            }
             self._insert_edge(
                 conn,
                 file_id=file_id,
@@ -1296,7 +1341,7 @@ class SQLiteIndexer:
                 source_name=unit.name,
                 target_name=statement.name,
                 target_kind="procedure",
-                detail={"tag": statement.tag, "line_start": statement.line_start, "line_end": statement.line_end},
+                detail=call_detail,
             )
             edge_counter["calls_procedure"] += 1
 
@@ -2595,34 +2640,25 @@ class SQLiteIndexer:
         related_limit: int,
     ) -> dict[str, object]:
         aliases = self._procedure_aliases(conn, procedure_id=procedure_id, procedure_name=procedure_name)
-        outgoing_calls = [
-            self._resolve_procedure_name(conn, str(row["target_name"]))
-            for row in conn.execute(
-                """
-                SELECT DISTINCT target_name
-                FROM edges
-                WHERE procedure_id = ? AND edge_type = 'calls_procedure'
-                ORDER BY target_name
-                LIMIT ?
-                """,
-                (procedure_id, related_limit),
-            ).fetchall()
-        ]
-        outgoing_calls = _dedupe_strings(outgoing_calls)
+        outgoing_call_edges = self._fetch_related_call_edges(
+            conn,
+            procedure_id=procedure_id,
+            procedure_name=procedure_name,
+            aliases=aliases,
+            direction="outgoing",
+            limit=related_limit,
+        )
+        outgoing_calls = [str(item["procedure_name"]) for item in outgoing_call_edges]
 
-        incoming_callers = [
-            str(row["source_name"])
-            for row in conn.execute(
-                f"""
-                SELECT DISTINCT source_name
-                FROM edges
-                WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in aliases)})
-                ORDER BY source_name
-                LIMIT ?
-                """,
-                (*aliases, related_limit),
-            ).fetchall()
-        ]
+        incoming_caller_edges = self._fetch_related_call_edges(
+            conn,
+            procedure_id=procedure_id,
+            procedure_name=procedure_name,
+            aliases=aliases,
+            direction="incoming",
+            limit=related_limit,
+        )
+        incoming_callers = [str(item["procedure_name"]) for item in incoming_caller_edges]
 
         related_tables = [
             {
@@ -2696,6 +2732,8 @@ class SQLiteIndexer:
         return {
             "outgoing_calls": outgoing_calls,
             "incoming_callers": incoming_callers,
+            "outgoing_call_edges": outgoing_call_edges,
+            "incoming_caller_edges": incoming_caller_edges,
             "related_tables": related_tables,
             "related_actions": related_actions,
             "control_flow": control_flow,
@@ -2703,6 +2741,71 @@ class SQLiteIndexer:
             "two_hop_incoming": two_hop_incoming,
             "related_procedures": related_procedures,
         }
+
+    def _fetch_related_call_edges(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_id: int,
+        procedure_name: str,
+        aliases: tuple[str, ...],
+        direction: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        if direction == "outgoing":
+            rows = conn.execute(
+                """
+                SELECT DISTINCT target_name, detail_json
+                FROM edges
+                WHERE procedure_id = ? AND edge_type = 'calls_procedure'
+                ORDER BY target_name
+                LIMIT ?
+                """,
+                (procedure_id, limit),
+            ).fetchall()
+            items: list[dict[str, object]] = []
+            seen_names: set[str] = set()
+            for row in rows:
+                target_name = self._resolve_procedure_name(conn, str(row["target_name"]))
+                if target_name in seen_names:
+                    continue
+                seen_names.add(target_name)
+                detail = _json_loads(str(row["detail_json"]))
+                semantic = _coerce_call_semantics(detail, source_name=procedure_name, target_name=target_name)
+                items.append(
+                    {
+                        "procedure_name": target_name,
+                        **semantic,
+                    }
+                )
+            return items
+
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT source_name, detail_json
+            FROM edges
+            WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in aliases)})
+            ORDER BY source_name
+            LIMIT ?
+            """,
+            (*aliases, limit),
+        ).fetchall()
+        items = []
+        seen_names: set[str] = set()
+        for row in rows:
+            source_name = str(row["source_name"])
+            if source_name in seen_names:
+                continue
+            seen_names.add(source_name)
+            detail = _json_loads(str(row["detail_json"]))
+            semantic = _coerce_call_semantics(detail, source_name=source_name, target_name=procedure_name)
+            items.append(
+                {
+                    "procedure_name": source_name,
+                    **semantic,
+                }
+            )
+        return items
 
     def _fetch_call_chain_paths(
         self,
@@ -2941,9 +3044,19 @@ class SQLiteIndexer:
                         f"Covering block: {item['block_type']} [{item['line_start']}-{item['line_end']}] "
                         f"{item['summary_text']}{suffix}".strip()
                     )
-            if related["outgoing_calls"]:
+            if related["outgoing_call_edges"]:
+                lines.append(
+                    "Related calls: "
+                    + ", ".join(_format_call_edge_label(item) for item in related["outgoing_call_edges"])
+                )
+            elif related["outgoing_calls"]:
                 lines.append(f"Related calls: {', '.join(related['outgoing_calls'])}")
-            if related["incoming_callers"]:
+            if related["incoming_caller_edges"]:
+                lines.append(
+                    "Incoming callers: "
+                    + ", ".join(_format_call_edge_label(item) for item in related["incoming_caller_edges"])
+                )
+            elif related["incoming_callers"]:
                 lines.append(f"Incoming callers: {', '.join(related['incoming_callers'])}")
             if related["related_tables"]:
                 table_desc = ", ".join(
@@ -4087,6 +4200,70 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
     }
 
 
+def _call_prefix(name: str | None) -> str | None:
+    if not name:
+        return None
+    stem = str(name).split("_", 1)[0].strip().upper()
+    return stem or None
+
+
+def _classify_call_semantics(source_name: str, target_name: str) -> dict[str, object]:
+    source_prefix = _call_prefix(source_name)
+    target_prefix = _call_prefix(target_name)
+    call_rule = f"{source_prefix}->{target_prefix}" if source_prefix and target_prefix else None
+
+    if source_prefix and target_prefix and (source_prefix, target_prefix) in LOCAL_CALL_RULES:
+        return {
+            "source_prefix": source_prefix,
+            "target_prefix": target_prefix,
+            "call_rule": call_rule,
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用",
+        }
+
+    if source_prefix and target_prefix and (source_prefix, target_prefix) in RPC_CALL_RULES:
+        return {
+            "source_prefix": source_prefix,
+            "target_prefix": target_prefix,
+            "call_rule": call_rule,
+            "call_kind": "rpc_call",
+            "call_label": "系统间RPC调用",
+        }
+
+    return {
+        "source_prefix": source_prefix,
+        "target_prefix": target_prefix,
+        "call_rule": call_rule,
+        "call_kind": "unknown_call_kind",
+        "call_label": "未归类调用",
+    }
+
+
+def _coerce_call_semantics(detail: dict[str, object], *, source_name: str, target_name: str) -> dict[str, object]:
+    semantic = _classify_call_semantics(source_name, target_name)
+    semantic.update(
+        {
+            "source_prefix": detail.get("source_prefix") or semantic["source_prefix"],
+            "target_prefix": detail.get("target_prefix") or semantic["target_prefix"],
+            "call_rule": detail.get("call_rule") or semantic["call_rule"],
+            "call_kind": detail.get("call_kind") or semantic["call_kind"],
+            "call_label": detail.get("call_label") or semantic["call_label"],
+        }
+    )
+    return semantic
+
+
+def _format_call_edge_label(item: dict[str, object]) -> str:
+    procedure_name = str(item["procedure_name"])
+    call_label = str(item.get("call_label") or "")
+    call_rule = str(item.get("call_rule") or "")
+    if call_label and call_rule:
+        return f"{procedure_name}({call_label} {call_rule})"
+    if call_label:
+        return f"{procedure_name}({call_label})"
+    return procedure_name
+
+
 def _maybe_int(value: object) -> int | None:
     if value is None:
         return None
@@ -4112,6 +4289,16 @@ def _paths_match(left: str | Path, right: str | Path) -> bool:
 
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_loads(value: str) -> dict[str, object]:
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(loaded, dict):
+        return loaded
+    return {}
 
 
 def _truncate_text(value: str, limit: int) -> str:

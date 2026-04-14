@@ -91,6 +91,33 @@
           "AF_CRTPUB_ACCTASSURE_GET",
           "AF_CRTPUB_ASSET_PRICE_GET"
         ],
+        "outgoing_call_edges": [],
+        "incoming_caller_edges": [
+          {
+            "procedure_name": "AF_CBPPUB_ISSUEAMOUNT_GET2",
+            "source_prefix": "AF",
+            "target_prefix": "AF",
+            "call_rule": "AF->AF",
+            "call_kind": "unknown_call_kind",
+            "call_label": "未归类调用"
+          },
+          {
+            "procedure_name": "AF_CRTPUB_ACCTASSURE_GET",
+            "source_prefix": "AF",
+            "target_prefix": "AF",
+            "call_rule": "AF->AF",
+            "call_kind": "unknown_call_kind",
+            "call_label": "未归类调用"
+          },
+          {
+            "procedure_name": "AF_CRTPUB_ASSET_PRICE_GET",
+            "source_prefix": "AF",
+            "target_prefix": "AF",
+            "call_rule": "AF->AF",
+            "call_kind": "unknown_call_kind",
+            "call_label": "未归类调用"
+          }
+        ],
         "related_tables": [
           {
             "name": "usps_stkcode",
@@ -221,13 +248,39 @@
       "recovered_blocks": [],
       "related_context": {
         "outgoing_calls": [
-          "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET",
-          "LF_CONVERTTRANSPUB_STKCODE_GET",
-          "LF_SYSARGPUB_SYSARGGET"
+          "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET"
         ],
         "incoming_callers": [
           "LF_SESPRICE_CPXXUPDATE",
           "LF_SESPRICE_STKCODE_UPDATE"
+        ],
+        "outgoing_call_edges": [
+          {
+            "procedure_name": "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET",
+            "source_prefix": "LF",
+            "target_prefix": "LF",
+            "call_rule": "LF->LF",
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用"
+          }
+        ],
+        "incoming_caller_edges": [
+          {
+            "procedure_name": "LF_SESPRICE_CPXXUPDATE",
+            "source_prefix": "LF",
+            "target_prefix": "LF",
+            "call_rule": "LF->LF",
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用"
+          },
+          {
+            "procedure_name": "LF_SESPRICE_STKCODE_UPDATE",
+            "source_prefix": "LF",
+            "target_prefix": "LF",
+            "call_rule": "LF->LF",
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用"
+          }
         ],
         "related_tables": [],
         "related_actions": [
@@ -295,24 +348,24 @@
             "summary_text": "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET | control_block | conditions: @main_branch_no == 0 | vars: @init_date, @main_branch_no, @table_name, @column_str, @where_str | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; 20180620 zouyb mod 增加counter_type获取 修改单：M201806200611"
           },
           {
-            "relation_type": "calls",
-            "procedure_name": "LF_CONVERTTRANSPUB_STKCODE_GET",
-            "chinese_name": "LF_代码转换公用_证券代码获取",
-            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/converttranspub/LF_CONVERTTRANSPUB_STKCODE_GET.uftfunction",
+            "relation_type": "called_by",
+            "procedure_name": "LF_SESPRICE_CPXXUPDATE",
+            "chinese_name": "LF_证券行情_产品信息更新",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SESPRICE_CPXXUPDATE.uftfunction",
             "line_start": 2,
-            "line_end": 4,
+            "line_end": 10,
             "chunk_type": "control_block",
-            "summary_text": "LF_CONVERTTRANSPUB_STKCODE_GET | control_block | conditions: hs_isnull_s(@stock_code) != 0, hs_isnull_s(@exchange_type) == 0 || hs_strcmp(@exchange_type, \"0\") == 0 | vars: @stock_code, @exchange_type"
+            "summary_text": "LF_SESPRICE_CPXXUPDATE | control_block | conditions: hs_strstr(\"9UXYauI\", @stock_type) > 0 | vars: @stock_type, @bondinv_flag, @stkcode_ctrlstr[5] | notes: 20220804 zhangpf mod 支持更新A股和存托凭证代码的尚未盈利及存在投票权差异标志 修改单：M202207300004; 20190410 ligq    mod 支持更新科创板代码中的尚未盈利及存在投票权差异标志 修改单：M201904041193"
           },
           {
-            "relation_type": "calls",
-            "procedure_name": "LF_SYSARGPUB_SYSARGGET",
-            "chinese_name": "LF_证券行情_系统参数获取",
-            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SYSARGPUB_SYSARGGET.uftfunction",
-            "line_start": 2,
-            "line_end": 14,
-            "chunk_type": "action_block",
-            "summary_text": "LF_SYSARGPUB_SYSARGGET | action_block | actions: 查询缓存表数据单行, 处理失败, EXCEPTION, WHEN_NO_DATA_FOUND | targets: select init_date,sys_status,sys_name,branch_no\n                    from upbs_arg\n                   limit 1, ERR_USER_SYSARG_NOTEXISTS | vars: @sql_row_count, @init_date, @sys_status, @sys_name, @main_branch_no | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; <M>[通用SQL执行][select init_date,sys_status,sys_name,branch_no"
+            "relation_type": "called_by",
+            "procedure_name": "LF_SESPRICE_STKCODE_UPDATE",
+            "chinese_name": "LF_证券行情_证券代码更新",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SESPRICE_STKCODE_UPDATE.uftfunction",
+            "line_start": 4,
+            "line_end": 7,
+            "chunk_type": "assignment_block",
+            "summary_text": "LF_SESPRICE_STKCODE_UPDATE | assignment_block | vars: @stock_type_source_t, @stock_type_source, @sync_type | notes: 20241029 ruansh mod 支持上海市场要约收购新fjyYYYYMMDD文件传入时，正股代码信息不处理，当remark字段为770开头的6位申报编号，且业务包数据字段不为空时进行处理要约信息表 修改单：T202410293714"
           }
         ]
       }
@@ -365,12 +418,30 @@
       "recovered_blocks": [],
       "related_context": {
         "outgoing_calls": [
-          "LF_CONVERTTRANSPUB_TRANSACTION_NO_GET",
-          "LF_CONVERTTRANSPUB_MDB_GET",
-          "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET"
+          "LF_CONVERTTRANSPUB_TRANSACTION_NO_GET"
         ],
         "incoming_callers": [
           "LS_SESPRICE_PRICE_UPDATE"
+        ],
+        "outgoing_call_edges": [
+          {
+            "procedure_name": "LF_CONVERTTRANSPUB_TRANSACTION_NO_GET",
+            "source_prefix": "LF",
+            "target_prefix": "LF",
+            "call_rule": "LF->LF",
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用"
+          }
+        ],
+        "incoming_caller_edges": [
+          {
+            "procedure_name": "LS_SESPRICE_PRICE_UPDATE",
+            "source_prefix": "LS",
+            "target_prefix": "LF",
+            "call_rule": "LS->LF",
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用"
+          }
         ],
         "related_tables": [
           {
@@ -440,28 +511,18 @@
             "summary_text": "LF_CONVERTTRANSPUB_TRANSACTION_NO_GET | action_block | actions: 获取微秒时间戳 | targets: @transaction_no | vars: @transaction_no"
           },
           {
-            "relation_type": "calls",
-            "procedure_name": "LF_CONVERTTRANSPUB_MDB_GET",
-            "chinese_name": "LF_代码转换公用_内存表获取",
-            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/converttranspub/LF_CONVERTTRANSPUB_MDB_GET.uftfunction",
+            "relation_type": "called_by",
+            "procedure_name": "LS_SESPRICE_PRICE_UPDATE",
+            "chinese_name": "LS_证券行情_行情更新",
+            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LS_SESPRICE_PRICE_UPDATE.uftservice",
             "line_start": 2,
-            "line_end": 7,
+            "line_end": 4,
             "chunk_type": "control_block",
-            "summary_text": "LF_CONVERTTRANSPUB_MDB_GET | control_block | conditions: hs_isnull_s(@where_str) != 0 | vars: @sql_str, @where_str, @where_str_t | notes: 20251005 wangyq mod 内部字符串变量初始化为空格 修改单：T202509293457"
-          },
-          {
-            "relation_type": "calls",
-            "procedure_name": "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET",
-            "chinese_name": "LF_代码转换公用_系统配置信息获取",
-            "file_path": "/Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/converttranspub/LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET.uftfunction",
-            "line_start": 2,
-            "line_end": 13,
-            "chunk_type": "control_block",
-            "summary_text": "LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET | control_block | conditions: @main_branch_no == 0 | vars: @init_date, @main_branch_no, @table_name, @column_str, @where_str | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; 20180620 zouyb mod 增加counter_type获取 修改单：M201806200611"
+            "summary_text": "LS_SESPRICE_PRICE_UPDATE | control_block | actions: 获取仲裁状态 | targets: @core_status | conditions: @core_status != 4 && @core_status != 2 | vars: @core_status | notes: 节点为主机时，行情转入uarg执行数据更新"
           }
         ]
       }
     }
   ],
-  "llm_context": "Question: 哪些流程调用证券代码获取\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: AF_SYSARGPUB_STKCODE_GET\nFile: /Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sysargpub/AF_SYSARGPUB_STKCODE_GET.uftatomfunction\nLines: 2-8\nMatched text: AF_系统参数公用_证券代码获取\nMatch source: procedure_fts\nRetrieval source: fts_procedure\nWhy relevant: fts_hit, token_overlap=1/1, focus_match_in_hit=证券代码获取, intent_call_chain_procedure, call_chain_one_hop=AF_CBPPUB_ISSUEAMOUNT_GET2,AS_SYSARGPUB_STKCODE_GET,LF_SESPRICE_INCOMECODE_UPDATE, call_chain_two_hop=LF_CONVERTTRANSPUB_STKCODE_GET, call_chain_weight=1.50\nSnippet:\nL2:   if(hs_isnull_s(@stock_code) != 0)\nL4:     if(hs_isnull_s(@exchange_type) == 0 || hs_strcmp(@exchange_type, \"0\") == 0)\nL6:       //20240916 xush mod 支持先获取上海和深圳市场代码，获取不到才遍历全表,防止全表遍历耗费性能  修改单:T202409144188\nL7:       <Z>[获取记录][usps_stkcode(idx_uft_stkcode)][stock_code = @stock_code, exchange_type = \"1\"]\nL8:       [记录为空][usps_stkcode]\nIncoming callers: AF_CBPPUB_ISSUEAMOUNT_GET2, AF_CRTPUB_ACCTASSURE_GET, AF_CRTPUB_ASSET_PRICE_GET\nRelated tables: reads_table:usps_stkcode\nRelated actions: 业务报错返回, 获取记录, 记录为空\nTwo-hop incoming chain: AF_CBPPUB_ETF_CREATION_CHECK -> AF_CBPPUB_ISSUEAMOUNT_GET2, AF_CRTPUB_ASSURECODE_GET -> AF_CRTPUB_ACCTASSURE_GET, AF_CRTPUB_FINCOMPACT_STOCKASSET_MINUS -> AF_CRTPUB_ASSET_PRICE_GET\nRelated procedure (called_by): AF_CBPPUB_ISSUEAMOUNT_GET2 [2-13] AF_CBPPUB_ISSUEAMOUNT_GET2 | assignment_block | vars: @str_config_3191_tmp, @str_config_3191, @stkholder_ctrlstr_tmp, @stkholder_ctrlstr | notes: 20140805 吴振魁 add || @etfcode_type == '4')，深圳切换为货币ETF后，一二级互通 单号：20140723026; 20140609 刘晓春 add 增加hs_strcmp(@entrust_prop,CNST_ENTRUSTPROP_APPLY) != 0 条件判断 单号：20140604015\nRelated procedure (called_by): AF_CRTPUB_ACCTASSURE_GET [2-6] AF_CRTPUB_ACCTASSURE_GET | control_block | actions: 遍历记录开始 | targets: ucrt_acct_assure_code | vars: @ucrt_fund_account.fund_account | notes: 20240909 liuchuang add 如果该客户没有个人担保资格信息直接返回  任务单号:T202409064539; 20250730 xush mod 支持ART索引调整\nRelated procedure (called_by): AF_CRTPUB_ASSET_PRICE_GET [2-14] AF_CRTPUB_ASSET_PRICE_GET | call_flow | actions: AF_系统参数公用_证券代码获取, 处理成功, AF_系统参数公用_证券行情信息优化获取 | targets: AF_系统参数公用_证券代码获取, AF_系统参数公用_证券行情信息优化获取 | vars: @usps_stkcode, @asset_price, @store_unit, @usps_stkcode.store_unit, @stock_type, @usps_stkcode.stock_type | notes: 20250226 ruansh mod asset_price不再从stkcode表中获取 修改单：T202412264586; @asset_price = @usps_stkcode.asset_price;\n\n[Evidence 2]\nProcedure: LF_SESPRICE_STKCODE_UPDATEPREPARE\nFile: /Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SESPRICE_STKCODE_UPDATEPREPARE.uftfunction\nLines: 368-369\nMatched text: LF_SESPRICE_STKCODE_UPDATEPREPARE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @relative_code, @exchange_type\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1, focus_match_in_hit=证券代码获取, multi_source_match=2, intent_call_chain, intent_call_chain_focus, call_chain_one_hop=AF_SYSARGPUB_STKCODE_GET,LF_CONVERTTRANSPUB_STKCODE_GET, call_chain_two_hop=AF_CBPPUB_ISSUEAMOUNT_GET2,AS_SYSARGPUB_STKCODE_GET,LF_SESPRICE_INCOMECODE_UPDATE, call_chain_weight=1.50\nSnippet:\nL368:           <M>[LF_代码转换公用_证券代码获取][exchange_type = \" \", stock_code = @relative_code][exchange_type_t = @exchange_type]\nL369:           [处理成功]\nChunk type: call_flow\nChunk summary: LF_SESPRICE_STKCODE_UPDATEPREPARE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @relative_code, @exchange_type\nRelated calls: LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET, LF_CONVERTTRANSPUB_STKCODE_GET, LF_SYSARGPUB_SYSARGGET\nIncoming callers: LF_SESPRICE_CPXXUPDATE, LF_SESPRICE_STKCODE_UPDATE\nRelated actions: 处理成功, 继续执行\nTwo-hop outgoing chain: AF_SYSARGPUB_SYSCONFIG_GET -> AF_SYSARGPUB_SYSARGGET, LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET -> LF_CONVERTTRANSPUB_LOCALCACHE_GET\nTwo-hop incoming chain: LS_SESPRICE_CPXXUPDATE -> LF_SESPRICE_CPXXUPDATE, LS_SESPRICE_STKCODE_UPDATE -> LF_SESPRICE_STKCODE_UPDATE\nRelated procedure (calls): LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET [2-13] LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET | control_block | conditions: @main_branch_no == 0 | vars: @init_date, @main_branch_no, @table_name, @column_str, @where_str | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; 20180620 zouyb mod 增加counter_type获取 修改单：M201806200611\nRelated procedure (calls): LF_CONVERTTRANSPUB_STKCODE_GET [2-4] LF_CONVERTTRANSPUB_STKCODE_GET | control_block | conditions: hs_isnull_s(@stock_code) != 0, hs_isnull_s(@exchange_type) == 0 || hs_strcmp(@exchange_type, \"0\") == 0 | vars: @stock_code, @exchange_type\nRelated procedure (calls): LF_SYSARGPUB_SYSARGGET [2-14] LF_SYSARGPUB_SYSARGGET | action_block | actions: 查询缓存表数据单行, 处理失败, EXCEPTION, WHEN_NO_DATA_FOUND | targets: select init_date,sys_status,sys_name,branch_no\n                    from upbs_arg\n                   limit 1, ERR_USER_SYSARG_NOTEXISTS | vars: @sql_row_count, @init_date, @sys_status, @sys_name, @main_branch_no | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; <M>[通用SQL执行][select init_date,sys_status,sys_name,branch_no\n\n[Evidence 3]\nProcedure: LF_SESPRICE_PRICE_UPDATE\nFile: /Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SESPRICE_PRICE_UPDATE.uftfunction\nLines: 21-23\nMatched text: LF_SESPRICE_PRICE_UPDATE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @stock_code, @exchange_type_t\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1, focus_match_in_hit=证券代码获取, multi_source_match=2, intent_call_chain, intent_call_chain_focus, call_chain_one_hop=AF_SYSARGPUB_STKCODE_GET,LF_CONVERTTRANSPUB_STKCODE_GET, call_chain_two_hop=AF_CBPPUB_ISSUEAMOUNT_GET2,AS_SYSARGPUB_STKCODE_GET,LF_SESPRICE_INCOMECODE_UPDATE, call_chain_weight=1.50\nSnippet:\nL21:         <M>[LF_代码转换公用_证券代码获取][stock_code = @stock_code,\n                                             exchange_type = \" \"][exchange_type_t = @exchange_type_t]\nL23:         [处理成功]\nChunk type: call_flow\nChunk summary: LF_SESPRICE_PRICE_UPDATE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @stock_code, @exchange_type_t\nRelated calls: LF_CONVERTTRANSPUB_TRANSACTION_NO_GET, LF_CONVERTTRANSPUB_MDB_GET, LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET\nIncoming callers: LS_SESPRICE_PRICE_UPDATE\nRelated tables: reads_table:uopt_underly_code, writes_table:uopt_underly_code, reads_table:usps_exch_arg\nRelated actions: EXCEPTION, WHEN_DUP_VAL_ON_INDEX, WHEN_OTHERS\nTwo-hop outgoing chain: AF_SYSARGPUB_DEBTINTEREST_CAL -> AF_SYSARGPUB_DEBINTEREST_GET, AF_SYSARGPUB_DEBTINTEREST_CAL -> AF_SYSARGPUB_SYSCONFIG_GET, AF_SYSARGPUB_DEBTINTEREST_CAL -> AF_SYSARGPUB_STKCODE_GET\nRelated procedure (calls): LF_CONVERTTRANSPUB_TRANSACTION_NO_GET [2-2] LF_CONVERTTRANSPUB_TRANSACTION_NO_GET | action_block | actions: 获取微秒时间戳 | targets: @transaction_no | vars: @transaction_no\nRelated procedure (calls): LF_CONVERTTRANSPUB_MDB_GET [2-7] LF_CONVERTTRANSPUB_MDB_GET | control_block | conditions: hs_isnull_s(@where_str) != 0 | vars: @sql_str, @where_str, @where_str_t | notes: 20251005 wangyq mod 内部字符串变量初始化为空格 修改单：T202509293457\nRelated procedure (calls): LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET [2-13] LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET | control_block | conditions: @main_branch_no == 0 | vars: @init_date, @main_branch_no, @table_name, @column_str, @where_str | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; 20180620 zouyb mod 增加counter_type获取 修改单：M201806200611"
+  "llm_context": "Question: 哪些流程调用证券代码获取\n\nUse only the following indexed evidence when answering.\n\n[Evidence 1]\nProcedure: AF_SYSARGPUB_STKCODE_GET\nFile: /Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sysargpub/AF_SYSARGPUB_STKCODE_GET.uftatomfunction\nLines: 2-8\nMatched text: AF_系统参数公用_证券代码获取\nMatch source: procedure_fts\nRetrieval source: fts_procedure\nWhy relevant: fts_hit, token_overlap=1/1, focus_match_in_hit=证券代码获取, intent_call_chain_procedure, call_chain_one_hop=AF_CBPPUB_ISSUEAMOUNT_GET2,AS_SYSARGPUB_STKCODE_GET,LF_SESPRICE_INCOMECODE_UPDATE, call_chain_two_hop=LF_CONVERTTRANSPUB_STKCODE_GET, call_chain_weight=1.50\nSnippet:\nL2:   if(hs_isnull_s(@stock_code) != 0)\nL4:     if(hs_isnull_s(@exchange_type) == 0 || hs_strcmp(@exchange_type, \"0\") == 0)\nL6:       //20240916 xush mod 支持先获取上海和深圳市场代码，获取不到才遍历全表,防止全表遍历耗费性能  修改单:T202409144188\nL7:       <Z>[获取记录][usps_stkcode(idx_uft_stkcode)][stock_code = @stock_code, exchange_type = \"1\"]\nL8:       [记录为空][usps_stkcode]\nIncoming callers: AF_CBPPUB_ISSUEAMOUNT_GET2(未归类调用 AF->AF), AF_CRTPUB_ACCTASSURE_GET(未归类调用 AF->AF), AF_CRTPUB_ASSET_PRICE_GET(未归类调用 AF->AF)\nRelated tables: reads_table:usps_stkcode\nRelated actions: 业务报错返回, 获取记录, 记录为空\nTwo-hop incoming chain: AF_CBPPUB_ETF_CREATION_CHECK -> AF_CBPPUB_ISSUEAMOUNT_GET2, AF_CRTPUB_ASSURECODE_GET -> AF_CRTPUB_ACCTASSURE_GET, AF_CRTPUB_FINCOMPACT_STOCKASSET_MINUS -> AF_CRTPUB_ASSET_PRICE_GET\nRelated procedure (called_by): AF_CBPPUB_ISSUEAMOUNT_GET2 [2-13] AF_CBPPUB_ISSUEAMOUNT_GET2 | assignment_block | vars: @str_config_3191_tmp, @str_config_3191, @stkholder_ctrlstr_tmp, @stkholder_ctrlstr | notes: 20140805 吴振魁 add || @etfcode_type == '4')，深圳切换为货币ETF后，一二级互通 单号：20140723026; 20140609 刘晓春 add 增加hs_strcmp(@entrust_prop,CNST_ENTRUSTPROP_APPLY) != 0 条件判断 单号：20140604015\nRelated procedure (called_by): AF_CRTPUB_ACCTASSURE_GET [2-6] AF_CRTPUB_ACCTASSURE_GET | control_block | actions: 遍历记录开始 | targets: ucrt_acct_assure_code | vars: @ucrt_fund_account.fund_account | notes: 20240909 liuchuang add 如果该客户没有个人担保资格信息直接返回  任务单号:T202409064539; 20250730 xush mod 支持ART索引调整\nRelated procedure (called_by): AF_CRTPUB_ASSET_PRICE_GET [2-14] AF_CRTPUB_ASSET_PRICE_GET | call_flow | actions: AF_系统参数公用_证券代码获取, 处理成功, AF_系统参数公用_证券行情信息优化获取 | targets: AF_系统参数公用_证券代码获取, AF_系统参数公用_证券行情信息优化获取 | vars: @usps_stkcode, @asset_price, @store_unit, @usps_stkcode.store_unit, @stock_type, @usps_stkcode.stock_type | notes: 20250226 ruansh mod asset_price不再从stkcode表中获取 修改单：T202412264586; @asset_price = @usps_stkcode.asset_price;\n\n[Evidence 2]\nProcedure: LF_SESPRICE_STKCODE_UPDATEPREPARE\nFile: /Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SESPRICE_STKCODE_UPDATEPREPARE.uftfunction\nLines: 368-369\nMatched text: LF_SESPRICE_STKCODE_UPDATEPREPARE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @relative_code, @exchange_type\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1, focus_match_in_hit=证券代码获取, multi_source_match=2, intent_call_chain, intent_call_chain_focus, call_chain_one_hop=AF_SYSARGPUB_STKCODE_GET,LF_CONVERTTRANSPUB_STKCODE_GET, call_chain_two_hop=AF_CBPPUB_ISSUEAMOUNT_GET2,AS_SYSARGPUB_STKCODE_GET,LF_SESPRICE_INCOMECODE_UPDATE, call_chain_weight=1.50\nSnippet:\nL368:           <M>[LF_代码转换公用_证券代码获取][exchange_type = \" \", stock_code = @relative_code][exchange_type_t = @exchange_type]\nL369:           [处理成功]\nChunk type: call_flow\nChunk summary: LF_SESPRICE_STKCODE_UPDATEPREPARE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @relative_code, @exchange_type\nRelated calls: LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET(本地函数调用 LF->LF)\nIncoming callers: LF_SESPRICE_CPXXUPDATE(本地函数调用 LF->LF), LF_SESPRICE_STKCODE_UPDATE(本地函数调用 LF->LF)\nRelated actions: 处理成功, 继续执行\nTwo-hop outgoing chain: AF_SYSARGPUB_SYSCONFIG_GET -> AF_SYSARGPUB_SYSARGGET, LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET -> LF_CONVERTTRANSPUB_LOCALCACHE_GET\nTwo-hop incoming chain: LS_SESPRICE_CPXXUPDATE -> LF_SESPRICE_CPXXUPDATE, LS_SESPRICE_STKCODE_UPDATE -> LF_SESPRICE_STKCODE_UPDATE\nRelated procedure (calls): LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET [2-13] LF_CONVERTTRANSPUB_PUB_SYSCONFIG_GET | control_block | conditions: @main_branch_no == 0 | vars: @init_date, @main_branch_no, @table_name, @column_str, @where_str | notes: 20251103 gaozq27559 mod upbs_arg改造为数据源是uarg库的缓存表. 修改单:T202510305942; 20180620 zouyb mod 增加counter_type获取 修改单：M201806200611\nRelated procedure (called_by): LF_SESPRICE_CPXXUPDATE [2-10] LF_SESPRICE_CPXXUPDATE | control_block | conditions: hs_strstr(\"9UXYauI\", @stock_type) > 0 | vars: @stock_type, @bondinv_flag, @stkcode_ctrlstr[5] | notes: 20220804 zhangpf mod 支持更新A股和存托凭证代码的尚未盈利及存在投票权差异标志 修改单：M202207300004; 20190410 ligq    mod 支持更新科创板代码中的尚未盈利及存在投票权差异标志 修改单：M201904041193\nRelated procedure (called_by): LF_SESPRICE_STKCODE_UPDATE [4-7] LF_SESPRICE_STKCODE_UPDATE | assignment_block | vars: @stock_type_source_t, @stock_type_source, @sync_type | notes: 20241029 ruansh mod 支持上海市场要约收购新fjyYYYYMMDD文件传入时，正股代码信息不处理，当remark字段为770开头的6位申报编号，且业务包数据字段不为空时进行处理要约信息表 修改单：T202410293714\n\n[Evidence 3]\nProcedure: LF_SESPRICE_PRICE_UPDATE\nFile: /Users/songzuoqiang/Documents/agent/code/uarg_codes/uftbusiness/price/sesprice/LF_SESPRICE_PRICE_UPDATE.uftfunction\nLines: 21-23\nMatched text: LF_SESPRICE_PRICE_UPDATE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @stock_code, @exchange_type_t\nMatch source: chunk_summary\nRetrieval source: fts_chunk\nWhy relevant: fts_hit, token_overlap=1/1, focus_match_in_hit=证券代码获取, multi_source_match=2, intent_call_chain, intent_call_chain_focus, call_chain_one_hop=AF_SYSARGPUB_STKCODE_GET,LF_CONVERTTRANSPUB_STKCODE_GET, call_chain_two_hop=AF_CBPPUB_ISSUEAMOUNT_GET2,AS_SYSARGPUB_STKCODE_GET,LF_SESPRICE_INCOMECODE_UPDATE, call_chain_weight=1.50\nSnippet:\nL21:         <M>[LF_代码转换公用_证券代码获取][stock_code = @stock_code,\n                                             exchange_type = \" \"][exchange_type_t = @exchange_type_t]\nL23:         [处理成功]\nChunk type: call_flow\nChunk summary: LF_SESPRICE_PRICE_UPDATE | call_flow | actions: LF_代码转换公用_证券代码获取, 处理成功 | targets: LF_代码转换公用_证券代码获取 | vars: @stock_code, @exchange_type_t\nRelated calls: LF_CONVERTTRANSPUB_TRANSACTION_NO_GET(本地函数调用 LF->LF)\nIncoming callers: LS_SESPRICE_PRICE_UPDATE(本地函数调用 LS->LF)\nRelated tables: reads_table:uopt_underly_code, writes_table:uopt_underly_code, reads_table:usps_exch_arg\nRelated actions: EXCEPTION, WHEN_DUP_VAL_ON_INDEX, WHEN_OTHERS\nTwo-hop outgoing chain: AF_SYSARGPUB_DEBTINTEREST_CAL -> AF_SYSARGPUB_DEBINTEREST_GET, AF_SYSARGPUB_DEBTINTEREST_CAL -> AF_SYSARGPUB_SYSCONFIG_GET, AF_SYSARGPUB_DEBTINTEREST_CAL -> AF_SYSARGPUB_STKCODE_GET\nRelated procedure (calls): LF_CONVERTTRANSPUB_TRANSACTION_NO_GET [2-2] LF_CONVERTTRANSPUB_TRANSACTION_NO_GET | action_block | actions: 获取微秒时间戳 | targets: @transaction_no | vars: @transaction_no\nRelated procedure (called_by): LS_SESPRICE_PRICE_UPDATE [2-4] LS_SESPRICE_PRICE_UPDATE | control_block | actions: 获取仲裁状态 | targets: @core_status | conditions: @core_status != 4 && @core_status != 2 | vars: @core_status | notes: 节点为主机时，行情转入uarg执行数据更新"
 }

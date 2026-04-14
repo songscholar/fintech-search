@@ -107,5 +107,34 @@
     "jumps_to_exit": 548,
     "uses_component": 424,
     "defines_label": 69
+  },
+  "call_kind_counts": {
+    "local_function_call": 44486,
+    "rpc_call": 3999,
+    "unknown_call_kind": 6289
+  },
+  "call_rule_counts": {
+    "LF->LF": 24810,
+    "LS->LF": 8294,
+    "LF->LS": 3629,
+    "LF->AF": 11230,
+    "CNST->LF": 42,
+    "CSNT->LF": 14,
+    "LS->AF": 152,
+    "RS->LS": 80,
+    "AF->LS": 310,
+    "AF->AF": 2522,
+    "AS->AF": 126,
+    "LF->AS": 3306,
+    "LS->AS": 96,
+    "AF->LF": 4,
+    "AS->LS": 6,
+    "AS->LF": 68,
+    "AS->AS": 21,
+    "CNST->AF": 1,
+    "LS->LS": 60,
+    "REF->LF": 1,
+    "REF->AF": 1,
+    "CNST->LS": 1
   }
 }

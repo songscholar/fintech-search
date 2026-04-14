@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from types import SimpleNamespace
 from pathlib import Path
@@ -61,6 +62,70 @@ DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Function>
 """
 
+LS_LOCAL_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Service xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LS_测试_本地调用方" objectId="11">
+  <code><![CDATA[
+  [AF_LOCAL][][]
+  ]]></code>
+</business:Service>
+"""
+
+LF_LOCAL_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LF_测试_本地调用方" objectId="12">
+  <code><![CDATA[
+  [LF_HELPER][][]
+  ]]></code>
+</business:Function>
+"""
+
+AF_LOCAL_TARGET_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="AF_测试_本地目标" objectId="13">
+  <code><![CDATA[
+  @result = 1;
+  ]]></code>
+</business:Function>
+"""
+
+LF_HELPER_TARGET_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LF_测试_LF目标" objectId="14">
+  <code><![CDATA[
+  @result = 1;
+  ]]></code>
+</business:Function>
+"""
+
+LS_RPC_TARGET_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Service xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LS_测试_RPC目标" objectId="15">
+  <code><![CDATA[
+  @result = 1;
+  ]]></code>
+</business:Service>
+"""
+
+LS_RPC_CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Service xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LS_测试_RPC调用方" objectId="16">
+  <code><![CDATA[
+  [LS_REMOTE][][]
+  ]]></code>
+</business:Service>
+"""
+
+LF_RPC_CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LF_测试_RPC调用方" objectId="17">
+  <code><![CDATA[
+  [LS_REMOTE][][]
+  ]]></code>
+</business:Function>
+"""
+
+AF_RPC_CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="AF_测试_RPC调用方" objectId="18">
+  <code><![CDATA[
+  [LS_REMOTE][][]
+  ]]></code>
+</business:Function>
+"""
+
 
 def _write_sample_sources(tmp_path: Path) -> Path:
     source_dir = tmp_path / "src"
@@ -74,6 +139,23 @@ def _write_sample_sources(tmp_path: Path) -> Path:
 def _build_sample_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
     source_dir = _write_sample_sources(tmp_path)
     db_path = tmp_path / "index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    return indexer, db_path
+
+
+def _build_call_semantic_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
+    source_dir = tmp_path / "semantic_src"
+    source_dir.mkdir()
+    (source_dir / "LS_LOCAL.uftservice").write_text(LS_LOCAL_XML, encoding="utf-8")
+    (source_dir / "LF_LOCAL.uftfunction").write_text(LF_LOCAL_XML, encoding="utf-8")
+    (source_dir / "AF_LOCAL.uftatomfunction").write_text(AF_LOCAL_TARGET_XML, encoding="utf-8")
+    (source_dir / "LF_HELPER.uftfunction").write_text(LF_HELPER_TARGET_XML, encoding="utf-8")
+    (source_dir / "LS_REMOTE.uftservice").write_text(LS_RPC_TARGET_XML, encoding="utf-8")
+    (source_dir / "LS_RPC_CALLER.uftservice").write_text(LS_RPC_CALLER_XML, encoding="utf-8")
+    (source_dir / "LF_RPC_CALLER.uftfunction").write_text(LF_RPC_CALLER_XML, encoding="utf-8")
+    (source_dir / "AF_RPC_CALLER.uftatomfunction").write_text(AF_RPC_CALLER_XML, encoding="utf-8")
+    db_path = tmp_path / "semantic_index.db"
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     return indexer, db_path
@@ -256,6 +338,57 @@ def test_query_index_includes_block_hits_for_failure_and_sql_queries(tmp_path: P
 
     assert result["hit_count"] >= 1
     assert any(hit["hit_type"] == "block" for hit in result["hits"])
+
+
+def test_call_semantics_are_classified_in_edges_and_summary(tmp_path: Path) -> None:
+    indexer, db_path = _build_call_semantic_index(tmp_path)
+
+    conn = sqlite3.connect(db_path)
+    edge_rows = conn.execute(
+        """
+        SELECT source_name, target_name, detail_json
+        FROM edges
+        WHERE edge_type = 'calls_procedure'
+        ORDER BY source_name, target_name
+        """
+    ).fetchall()
+    conn.close()
+
+    details = {
+        (str(source_name), str(target_name)): json.loads(str(detail_json))
+        for source_name, target_name, detail_json in edge_rows
+    }
+
+    assert details[("LS_LOCAL", "AF_LOCAL")]["call_kind"] == "local_function_call"
+    assert details[("LS_LOCAL", "AF_LOCAL")]["call_rule"] == "LS->AF"
+    assert details[("LF_LOCAL", "LF_HELPER")]["call_kind"] == "local_function_call"
+    assert details[("LF_LOCAL", "LF_HELPER")]["call_rule"] == "LF->LF"
+    assert details[("LS_RPC_CALLER", "LS_REMOTE")]["call_kind"] == "rpc_call"
+    assert details[("LS_RPC_CALLER", "LS_REMOTE")]["call_rule"] == "LS->LS"
+    assert details[("LF_RPC_CALLER", "LS_REMOTE")]["call_kind"] == "rpc_call"
+    assert details[("LF_RPC_CALLER", "LS_REMOTE")]["call_rule"] == "LF->LS"
+    assert details[("AF_RPC_CALLER", "LS_REMOTE")]["call_kind"] == "rpc_call"
+    assert details[("AF_RPC_CALLER", "LS_REMOTE")]["call_rule"] == "AF->LS"
+
+    summary = indexer.summarize_db(db_path)
+    assert summary["call_kind_counts"]["local_function_call"] == 2
+    assert summary["call_kind_counts"]["rpc_call"] == 3
+    assert summary["call_rule_counts"]["LS->AF"] == 1
+    assert summary["call_rule_counts"]["LF->LF"] == 1
+    assert summary["call_rule_counts"]["LS->LS"] == 1
+    assert summary["call_rule_counts"]["LF->LS"] == 1
+    assert summary["call_rule_counts"]["AF->LS"] == 1
+
+
+def test_related_context_exposes_call_semantics_labels(tmp_path: Path) -> None:
+    indexer, db_path = _build_call_semantic_index(tmp_path)
+
+    evidence = indexer.assemble_evidence(db_path, "LS_REMOTE 被谁调用", limit=3)
+    llm_context = str(evidence["llm_context"])
+
+    assert "系统间RPC调用 LS->LS" in llm_context
+    assert "系统间RPC调用 LF->LS" in llm_context
+    assert "系统间RPC调用 AF->LS" in llm_context
 
 
 def test_query_index_includes_control_flow_hits_for_exit_labels(tmp_path: Path) -> None:

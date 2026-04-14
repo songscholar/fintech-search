@@ -144,6 +144,12 @@ python3 -m uses_indexer answer-codebase \
 - `call_chain_one_hop`
 - `call_chain_two_hop`
 - `incoming_callers`
+- `本地函数调用 / 系统间RPC调用` 标签
+
+如果 related context 里出现：
+
+- `AF_xxx(本地函数调用 LS->AF)`，表示同核心内函数调用
+- `LS_xxx(系统间RPC调用 LF->LS)`，表示更应该按跨系统 RPC 调用理解
 
 ### 场景 2：找变量赋值或执行点
 

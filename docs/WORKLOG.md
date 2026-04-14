@@ -605,6 +605,36 @@
   - 以后默认面向完整代码根目录检索
   - 避免继续误用只覆盖 `uses_codes` 的子库索引
 
+### 阶段 32：调用语义规则落库
+
+- 新增 `LS/LF/AF` 调用语义规则
+- 当前明确区分：
+  - 本地函数调用：
+    - `LS -> AF`
+    - `LS -> LF`
+    - `LF -> LF`
+    - `LF -> AF`
+  - 系统间 RPC 调用：
+    - `LS -> LS`
+    - `LF -> LS`
+    - `AF -> LS`
+- `calls_procedure` 边的 `detail_json` 现在会记录：
+  - `source_prefix`
+  - `target_prefix`
+  - `call_rule`
+  - `call_kind`
+  - `call_label`
+- `db-summary` 现在会额外输出：
+  - `call_kind_counts`
+  - `call_rule_counts`
+- `assemble-evidence` / `answer-codebase` 的 related context 现在会带调用语义标签
+- 新增文档：
+  - `docs/CALL_SEMANTICS.md`
+- 新增测试，覆盖：
+  - 本地函数调用分类
+  - RPC 调用分类
+  - 调用语义在 summary 和 evidence 中可见
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题

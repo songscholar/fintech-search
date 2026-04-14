@@ -120,6 +120,19 @@
 - `target_kind`
 - `detail_json`
 
+其中 `calls_procedure` 的 `detail_json` 现在还会记录调用语义：
+
+- `source_prefix`
+- `target_prefix`
+- `call_rule`
+- `call_kind`
+- `call_label`
+
+例如：
+
+- `LS -> AF` 记为 `local_function_call`
+- `LF -> LS` 记为 `rpc_call`
+
 ### `chunks`
 
 按过程内语义块切出来的检索单元。

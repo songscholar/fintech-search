@@ -25,6 +25,16 @@
 - 提供异常块和退出标签恢复
 - 提供 SQL 表访问抽取
 - 提供动态 SQL 字符串恢复
+- 提供基于过程前缀的调用语义分类：
+  - `LS -> AF`
+  - `LS -> LF`
+  - `LF -> LF`
+  - `LF -> AF`
+  - 视为本地函数调用
+  - `LS -> LS`
+  - `LF -> LS`
+  - `AF -> LS`
+  - 视为系统间 RPC 调用
 - 提供两跳调用链扩展与重排
 - 提供意图感知重排
 - 提供块级关系摘要
@@ -145,6 +155,10 @@ sequenceDiagram
 | CLI 层 | 命令行入口与参数编排 | `src/uses_indexer/cli.py` |
 | 评测层 | 检索评测与 A/B 对比 | `src/uses_indexer/evaluation.py` |
 | 集成层 | 安装 Codex skill 与 plugin | `src/uses_indexer/integration.py`, `plugins/uses-codebase-plugin/`, `skills/uses-codebase-search/` |
+
+调用语义规则详见：
+
+- `docs/CALL_SEMANTICS.md`
 
 ## 功能边界
 

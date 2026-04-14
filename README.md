@@ -16,6 +16,7 @@
 相关文档：
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：看整体分层、数据流和问答链路
+- [docs/CALL_SEMANTICS.md](docs/CALL_SEMANTICS.md)：看 `LS/LF/AF` 之间的本地调用与 RPC 调用语义规则
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：看怎么本地部署、怎么接 HTTP/MCP/Codex
 - [docs/USAGE.md](docs/USAGE.md)：看平时该怎么提问、怎么看返回结果
 - [docs/INDEX_SCHEMA.md](docs/INDEX_SCHEMA.md)：看 SQLite 里到底存了什么
@@ -83,6 +84,7 @@ flowchart LR
 - 提供可安装的 Codex 技能定义 `skills/uses-codebase-search`
 - 提供 repo-local Codex 插件定义 `plugins/uses-codebase-plugin`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code` 上完成一次全量扫描和索引验证，并保留 `uses_codes` 子库索引用于回归评测
+- 已把 `LS/LF/AF` 前缀调用规则正式编码进索引器，用于区分本地函数调用和系统间 RPC 调用
 
 ## 当前验证结果
 
