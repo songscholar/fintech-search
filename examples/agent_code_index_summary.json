@@ -34,13 +34,14 @@
   "edge_counts": {
     "writes_variable": 161190,
     "uses_action": 148998,
-    "uses_target": 70112,
+    "uses_target": 69611,
     "calls_procedure": 54774,
     "reads_table": 19228,
     "writes_table": 10234,
     "uses_component": 1237,
     "jumps_to_label": 602,
     "jumps_to_exit": 503,
+    "publishes_mc_topic": 501,
     "defines_label": 238
   },
   "variable_ref_counts": {
@@ -80,14 +81,15 @@
   "block_edge_counts": {
     "uses_action": 137613,
     "writes_variable": 44489,
-    "uses_target": 44357,
+    "uses_target": 44325,
     "reads_table": 16960,
     "writes_table": 10869,
     "calls_procedure": 5744,
     "jumps_to_label": 728,
     "jumps_to_exit": 548,
     "uses_component": 424,
-    "defines_label": 69
+    "defines_label": 69,
+    "publishes_mc_topic": 32
   },
   "fts_counts": {
     "procedures_fts": 21148,

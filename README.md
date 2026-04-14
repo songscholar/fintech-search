@@ -101,6 +101,12 @@ flowchart LR
 - `chunks`：`201030`
 - `chunk_vectors`：`201030`
 - `blocks`：`40887`
+- `calls_procedure`：`54774`
+- `publishes_mc_topic`：`501`
+- `local_function_call`：`44486`
+- `rpc_call`：`3999`
+- `MC async publish`：`313`
+- `MC sync publish`：`188`
 
 目录覆盖：
 
@@ -120,6 +126,7 @@ flowchart LR
 
 - `examples/agent_code_index_summary.json`
 - `examples/agent_code_db_summary.json`
+- `examples/agent_code_mc_publish_example.json`
 
 说明：
 

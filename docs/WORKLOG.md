@@ -662,6 +662,34 @@
   - summary 统计
   - evidence 中展示 topic 语义
 
+### 阶段 34：带 MC 语义的完整根目录重建
+
+- 删除旧的 `examples/agent_code_index.db`
+- 基于完整目录 `/Users/songzuoqiang/Documents/agent/code` 重新全量建库
+- 新库复核结果：
+  - `files = 21148`
+  - `chunks = 201030`
+  - `chunk_vectors = 201030`
+  - `blocks = 40887`
+  - `calls_procedure = 54774`
+  - `publishes_mc_topic = 501`
+- 调用语义统计：
+  - `local_function_call = 44486`
+  - `rpc_call = 3999`
+  - `unknown_call_kind = 6289`
+- MC 发布统计：
+  - `async = 313`
+  - `sync = 188`
+  - `CNST_MC_UFT_PUBSYNC = 129`
+  - `CNST_MC_UFT_CRTSYNC = 117`
+  - `CNST_MC_UFT_OPTSYNC = 53`
+- 新增样例：
+  - `examples/agent_code_mc_publish_example.json`
+- 验证“谁发布 CNST_MC_UFT_OPTSYNC”时，证据中已能显示：
+  - `消息中心主题发布`
+  - `同步发布 / 异步发布`
+  - `Published MC topics`
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题
