@@ -635,6 +635,33 @@
   - RPC 调用分类
   - 调用语义在 summary 和 evidence 中可见
 
+### 阶段 33：消息中心主题发布语义落库
+
+- 新增 MC 消息发布规则
+- 当前识别的特殊跨核心通信动作：
+  - `同步消息发布`
+  - `消息发布`
+- 当动作参数里存在 `topic_name` 时：
+  - 从参数中提取 topic 名
+  - 在 `actions.target_name` 中写入 topic
+  - 新增 `publishes_mc_topic` 关系边
+- `publishes_mc_topic.detail_json` 当前记录：
+  - `transport = mc`
+  - `topic_name`
+  - `message_kind = mc_topic_publish`
+  - `publish_mode = sync/async`
+  - `communication_kind = cross_core_message_publish`
+- `db-summary` 现在会额外输出：
+  - `mc_publish_mode_counts`
+  - `mc_topic_counts`
+- `assemble-evidence` / `answer-codebase` 的 related context 现在会显示：
+  - `Published MC topics`
+- 新增测试，覆盖：
+  - topic 提取
+  - `publishes_mc_topic` 边写入
+  - summary 统计
+  - evidence 中展示 topic 语义
+
 ### 后续计划
 
 - 扩充评测集到 30 到 50 条真实业务问题

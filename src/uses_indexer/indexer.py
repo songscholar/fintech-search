@@ -286,6 +286,10 @@ CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 READ_ACTIONS = {"获取记录", "获取字段", "遍历记录开始", "遍历记录池开始", "记录为空", "记录不为空"}
 WRITE_ACTIONS = {"插入记录", "修改记录", "清空记录池", "数据回库"}
 COMPONENT_ACTIONS = {"获取组件", "插入组件", "尾部插入组件", "遍历组件开始", "遍历组件结束", "组件大小"}
+MC_PUBLISH_ACTIONS = {
+    "同步消息发布": ("sync", "同步发布"),
+    "消息发布": ("async", "异步发布"),
+}
 TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
 QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 CHUNK_SIGNIFICANT_LIMIT = 6
@@ -547,6 +551,7 @@ class SQLiteIndexer:
             "block_edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM block_edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
         }
         summary.update(self._summarize_call_semantics(conn))
+        summary.update(self._summarize_mc_publish_semantics(conn))
         conn.close()
         return summary
 
@@ -575,6 +580,28 @@ class SQLiteIndexer:
         return {
             "call_kind_counts": dict(call_kind_counts),
             "call_rule_counts": dict(call_rule_counts),
+        }
+
+    def _summarize_mc_publish_semantics(self, conn: sqlite3.Connection) -> dict[str, object]:
+        rows = conn.execute(
+            """
+            SELECT target_name, detail_json
+            FROM edges
+            WHERE edge_type = 'publishes_mc_topic'
+            """
+        ).fetchall()
+        mode_counts: Counter[str] = Counter()
+        topic_counts: Counter[str] = Counter()
+
+        for row in rows:
+            detail = _json_loads(str(row["detail_json"]))
+            publish_mode = str(detail.get("publish_mode") or "unknown")
+            mode_counts[publish_mode] += 1
+            topic_counts[str(row["target_name"])] += 1
+
+        return {
+            "mc_publish_mode_counts": dict(mode_counts),
+            "mc_topic_counts": dict(topic_counts),
         }
 
     def _metadata(self, conn: sqlite3.Connection, key: str) -> str | None:
@@ -1346,6 +1373,7 @@ class SQLiteIndexer:
             edge_counter["calls_procedure"] += 1
 
         if statement.kind == "action" and statement.name:
+            mc_publish_detail = _classify_mc_publish(statement)
             self._insert_edge(
                 conn,
                 file_id=file_id,
@@ -1362,7 +1390,9 @@ class SQLiteIndexer:
             edge_counter["uses_action"] += 1
 
             if target_name and target_kind != "unknown":
-                if statement.name in READ_ACTIONS:
+                if mc_publish_detail is not None:
+                    edge_type = "publishes_mc_topic"
+                elif statement.name in READ_ACTIONS:
                     edge_type = "reads_table" if target_kind == "table" else "uses_target"
                 elif statement.name in WRITE_ACTIONS:
                     edge_type = "writes_table" if target_kind == "table" else "uses_target"
@@ -1382,7 +1412,11 @@ class SQLiteIndexer:
                     source_name=unit.name,
                     target_name=target_name,
                     target_kind=target_kind,
-                    detail={"action_name": statement.name, "tag": statement.tag},
+                    detail={
+                        "action_name": statement.name,
+                        "tag": statement.tag,
+                        **(mc_publish_detail or {}),
+                    },
                 )
                 edge_counter[edge_type] += 1
 
@@ -2729,11 +2763,18 @@ class SQLiteIndexer:
             related_limit=related_limit,
         )
 
+        published_mc_topics = self._fetch_related_mc_topics(
+            conn,
+            procedure_id=procedure_id,
+            limit=related_limit,
+        )
+
         return {
             "outgoing_calls": outgoing_calls,
             "incoming_callers": incoming_callers,
             "outgoing_call_edges": outgoing_call_edges,
             "incoming_caller_edges": incoming_caller_edges,
+            "published_mc_topics": published_mc_topics,
             "related_tables": related_tables,
             "related_actions": related_actions,
             "control_flow": control_flow,
@@ -2741,6 +2782,42 @@ class SQLiteIndexer:
             "two_hop_incoming": two_hop_incoming,
             "related_procedures": related_procedures,
         }
+
+    def _fetch_related_mc_topics(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        procedure_id: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT target_name, detail_json
+            FROM edges
+            WHERE procedure_id = ? AND edge_type = 'publishes_mc_topic'
+            ORDER BY target_name
+            LIMIT ?
+            """,
+            (procedure_id, limit),
+        ).fetchall()
+        topics: list[dict[str, object]] = []
+        seen_names: set[str] = set()
+        for row in rows:
+            topic_name = str(row["target_name"])
+            if topic_name in seen_names:
+                continue
+            seen_names.add(topic_name)
+            detail = _json_loads(str(row["detail_json"]))
+            topics.append(
+                {
+                    "topic_name": topic_name,
+                    "publish_mode": str(detail.get("publish_mode") or "unknown"),
+                    "publish_mode_label": str(detail.get("publish_mode_label") or "未知发布方式"),
+                    "message_label": str(detail.get("message_label") or "消息中心主题发布"),
+                    "communication_label": str(detail.get("communication_label") or "跨核心消息发布"),
+                }
+            )
+        return topics
 
     def _fetch_related_call_edges(
         self,
@@ -3066,6 +3143,11 @@ class SQLiteIndexer:
                 lines.append(f"Related tables: {table_desc}")
             if related["related_actions"]:
                 lines.append(f"Related actions: {', '.join(related['related_actions'])}")
+            if related["published_mc_topics"]:
+                lines.append(
+                    "Published MC topics: "
+                    + ", ".join(_format_mc_topic_label(item) for item in related["published_mc_topics"])
+                )
             if related["control_flow"]:
                 flow_desc = ", ".join(
                     f"{item['edge_type']}:{item['target_name']}"
@@ -3806,6 +3888,10 @@ def _derive_target(statement: CodeStatement) -> tuple[str | None, str]:
     if statement.kind == "call" and statement.name:
         return statement.name, "procedure"
 
+    mc_publish_detail = _classify_mc_publish(statement)
+    if mc_publish_detail is not None and mc_publish_detail.get("topic_name"):
+        return str(mc_publish_detail["topic_name"]), "mc_topic"
+
     if not statement.groups or len(statement.groups) < 2:
         return None, "unknown"
 
@@ -4262,6 +4348,54 @@ def _format_call_edge_label(item: dict[str, object]) -> str:
     if call_label:
         return f"{procedure_name}({call_label})"
     return procedure_name
+
+
+def _classify_mc_publish(statement: CodeStatement) -> dict[str, object] | None:
+    if statement.kind != "action" or statement.name not in MC_PUBLISH_ACTIONS:
+        return None
+
+    topic_name = _extract_action_argument(statement, "topic_name")
+    if not topic_name:
+        return None
+
+    publish_mode, publish_mode_label = MC_PUBLISH_ACTIONS[str(statement.name)]
+    return {
+        "transport": "mc",
+        "topic_name": topic_name,
+        "message_kind": "mc_topic_publish",
+        "message_label": "消息中心主题发布",
+        "publish_mode": publish_mode,
+        "publish_mode_label": publish_mode_label,
+        "communication_kind": "cross_core_message_publish",
+        "communication_label": "跨核心消息发布",
+    }
+
+
+def _extract_action_argument(statement: CodeStatement, key: str) -> str | None:
+    for group in statement.arguments:
+        for item in group:
+            if item.get("key") == key and item.get("value"):
+                return _normalize_argument_value(str(item["value"]))
+    return None
+
+
+def _normalize_argument_value(value: str) -> str:
+    candidate = value.strip()
+    quoted = _parse_double_quoted_string(candidate)
+    if quoted is not None:
+        return quoted
+    if candidate.startswith("'") and candidate.endswith("'") and len(candidate) >= 2:
+        return candidate[1:-1]
+    return candidate
+
+
+def _format_mc_topic_label(item: dict[str, object]) -> str:
+    topic_name = str(item["topic_name"])
+    message_label = str(item.get("message_label") or "消息中心主题发布")
+    publish_mode_label = str(item.get("publish_mode_label") or "")
+    if publish_mode_label:
+        return f"{topic_name}({message_label} {publish_mode_label})"
+    return f"{topic_name}({message_label})"
 
 
 def _maybe_int(value: object) -> int | None:

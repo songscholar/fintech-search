@@ -126,6 +126,25 @@ AF_RPC_CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Function>
 """
 
+MC_PUBLISH_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Service xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LS_测试_MC发布" objectId="19">
+  <code><![CDATA[
+  [同步消息发布][topic_name = CNST_MC_UFT_PUBSYNC][table_category = @table_category,
+                                                    param_oper_type = @param_oper_type,
+                                                    transaction_no = @transaction_no,
+                                                    business_data = @business_data,
+                                                    partition_no = 0]
+  [消息发布][topic_name = CNST_MC_UFT_OPTSYNC][table_category = @table_category,
+                                             param_oper_type = @param_oper_type,
+                                             transaction_str = @transaction_str,
+                                             transaction_no = 0,
+                                             business_data = @business_data,
+                                             position_str = @position_str,
+                                             partition_no = @partition_no]
+  ]]></code>
+</business:Service>
+"""
+
 
 def _write_sample_sources(tmp_path: Path) -> Path:
     source_dir = tmp_path / "src"
@@ -156,6 +175,16 @@ def _build_call_semantic_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
     (source_dir / "LF_RPC_CALLER.uftfunction").write_text(LF_RPC_CALLER_XML, encoding="utf-8")
     (source_dir / "AF_RPC_CALLER.uftatomfunction").write_text(AF_RPC_CALLER_XML, encoding="utf-8")
     db_path = tmp_path / "semantic_index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    return indexer, db_path
+
+
+def _build_mc_publish_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
+    source_dir = tmp_path / "mc_src"
+    source_dir.mkdir()
+    (source_dir / "LS_MC_PUBLISH.uftservice").write_text(MC_PUBLISH_XML, encoding="utf-8")
+    db_path = tmp_path / "mc_index.db"
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     return indexer, db_path
@@ -389,6 +418,59 @@ def test_related_context_exposes_call_semantics_labels(tmp_path: Path) -> None:
     assert "系统间RPC调用 LS->LS" in llm_context
     assert "系统间RPC调用 LF->LS" in llm_context
     assert "系统间RPC调用 AF->LS" in llm_context
+
+
+def test_mc_publish_actions_are_recorded_as_topic_edges(tmp_path: Path) -> None:
+    indexer, db_path = _build_mc_publish_index(tmp_path)
+
+    conn = sqlite3.connect(db_path)
+    action_rows = conn.execute(
+        """
+        SELECT action_name, target_name, target_kind
+        FROM actions
+        ORDER BY seq
+        """
+    ).fetchall()
+    edge_rows = conn.execute(
+        """
+        SELECT target_name, detail_json
+        FROM edges
+        WHERE edge_type = 'publishes_mc_topic'
+        ORDER BY target_name
+        """
+    ).fetchall()
+    conn.close()
+
+    assert action_rows == [
+        ("同步消息发布", "CNST_MC_UFT_PUBSYNC", "mc_topic"),
+        ("消息发布", "CNST_MC_UFT_OPTSYNC", "mc_topic"),
+    ]
+
+    details = {
+        str(target_name): json.loads(str(detail_json))
+        for target_name, detail_json in edge_rows
+    }
+    assert details["CNST_MC_UFT_PUBSYNC"]["message_kind"] == "mc_topic_publish"
+    assert details["CNST_MC_UFT_PUBSYNC"]["publish_mode"] == "sync"
+    assert details["CNST_MC_UFT_OPTSYNC"]["publish_mode"] == "async"
+    assert details["CNST_MC_UFT_OPTSYNC"]["communication_kind"] == "cross_core_message_publish"
+
+    summary = indexer.summarize_db(db_path)
+    assert summary["mc_publish_mode_counts"] == {"sync": 1, "async": 1}
+    assert summary["mc_topic_counts"] == {
+        "CNST_MC_UFT_OPTSYNC": 1,
+        "CNST_MC_UFT_PUBSYNC": 1,
+    }
+
+
+def test_related_context_exposes_mc_published_topics(tmp_path: Path) -> None:
+    indexer, db_path = _build_mc_publish_index(tmp_path)
+
+    evidence = indexer.assemble_evidence(db_path, "CNST_MC_UFT_OPTSYNC 谁发布", limit=2)
+    llm_context = str(evidence["llm_context"])
+
+    assert "Published MC topics:" in llm_context
+    assert "CNST_MC_UFT_OPTSYNC(消息中心主题发布 异步发布)" in llm_context
 
 
 def test_query_index_includes_control_flow_hits_for_exit_labels(tmp_path: Path) -> None:

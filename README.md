@@ -85,6 +85,7 @@ flowchart LR
 - 提供 repo-local Codex 插件定义 `plugins/uses-codebase-plugin`
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code` 上完成一次全量扫描和索引验证，并保留 `uses_codes` 子库索引用于回归评测
 - 已把 `LS/LF/AF` 前缀调用规则正式编码进索引器，用于区分本地函数调用和系统间 RPC 调用
+- 已把 `同步消息发布 / 消息发布` + `topic_name` 规则编码进索引器，用于识别消息中心跨核心发布
 
 ## 当前验证结果
 

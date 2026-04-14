@@ -133,6 +133,27 @@
 - `LS -> AF` 记为 `local_function_call`
 - `LF -> LS` 记为 `rpc_call`
 
+另外，当动作是：
+
+- `同步消息发布`
+- `消息发布`
+
+并且能从参数里提取到 `topic_name` 时，系统会额外写入：
+
+- `edge_type = publishes_mc_topic`
+- `target_kind = mc_topic`
+
+对应 `detail_json` 会记录：
+
+- `transport`
+- `topic_name`
+- `message_kind`
+- `message_label`
+- `publish_mode`
+- `publish_mode_label`
+- `communication_kind`
+- `communication_label`
+
 ### `chunks`
 
 按过程内语义块切出来的检索单元。
@@ -200,6 +221,7 @@
 
 现在也会汇总：
 
+- 发布了哪些 MC topic
 - 跳到了哪个标签
 - 是否跳向退出标签
 - 当前过程定义了哪些标签
@@ -228,6 +250,11 @@
 
 关系级全文索引，主要用于调用目标、表名、目标对象检索。
 
+现在也覆盖：
+
+- 过程调用目标
+- MC topic 名
+
 ### `chunks_fts`
 
 语义块级全文索引，主要用于比单条语句更稳定的上下文检索。
@@ -245,6 +272,7 @@
 - `uses_component`
 - `writes_variable`
 - `uses_target`
+- `publishes_mc_topic`
 - `jumps_to_label`
 - `jumps_to_exit`
 - `defines_label`
