@@ -699,6 +699,8 @@ class SQLiteIndexer:
                     "retrieval_source": candidate["retrieval_source"],
                     "match_source": candidate["match_source"],
                     "procedure_name": candidate["procedure_name"],
+                    "chinese_name": candidate.get("chinese_name"),
+                    "object_id": candidate.get("object_id"),
                     "file_path": candidate["file_path"],
                     "matched_text": candidate["matched_text"],
                     "reasons": list(candidate["reasons"]),
@@ -1677,6 +1679,8 @@ class SQLiteIndexer:
                 "statement_id": None,
                 "file_path": str(row["file_path"]),
                 "procedure_name": str(row["procedure_name"]),
+                "chinese_name": row["chinese_name"] if row["chinese_name"] else None,
+                "object_id": row["object_id"] if row["object_id"] else None,
                 "line_start": int(row["line_start"]),
                 "line_end": int(row["line_end"]),
                 "matched_text": str(row["summary_text"]),
@@ -1766,6 +1770,8 @@ class SQLiteIndexer:
               c.file_id AS file_id,
               f.path AS file_path,
               p.name AS procedure_name,
+              p.chinese_name AS chinese_name,
+              p.object_id AS object_id,
               c.line_start AS line_start,
               c.line_end AS line_end,
               c.summary_text AS summary_text,
@@ -1790,6 +1796,8 @@ class SQLiteIndexer:
                 "file_id": int(row["file_id"]),
                 "file_path": str(row["file_path"]),
                 "procedure_name": str(row["procedure_name"]),
+                "chinese_name": row["chinese_name"] if row["chinese_name"] else None,
+                "object_id": row["object_id"] if row["object_id"] else None,
                 "line_start": int(row["line_start"]),
                 "line_end": int(row["line_end"]),
                 "summary_text": str(row["summary_text"]),
@@ -1822,12 +1830,14 @@ class SQLiteIndexer:
                   b.anchor_statement_id AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   b.line_start AS line_start,
                   b.line_end AS line_end,
                   COALESCE(NULLIF(b.summary_text, ''), b.block_type) AS matched_text,
                   'block_summary' AS match_source,
                   -bm25(blocks_fts, 2.0, 1.0, 1.0, 1.0, 6.0, 4.0) AS source_rank,
-                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM blocks_fts
                 JOIN blocks b ON b.id = blocks_fts.rowid
                 JOIN procedures p ON p.id = b.procedure_id
@@ -1849,12 +1859,14 @@ class SQLiteIndexer:
                   NULL AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   c.line_start AS line_start,
                   c.line_end AS line_end,
                   COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
                   'chunk_summary' AS match_source,
                   -bm25(chunks_fts, 2.0, 1.5, 1.0, 6.0, 4.0) AS source_rank,
-                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM chunks_fts
                 JOIN chunks c ON c.id = chunks_fts.rowid
                 JOIN procedures p ON p.id = c.procedure_id
@@ -1876,12 +1888,14 @@ class SQLiteIndexer:
                   NULL AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   NULL AS line_start,
                   NULL AS line_end,
                   COALESCE(NULLIF(p.chinese_name, ''), p.name) AS matched_text,
                   'procedure_fts' AS match_source,
                   -bm25(procedures_fts, 8.0, 5.0, 2.0) AS source_rank,
-                  COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') || ' ' || COALESCE(f.path, '') AS search_text
+                  COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') || ' ' || COALESCE(p.object_id, '') || ' ' || COALESCE(f.path, '') AS search_text
                 FROM procedures_fts
                 JOIN procedures p ON p.id = procedures_fts.rowid
                 JOIN files f ON f.id = p.file_id
@@ -1902,6 +1916,8 @@ class SQLiteIndexer:
                   a.statement_id AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   s.line_start AS line_start,
                   s.line_end AS line_end,
                   CASE
@@ -1915,7 +1931,7 @@ class SQLiteIndexer:
                     ELSE 'action_fts'
                   END AS match_source,
                   -bm25(actions_fts, 7.0, 4.0, 2.0, 1.0, 1.0) AS source_rank,
-                  COALESCE(a.action_name, '') || ' ' || COALESCE(a.target_name, '') || ' ' || COALESCE(s.raw, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(a.action_name, '') || ' ' || COALESCE(a.target_name, '') || ' ' || COALESCE(s.raw, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM actions_fts
                 JOIN actions a ON a.id = actions_fts.rowid
                 JOIN procedures p ON p.id = a.procedure_id
@@ -1938,12 +1954,14 @@ class SQLiteIndexer:
                   s.id AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   s.line_start AS line_start,
                   s.line_end AS line_end,
                   s.raw AS matched_text,
                   s.kind AS match_source,
                   -bm25(statements_fts, 6.0, 2.0, 2.0, 2.0, 1.5, 1.0) AS source_rank,
-                  COALESCE(s.raw, '') || ' ' || COALESCE(s.name, '') || ' ' || COALESCE(s.condition, '') || ' ' || COALESCE(s.target, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(s.raw, '') || ' ' || COALESCE(s.name, '') || ' ' || COALESCE(s.condition, '') || ' ' || COALESCE(s.target, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM statements_fts
                 JOIN statements s ON s.id = statements_fts.rowid
                 JOIN procedures p ON p.id = s.procedure_id
@@ -1965,12 +1983,14 @@ class SQLiteIndexer:
                   e.statement_id AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   s.line_start AS line_start,
                   s.line_end AS line_end,
                   e.target_name AS matched_text,
                   e.edge_type AS match_source,
                   -bm25(edges_fts, 5.0, 1.0, 4.0, 1.0, 1.0, 1.0) AS source_rank,
-                  COALESCE(e.edge_type, '') || ' ' || COALESCE(e.source_name, '') || ' ' || COALESCE(e.target_name, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(e.edge_type, '') || ' ' || COALESCE(e.source_name, '') || ' ' || COALESCE(e.target_name, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM edges_fts
                 JOIN edges e ON e.id = edges_fts.rowid
                 JOIN procedures p ON p.id = e.procedure_id
@@ -2013,12 +2033,14 @@ class SQLiteIndexer:
                   b.anchor_statement_id AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   b.line_start AS line_start,
                   b.line_end AS line_end,
                   COALESCE(NULLIF(b.summary_text, ''), b.block_type) AS matched_text,
                   'block_summary' AS match_source,
                   0.0 AS source_rank,
-                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM blocks b
                 JOIN procedures p ON p.id = b.procedure_id
                 JOIN files f ON f.id = b.file_id
@@ -2039,12 +2061,14 @@ class SQLiteIndexer:
                   NULL AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   c.line_start AS line_start,
                   c.line_end AS line_end,
                   COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
                   'chunk_summary' AS match_source,
                   0.0 AS source_rank,
-                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') AS search_text
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
                 FROM chunks c
                 JOIN procedures p ON p.id = c.procedure_id
                 JOIN files f ON f.id = c.file_id
@@ -2065,26 +2089,30 @@ class SQLiteIndexer:
                   NULL AS statement_id,
                   f.path AS file_path,
                   p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
                   NULL AS line_start,
                   NULL AS line_end,
                   CASE
                     WHEN p.name LIKE ? THEN p.name
                     WHEN COALESCE(p.chinese_name, '') LIKE ? THEN COALESCE(p.chinese_name, '')
+                    WHEN COALESCE(p.object_id, '') LIKE ? THEN COALESCE(p.object_id, '')
                     ELSE f.path
                   END AS matched_text,
                   CASE
                     WHEN p.name LIKE ? THEN 'procedure_name'
                     WHEN COALESCE(p.chinese_name, '') LIKE ? THEN 'procedure_chinese_name'
+                    WHEN COALESCE(p.object_id, '') LIKE ? THEN 'procedure_object_id'
                     ELSE 'file_path'
                   END AS match_source,
                   0.0 AS source_rank,
-                  COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') || ' ' || COALESCE(f.path, '') AS search_text
+                  COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') || ' ' || COALESCE(p.object_id, '') || ' ' || COALESCE(f.path, '') AS search_text
                 FROM procedures p
                 JOIN files f ON f.id = p.file_id
-                WHERE p.name LIKE ? OR COALESCE(p.chinese_name, '') LIKE ? OR f.path LIKE ?
+                WHERE p.name LIKE ? OR COALESCE(p.chinese_name, '') LIKE ? OR COALESCE(p.object_id, '') LIKE ? OR f.path LIKE ?
                 LIMIT ?
-                """,
-                (like, like, like, like, like, like, like, limit),
+                """, 
+                (like, like, like, like, like, like, like, like, like, like, limit),
             ),
             (
                 """
@@ -4682,6 +4710,8 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
         "retrieval_source": candidate["retrieval_source"],
         "match_source": candidate["match_source"],
         "procedure_name": candidate["procedure_name"],
+        "chinese_name": candidate.get("chinese_name"),
+        "object_id": candidate.get("object_id"),
         "file_path": candidate["file_path"],
         "line_start": candidate["line_start"],
         "line_end": candidate["line_end"],
