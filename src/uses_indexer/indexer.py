@@ -382,13 +382,13 @@ class SQLiteIndexer:
         self.embedder = embedder or create_embedder_from_env()
         self._vector_cache: dict[tuple[str, int, int, str, str], list[dict[str, object]]] = {}
 
-    def build_index(self, source_root: str | Path, db_path: str | Path, *, resume_vectors: bool = False) -> dict[str, object]:
+    def build_index(self, source_root: str | Path, db_path: str | Path, *, resume_vectors: bool = False, index_type: str = "all") -> dict[str, object]:
         root = Path(source_root)
         db_file = Path(db_path)
         db_file.parent.mkdir(parents=True, exist_ok=True)
 
         if resume_vectors:
-            return self.resume_chunk_vectors(root, db_file)
+            return self.resume_chunk_vectors(root, db_file, index_type=index_type)
 
         if db_file.exists():
             db_file.unlink()
@@ -397,9 +397,21 @@ class SQLiteIndexer:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(SCHEMA_SQL)
 
+        def is_metadata_path(path: Path) -> bool:
+            """Check if a path is a metadata file."""
+            return "metadata" in str(path).lower() and path.suffix not in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice")
+
+        def is_code_path(path: Path) -> bool:
+            """Check if a path is a code file."""
+            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice")
+
         files = sorted(
             path for path in root.rglob("*")
-            if path.is_file() and is_supported_path(path)
+            if path.is_file() and is_supported_path(path) and (
+                index_type == "all" or
+                (index_type == "metadata" and is_metadata_path(path)) or
+                (index_type == "code" and is_code_path(path))
+            )
         )
 
         unit_kind_counter: Counter[str] = Counter()
@@ -452,6 +464,7 @@ class SQLiteIndexer:
         return {
             "source_root": str(root),
             "db_path": str(db_file),
+            "index_type": index_type,
             "file_count": int(db_summary["files"]),
             "unit_kind_counts": db_summary["unit_kind_counts"],
             "prefix_counts": db_summary["file_prefix_counts"],
@@ -472,7 +485,7 @@ class SQLiteIndexer:
             },
         }
 
-    def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path) -> dict[str, object]:
+    def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path, index_type: str = "all") -> dict[str, object]:
         root = Path(source_root)
         db_file = Path(db_path)
         if not db_file.exists():
@@ -492,6 +505,7 @@ class SQLiteIndexer:
             "source_root": str(root),
             "db_path": str(db_file),
             "resume_vectors": True,
+            "index_type": index_type,
             "file_count": int(db_summary["files"]),
             "chunk_counts": db_summary["chunk_type_counts"],
             "vector_counts": db_summary["vector_provider_counts"],

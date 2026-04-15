@@ -42,6 +42,12 @@ def main() -> int:
         action="store_true",
         help="Reuse an existing index and only populate missing chunk vectors.",
     )
+    build_index_parser.add_argument(
+        "--index-type",
+        choices=["all", "code", "metadata"],
+        default="all",
+        help="Index type: all (default), code (only code files), metadata (only metadata files).",
+    )
 
     db_summary_parser = subparsers.add_parser("db-summary", help="Show SQLite index summary.")
     db_summary_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -135,7 +141,7 @@ def main() -> int:
     elif args.command == "scan-dir":
         data = _scan_dir(parser_impl, Path(args.path), args.limit)
     elif args.command == "build-index":
-        data = indexer.build_index(args.path, args.db, resume_vectors=args.resume_vectors)
+        data = indexer.build_index(args.path, args.db, resume_vectors=args.resume_vectors, index_type=args.index_type)
     elif args.command == "query-index":
         data = indexer.query_index(args.db, args.query, limit=args.limit)
     elif args.command == "eval-retrieval":
