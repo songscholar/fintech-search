@@ -2317,23 +2317,37 @@ class SQLiteIndexer:
         if not seed_names:
             return ranked
 
-        neighbor_cache: dict[str, tuple[set[str], set[str]]] = {}
+        neighbor_cache: dict[str, tuple[dict[int, set[str]], dict[int, set[str]]]] = {}
         reranked: list[dict[str, object]] = []
         call_chain_multiplier = _call_chain_bonus_multiplier(query_analysis)
+
+        # Configurable depth bonus - deeper hops get less weight
+        depth_bonus = {1: 3.0, 2: 1.5, 3: 0.8, 4: 0.4, 5: 0.2}
+
         for candidate in ranked:
             procedure_name = str(candidate.get("procedure_name") or "")
             if not procedure_name:
                 reranked.append(candidate)
                 continue
 
-            one_hop, two_hop = neighbor_cache.get(procedure_name, (set(), set()))
-            if not one_hop and not two_hop:
-                one_hop, two_hop = self._procedure_call_neighbors(conn, procedure_name=procedure_name)
-                neighbor_cache[procedure_name] = (one_hop, two_hop)
+            cached = neighbor_cache.get(procedure_name)
+            if cached is None:
+                outgoing_hops, incoming_hops = self._procedure_call_neighbors(conn, procedure_name=procedure_name)
+                neighbor_cache[procedure_name] = (outgoing_hops, incoming_hops)
+            else:
+                outgoing_hops, incoming_hops = cached
 
-            one_overlap = sorted((one_hop - {procedure_name}) & seed_names)
-            two_overlap = sorted((two_hop - one_hop - {procedure_name}) & seed_names)
-            if one_overlap or two_overlap:
+            # Calculate overlap at each depth level
+            all_overlaps: dict[int, list[str]] = {}
+            for depth in range(1, 6):
+                depth_out = outgoing_hops.get(depth, set())
+                depth_in = incoming_hops.get(depth, set())
+                depth_neighbors = (depth_out | depth_in) - {procedure_name}
+                overlap = sorted(depth_neighbors & seed_names)
+                if overlap:
+                    all_overlaps[depth] = overlap
+
+            if all_overlaps:
                 combined = (
                     f"{candidate.get('search_text') or ''} "
                     f"{candidate.get('matched_text') or ''} "
@@ -2346,13 +2360,27 @@ class SQLiteIndexer:
                 ):
                     reranked.append(candidate)
                     continue
-                bonus = (len(one_overlap) * 3.0 + len(two_overlap) * 1.5) * call_chain_multiplier
+
+                # Calculate bonus based on depth
+                bonus = 0.0
+                for depth, overlap in all_overlaps.items():
+                    depth_weight = depth_bonus.get(depth, 0.1)
+                    bonus += len(overlap) * depth_weight
+                bonus *= call_chain_multiplier
+
                 candidate["score"] = round(float(candidate["score"]) + bonus, 6)
                 reasons = list(candidate.get("reasons", []))
-                if one_overlap:
-                    reasons.append(f"call_chain_one_hop={','.join(one_overlap[:3])}")
-                if two_overlap:
-                    reasons.append(f"call_chain_two_hop={','.join(two_overlap[:3])}")
+
+                # Add reasons for each depth level
+                for depth in sorted(all_overlaps.keys()):
+                    overlap = all_overlaps[depth]
+                    direction = ""
+                    if depth in outgoing_hops and overlap[0] in outgoing_hops[depth]:
+                        direction = "_outgoing"
+                    elif depth in incoming_hops and overlap[0] in incoming_hops[depth]:
+                        direction = "_incoming"
+                    reasons.append(f"call_chain_{depth}{direction}={','.join(overlap[:3])}")
+
                 if call_chain_multiplier != 1.0:
                     reasons.append(f"call_chain_weight={call_chain_multiplier:.2f}")
                 candidate["reasons"] = reasons
@@ -2369,10 +2397,20 @@ class SQLiteIndexer:
         conn: sqlite3.Connection,
         *,
         procedure_name: str,
-    ) -> tuple[set[str], set[str]]:
-        aliases = self._procedure_aliases(conn, procedure_name=procedure_name)
+        max_depth: int = 5,
+    ) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+        """
+        Find all neighbors at each depth level using BFS.
 
-        outgoing = {
+        Returns:
+            outgoing_hops: dict mapping depth -> set of procedure names (this -> others)
+            incoming_hops: dict mapping depth -> set of procedure names (others -> this)
+        """
+        outgoing_hops: dict[int, set[str]] = {1: set()}
+        incoming_hops: dict[int, set[str]] = {1: set()}
+
+        # Get direct neighbors (depth 1)
+        outgoing_hops[1] = {
             self._resolve_procedure_name(conn, str(row[0]))
             for row in conn.execute(
                 """
@@ -2383,7 +2421,9 @@ class SQLiteIndexer:
                 (procedure_name,),
             ).fetchall()
         }
-        incoming = {
+
+        aliases = self._procedure_aliases(conn, procedure_name=procedure_name)
+        incoming_hops[1] = {
             str(row[0])
             for row in conn.execute(
                 f"""
@@ -2395,36 +2435,78 @@ class SQLiteIndexer:
             ).fetchall()
         }
 
-        one_hop = outgoing | incoming
-        two_hop: set[str] = set()
-        frontier = list(one_hop)
-        for neighbor_name in frontier:
-            second_outgoing = {
-                self._resolve_procedure_name(conn, str(row[0]))
-                for row in conn.execute(
-                    """
-                    SELECT DISTINCT target_name
-                    FROM edges
-                    WHERE source_name = ? AND edge_type = 'calls_procedure'
-                    """,
-                    (neighbor_name,),
-                ).fetchall()
-            }
-            second_incoming = {
-                str(row[0])
-                for row in conn.execute(
-                    f"""
-                    SELECT DISTINCT source_name
-                    FROM edges
-                    WHERE target_name IN ({",".join("?" for _ in self._procedure_aliases(conn, procedure_name=neighbor_name))}) AND edge_type = 'calls_procedure'
-                    """,
-                    self._procedure_aliases(conn, procedure_name=neighbor_name),
-                ).fetchall()
-            }
-            two_hop.update(second_outgoing)
-            two_hop.update(second_incoming)
+        # BFS for multi-hop neighbors
+        visited: set[str] = {procedure_name}
+        visited.update(outgoing_hops[1])
+        visited.update(incoming_hops[1])
 
-        return one_hop, two_hop
+        # Use a queue for BFS: (current_procedure, depth)
+        # Track both outgoing and incoming at each depth
+        current_outgoing = outgoing_hops[1].copy()
+        current_incoming = incoming_hops[1].copy()
+
+        for depth in range(2, max_depth + 1):
+            next_outgoing: set[str] = set()
+            next_incoming: set[str] = set()
+
+            # Expand from outgoing neighbors (this -> A -> B)
+            for neighbor_name in current_outgoing:
+                if neighbor_name in visited:
+                    continue
+
+                # Get outgoing calls from this neighbor
+                next_level_out = {
+                    self._resolve_procedure_name(conn, str(row[0]))
+                    for row in conn.execute(
+                        """
+                        SELECT DISTINCT target_name
+                        FROM edges
+                        WHERE source_name = ? AND edge_type = 'calls_procedure'
+                        """,
+                        (neighbor_name,),
+                    ).fetchall()
+                }
+                next_outgoing.update(next_level_out - visited)
+
+            # Expand from incoming neighbors (C -> A -> this)
+            for neighbor_name in current_incoming:
+                if neighbor_name in visited:
+                    continue
+
+                # Get incoming calls to this neighbor
+                neighbor_aliases = self._procedure_aliases(conn, procedure_name=neighbor_name)
+                next_level_in = {
+                    str(row[0])
+                    for row in conn.execute(
+                        f"""
+                        SELECT DISTINCT source_name
+                        FROM edges
+                        WHERE target_name IN ({",".join("?" for _ in neighbor_aliases)}) AND edge_type = 'calls_procedure'
+                        """,
+                        neighbor_aliases,
+                    ).fetchall()
+                }
+                next_incoming.update(next_level_in - visited)
+
+            # Update visited
+            visited.update(next_outgoing)
+            visited.update(next_incoming)
+
+            # Only add if we have new nodes
+            if next_outgoing:
+                outgoing_hops[depth] = next_outgoing
+            if next_incoming:
+                incoming_hops[depth] = next_incoming
+
+            # Update current level for next iteration
+            current_outgoing = next_outgoing
+            current_incoming = next_incoming
+
+            # Stop if no more neighbors found
+            if not current_outgoing and not current_incoming:
+                break
+
+        return outgoing_hops, incoming_hops
 
     def _fetch_context_block(
         self,
@@ -2771,18 +2853,36 @@ class SQLiteIndexer:
             ).fetchall()
         ]
 
-        two_hop_outgoing = self._fetch_call_chain_paths(
+        # Get multi-hop call chains using BFS
+        outgoing_hops, incoming_hops = self._procedure_call_neighbors(
             conn,
             procedure_name=procedure_name,
-            direction="outgoing",
-            limit=related_limit,
+            max_depth=5,
         )
-        two_hop_incoming = self._fetch_call_chain_paths(
-            conn,
-            procedure_name=procedure_name,
-            direction="incoming",
-            limit=related_limit,
-        )
+
+        # Build multi-hop call chain paths for evidence
+        multi_hop_outgoing: list[dict[str, object]] = []
+        multi_hop_incoming: list[dict[str, object]] = []
+
+        for depth in range(2, 6):
+            depth_out = outgoing_hops.get(depth, set())
+            depth_in = incoming_hops.get(depth, set())
+
+            # Get procedure summaries for outgoing at this depth
+            for proc_name in list(depth_out)[:related_limit]:
+                summary = self._lookup_procedure_summary(conn, proc_name)
+                if summary:
+                    summary["hop_depth"] = depth
+                    summary["direction"] = "outgoing"
+                    multi_hop_outgoing.append(summary)
+
+            # Get procedure summaries for incoming at this depth
+            for proc_name in list(depth_in)[:related_limit]:
+                summary = self._lookup_procedure_summary(conn, proc_name)
+                if summary:
+                    summary["hop_depth"] = depth
+                    summary["direction"] = "incoming"
+                    multi_hop_incoming.append(summary)
 
         related_procedures = self._fetch_related_procedure_summaries(
             conn,
@@ -2812,8 +2912,8 @@ class SQLiteIndexer:
             "related_tables": related_tables,
             "related_actions": related_actions,
             "control_flow": control_flow,
-            "two_hop_outgoing": two_hop_outgoing,
-            "two_hop_incoming": two_hop_incoming,
+            "multi_hop_outgoing": multi_hop_outgoing,
+            "multi_hop_incoming": multi_hop_incoming,
             "related_procedures": related_procedures,
         }
 
@@ -3227,18 +3327,16 @@ class SQLiteIndexer:
                     for item in related["control_flow"]
                 )
                 lines.append(f"Control flow: {flow_desc}")
-            if related["two_hop_outgoing"]:
-                outgoing_desc = ", ".join(
-                    f"{item['via_name']} -> {item['procedure_name']}"
-                    for item in related["two_hop_outgoing"]
-                )
-                lines.append(f"Two-hop outgoing chain: {outgoing_desc}")
-            if related["two_hop_incoming"]:
-                incoming_desc = ", ".join(
-                    f"{item['procedure_name']} -> {item['via_name']}"
-                    for item in related["two_hop_incoming"]
-                )
-                lines.append(f"Two-hop incoming chain: {incoming_desc}")
+            # Multi-hop outgoing chain (this -> ... -> others)
+            if related.get("multi_hop_outgoing"):
+                for item in related["multi_hop_outgoing"]:
+                    depth = item.get("hop_depth", 2)
+                    lines.append(f"{depth}-hop outgoing: {procedure_name} -> ... -> {item['procedure_name']}")
+            # Multi-hop incoming chain (others -> ... -> this)
+            if related.get("multi_hop_incoming"):
+                for item in related["multi_hop_incoming"]:
+                    depth = item.get("hop_depth", 2)
+                    lines.append(f"{depth}-hop incoming: {item['procedure_name']} -> ... -> {procedure_name}")
             if related["related_procedures"]:
                 for item in related["related_procedures"]:
                     summary_text = item["summary_text"] or ""
