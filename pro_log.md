@@ -17,10 +17,26 @@
    - 更新全文搜索表，添加表空间相关字段到 FTS 索引
    - 支持通过表空间信息进行检索
 
+2. **添加表结构索引 CLI 命令**
+   - 新增 `build-table-index` 命令，用于构建表结构索引
+   - 新增 `query-table-index` 命令，用于查询表结构索引
+   - 支持通过 --stdfield 参数加载标准字段定义
+   - 支持通过 --mdbobject 参数加载表空间关系配置
+
+3. **文档更新 - 说明四种索引类型**
+   - 更新 INDEX_SCHEMA.md，添加表结构索引的表结构说明
+   - 更新 QUICKSTART.md，添加四种索引类型的构建方法
+   - 更新 USAGE.md，添加四种索引类型的使用说明
+
 ### 修改的文件
 
 - `src/uses_indexer/table_parser.py`: 新增表空间字段和加载方法
 - `src/uses_indexer/table_indexer.py`: 更新数据库表结构和插入逻辑
+- `src/uses_indexer/cli.py`: 添加 build-table-index 和 query-table-index 命令
+- `docs/INDEX_SCHEMA.md`: 添加表结构索引说明
+- `docs/QUICKSTART.md`: 添加四种索引类型构建方法
+- `docs/USAGE.md`: 添加四种索引类型使用说明
+- `.gitignore`: 更新忽略文件规则
 
 ### 技术细节
 
@@ -33,6 +49,12 @@
    - tables 表新增 6 个表空间相关字段
    - tables_fts 全文搜索表新增表空间字段支持
    - 保持向后兼容，现有功能不受影响
+
+3. **四种索引类型**
+   - **全量索引 (all)**: 包含所有文件（代码+元数据）
+   - **代码索引 (code)**: 仅包含代码文件
+   - **元数据索引 (metadata)**: 仅包含元数据文件
+   - **表结构索引**: 包含表结构信息
 
 ## [1.0.3] - 2026-04-15
 
