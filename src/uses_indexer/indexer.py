@@ -399,11 +399,11 @@ class SQLiteIndexer:
 
         def is_metadata_path(path: Path) -> bool:
             """Check if a path is a metadata file."""
-            return "metadata" in str(path).lower() and path.suffix not in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice")
+            return "metadata" in str(path).lower() and path.suffix not in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface")
 
         def is_code_path(path: Path) -> bool:
             """Check if a path is a code file."""
-            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice")
+            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface")
 
         files = sorted(
             path for path in root.rglob("*")

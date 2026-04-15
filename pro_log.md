@@ -1,5 +1,31 @@
 # 项目变更日志
 
+## [1.0.2] - 2026-04-15
+
+### 新增功能
+
+1. **支持 .extinterface 格式外部接口文件**
+   - 在 parser.py 中添加 .extinterface 到 SUPPORTED_CODE_SUFFIXES
+   - 更新 indexer.py 中的 is_code_path() 函数，确保外部接口文件被识别为代码文件
+   - 更新 indexer.py 中的 is_metadata_path() 函数，确保外部接口文件不被识别为元数据文件
+   - 支持 RPC 调用识别，通过中文文件名调用外部接口时会被标记为远程调用
+
+### 修改的文件
+
+- `src/uses_indexer/parser.py`: 添加 .extinterface 到支持的代码后缀列表
+- `src/uses_indexer/indexer.py`: 更新文件类型判断函数，支持 .extinterface 文件
+
+### 技术细节
+
+1. **文件过滤逻辑**
+   - `is_code_path()`: 识别 .uftfunction、.uftservice、.uftatomfunction、.uftfactorservice、.extinterface 文件
+   - `is_metadata_path()`: 识别路径包含 "metadata" 且非代码文件的文件
+
+2. **RPC 调用识别**
+   - 外部接口文件（.extinterface）被视为远程服务
+   - 当代码中使用中文文件名调用这些接口时，会被识别为 RPC 调用
+   - 支持追踪从核心服务到其他服务/应用的远程调用链路
+
 ## [1.0.1] - 2026-04-15
 
 ### 新增功能

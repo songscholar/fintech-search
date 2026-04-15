@@ -13,6 +13,7 @@ SUPPORTED_CODE_SUFFIXES = {
     ".uftatomfunction",
     ".uftatomservice",
     ".uftfactorservice",
+    ".extinterface",
 }
 SUPPORTED_SUFFIXES = SUPPORTED_CODE_SUFFIXES | SUPPORTED_METADATA_SUFFIXES
 

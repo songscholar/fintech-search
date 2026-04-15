@@ -12,7 +12,7 @@
 
 当前版本已经做到：
 
-- 识别文件类型：`LF / LS / AF / RS`
+- 识别文件类型：`LF / LS / AF / RS / EI`
 - 解析 XML 元信息
 - 解析 `CDATA` 中的 DSL 代码体
 - 解析 `metadata` 目录中的元数据文件与条目级对象
@@ -204,11 +204,13 @@ sequenceDiagram
   - `Function`
   - `Service`
   - `FactorService`
+  - `ExternalInterface`
 - `prefix`
   - `LF`
   - `LS`
   - `AF`
   - `RS`
+  - `EI`
 - `name`
 - `chinese_name`
 - `object_id`
