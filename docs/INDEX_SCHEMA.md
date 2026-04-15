@@ -365,6 +365,81 @@
 - 失败处理 / 异常路径问题
 - 过程 / 服务 / 函数定位问题
 
+## 表结构索引
+
+### `tables`
+
+存储表结构基本信息。
+
+主要字段：
+
+- `path`
+- `file_name`
+- `table_name`
+- `chinese_name`
+- `object_id`
+- `space`
+- `run_mode`
+- `has_history`
+- `data_storage_medium`
+- `index_space`
+- `history_space`
+- `history_index_space`
+- `archive_space`
+- `archive_index_space`
+
+### `table_fields`
+
+存储表字段信息。
+
+主要字段：
+
+- `table_id`
+- `field_id`
+- `allow_null`
+- `uuid`
+- `data_type`
+- `chinese_name`
+- `dictionary_type`
+
+### `table_indexes`
+
+存储表索引信息。
+
+主要字段：
+
+- `table_id`
+- `index_name`
+- `global_index`
+- `flags`
+- `index_type_ex`
+- `field_names_json`
+
+### `tablespace_relations`
+
+存储表空间关系配置。
+
+主要字段：
+
+- `space`
+- `index_space`
+- `history_space`
+- `history_index_space`
+- `archive_space`
+- `archive_index_space`
+
+### `tables_fts`
+
+表结构全文索引，用于表名、中文名、表空间等检索。
+
+### `table_fields_fts`
+
+表字段全文索引，用于字段名、数据类型等检索。
+
+### `table_indexes_fts`
+
+表索引全文索引，用于索引名、字段名等检索。
+
 ## 后续扩展方向
 
 - 增加 `blocks` 表，恢复事务块、异常块、循环块、分支块

@@ -89,16 +89,53 @@ python3 -m uses_indexer scan-dir \
 
 ### 2.3 构建索引
 
+项目支持四种索引类型：
+
+#### 方式一：全量索引（包含代码和元数据）
+
 ```bash
-python3 -m uses_indexer build-index \
+PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/my_index.db \
-  --output ./examples/index_summary.json
+  --db ./examples/business_full_index.db \
+  --index-type all
+```
+
+#### 方式二：代码专用索引（仅代码文件）
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db ./examples/business_code_index.db \
+  --index-type code
+```
+
+#### 方式三：元数据专用索引（仅元数据文件）
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db ./examples/business_metadata_index.db \
+  --index-type metadata
 ```
 
 **注意**：首次建库需要较长时间（取决于代码库规模）
 
-### 2.4 查看索引摘要
+### 2.4 构建表结构索引
+
+```bash
+# 构建表结构索引
+PYTHONPATH=src python3 -m uses_indexer build-table-index \
+  /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure \
+  --db ./examples/business_table_index.db \
+  --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/stdfield.stdfield \
+  --mdbobject /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/mdbobject.mdbobject
+```
+
+**参数说明**：
+- `stdfield`：标准字段定义文件路径
+- `mdbobject`：表空间关系配置文件路径
+
+### 2.5 查看索引摘要
 
 ```bash
 python3 -m uses_indexer db-summary \

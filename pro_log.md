@@ -1,5 +1,39 @@
 # 项目变更日志
 
+## [1.0.4] - 2026-04-15
+
+### 新增功能
+
+1. **表结构索引增强 - 补充表空间和存储介质字段**
+   - 在 TableStructure 数据类中新增字段：
+     - data_storage_medium: 数据存储介质
+     - index_space: 索引表空间
+     - history_space: 历史表空间
+     - history_index_space: 历史索引表空间
+     - archive_space: 归档表空间
+     - archive_index_space: 归档索引表空间
+   - 新增 load_tablespace_relations() 方法，从 mdbobject.mdbobject 文件加载表空间关系
+   - 更新数据库表结构，新增对应字段
+   - 更新全文搜索表，添加表空间相关字段到 FTS 索引
+   - 支持通过表空间信息进行检索
+
+### 修改的文件
+
+- `src/uses_indexer/table_parser.py`: 新增表空间字段和加载方法
+- `src/uses_indexer/table_indexer.py`: 更新数据库表结构和插入逻辑
+
+### 技术细节
+
+1. **表空间关系加载**
+   - 从 mdbobject.mdbobject 文件解析表空间关系配置
+   - 支持主表空间、索引表空间、历史表空间、归档表空间的关联
+   - 根据表的 space 属性自动匹配对应的表空间关系
+
+2. **数据库表结构更新**
+   - tables 表新增 6 个表空间相关字段
+   - tables_fts 全文搜索表新增表空间字段支持
+   - 保持向后兼容，现有功能不受影响
+
 ## [1.0.3] - 2026-04-15
 
 ### 新增功能

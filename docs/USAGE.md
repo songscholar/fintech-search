@@ -11,6 +11,30 @@
 - 返回结果应该怎么看
 - 什么时候要继续深挖
 
+项目支持四种索引类型：
+
+## 四种索引类型
+
+### 1. 全量索引（all）
+- 包含所有文件（代码文件 + 元数据文件）
+- 适用于综合检索场景
+- 推荐文件名：`business_full_index.db`
+
+### 2. 代码索引（code）
+- 仅包含代码文件（.uftfunction、.uftservice、.uftatomfunction、.uftfactorservice、.extinterface）
+- 适用于代码逻辑检索，避免元数据干扰
+- 推荐文件名：`business_code_index.db`
+
+### 3. 元数据索引（metadata）
+- 仅包含元数据文件（metadata 目录下的文件）
+- 适用于元数据检索，避免代码干扰
+- 推荐文件名：`business_metadata_index.db`
+
+### 4. 表结构索引
+- 包含表结构信息（.uftstructure 文件）
+- 适用于表结构、字段、索引、表空间等检索
+- 推荐文件名：`business_table_index.db`
+
 当前默认库不只覆盖业务 DSL 代码，也覆盖 `metadata` 目录中的元数据文件，所以它既能回答：
 
 - “哪些流程调用证券代码获取”
@@ -38,7 +62,7 @@
 | 给其他程序调用 | HTTP API | 适合前端、脚本、服务 |
 | 给 Agent / Codex 调用 | MCP | 适合对话式工具调用 |
 
-## 日常最常用的 4 个命令
+## 日常最常用的 5 个命令
 
 ### 1. 搜命中
 
@@ -98,6 +122,21 @@ python3 -m uses_indexer answer-codebase \
 
 - 直接拿结果
 - 验证当前整条链路能否闭环
+
+### 5. 表结构查询
+
+```bash
+python3 -m uses_indexer query-table-index \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_table_index.db \
+  --query "客户" \
+  --limit 5
+```
+
+适合：
+
+- 查找表结构信息
+- 查看表字段和索引
+- 检索表空间配置
 
 ## 问题怎么提效果更好
 
@@ -227,6 +266,25 @@ python3 -m uses_indexer answer-codebase \
 - 或 `POST /answer`
 
 如果想先检查证据是否靠谱，再决定要不要交给外部模型，就先看 `assemble-evidence`。
+
+### 场景 6：表结构查询
+
+问题：
+
+- `客户基本信息表的结构是什么`
+- `uact_client 表有哪些字段`
+- `哪些表使用了 HS_UFT_DATA 表空间`
+
+推荐入口：
+
+- `query-table-index`
+
+重点看：
+
+- 表名、中文名、对象号
+- 表字段列表
+- 表索引信息
+- 表空间配置（数据库表空间、索引表空间、历史表空间等）
 
 ## 返回结果怎么看
 

@@ -4,3 +4,8 @@ __pycache__/
 examples/*.db
 examples/*.db-wal
 examples/*.db-shm
+*.db
+*.db-wal
+*.db-shm
+.claude/
+*.egg-info/

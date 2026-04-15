@@ -13,6 +13,7 @@ from .indexer import SQLiteIndexer
 from .mcp_server import CodebaseMcpServer
 from .parser import UftDslParser, is_supported_path
 from .qa import CodebaseQA
+from .table_indexer import TableIndexer
 
 DEFAULT_DB_CANDIDATES = (
     "agent_code_index.db",
@@ -113,9 +114,23 @@ def main() -> int:
     install_parser = subparsers.add_parser("install-codex-integration", help="Install repo-local plugin and skill into the local Codex home via symlinks.")
     install_parser.add_argument("--force", action="store_true", help="Replace an existing local plugin or skill target if needed.")
 
+    build_table_index_parser = subparsers.add_parser("build-table-index", help="Build a SQLite index for table structures.")
+    build_table_index_parser.add_argument("path", help="Directory containing .uftstructure files.")
+    build_table_index_parser.add_argument("--db", required=True, help="SQLite database path.")
+    build_table_index_parser.add_argument("--stdfield", help="Path to stdfield.stdfield file.")
+    build_table_index_parser.add_argument("--mdbobject", help="Path to mdbobject.mdbobject file.")
+    build_table_index_parser.add_argument("--output", help="Optional JSON summary output path.")
+
+    query_table_index_parser = subparsers.add_parser("query-table-index", help="Query table structure index.")
+    query_table_index_parser.add_argument("--db", required=True, help="SQLite database path.")
+    query_table_index_parser.add_argument("--query", required=True, help="Keyword to search for.")
+    query_table_index_parser.add_argument("--limit", type=int, default=20, help="Maximum number of hits.")
+    query_table_index_parser.add_argument("--output", help="Optional JSON output path.")
+
     args = parser.parse_args()
     parser_impl = UftDslParser()
     indexer = SQLiteIndexer(parser_impl)
+    table_indexer = TableIndexer()
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa)
     evaluator = RetrievalEvaluator(indexer)
@@ -144,6 +159,15 @@ def main() -> int:
         data = indexer.build_index(args.path, args.db, resume_vectors=args.resume_vectors, index_type=args.index_type)
     elif args.command == "query-index":
         data = indexer.query_index(args.db, args.query, limit=args.limit)
+    elif args.command == "build-table-index":
+        data = table_indexer.build_index(
+            source_root=args.path,
+            db_path=args.db,
+            stdfield_path=args.stdfield,
+            mdbobject_path=args.mdbobject,
+        )
+    elif args.command == "query-table-index":
+        data = table_indexer.query_index(args.db, args.query, limit=args.limit)
     elif args.command == "eval-retrieval":
         data = evaluator.evaluate(
             args.db,
