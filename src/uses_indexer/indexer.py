@@ -213,6 +213,7 @@ CREATE TABLE IF NOT EXISTS block_edges (
 CREATE VIRTUAL TABLE IF NOT EXISTS procedures_fts USING fts5(
   name,
   chinese_name,
+  object_id,
   path,
   tokenize='unicode61 remove_diacritics 0'
 );
@@ -775,10 +776,10 @@ class SQLiteIndexer:
 
         conn.execute(
             """
-            INSERT INTO procedures_fts(rowid, name, chinese_name, path)
-            VALUES(?, ?, ?, ?)
+            INSERT INTO procedures_fts(rowid, name, chinese_name, object_id, path)
+            VALUES(?, ?, ?, ?, ?)
             """,
-            (procedure_id, unit.name, unit.chinese_name or "", unit.path),
+            (procedure_id, unit.name, unit.chinese_name or "", unit.object_id or "", unit.path),
         )
 
         for seq, history in enumerate(unit.histories, start=1):
