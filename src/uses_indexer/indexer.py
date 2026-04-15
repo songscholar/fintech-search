@@ -411,7 +411,7 @@ class SQLiteIndexer:
                 index_type == "all" or
                 (index_type == "metadata" and is_metadata_path(path)) or
                 (index_type == "code" and is_code_path(path))
-            )
+            ) and not any(excluded in str(path) for excluded in ["通用数据", "commondata", "tools"])
         )
 
         unit_kind_counter: Counter[str] = Counter()
