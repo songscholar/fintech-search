@@ -637,9 +637,25 @@ python3 -m uses_indexer install-codex-integration --force
 
 ## 下一步
 
-- 增加更稳定的块级 AST
-- 补齐事务块、异常块、SQL 块的配对关系
-- 增加更强语义的 embedding / 向量索引
-- 增加更精细的表访问与过程关系
-- 增加更丰富的模型适配器
-- 增加更强的 MCP 能力和更细粒度的工具
+> **已全部完成！** 以下是各任务的完成状态：
+
+| 原计划任务 | 状态 | 说明 |
+|-----------|------|------|
+| **增加更稳定的块级 AST** | ✅ 完成 | 已实现 `blocks` 表和 `_recover_blocks` 函数，支持事务块、SQL块、异常块、循环块恢复 |
+| **补齐事务块、异常块、SQL 块的配对关系** | ✅ 完成 | `PAIRED_BLOCK_ACTIONS` 支持事务开始/结束、SQL查询开始/结束等配对；`SINGLE_BLOCK_ACTIONS` 支持单条SQL执行；`BRACE_ATTACHED_BLOCK_ACTIONS` 支持失败处理、EXCEPTION、WHEN_OTHERS |
+| **增加更强语义的 embedding / 向量索引** | ✅ 完成 | 支持本地哈希向量 + OpenAI-compatible embedding 向量双模式；支持向量空间兼容性校验；支持 SQLite 缓存 |
+| **增加更精细的表访问与过程关系** | ✅ 完成 | 支持从 SELECT/UPDATE/INSERT/DELETE/MERGE 抽取表名；支持动态 SQL 恢复（sprintf/hs_snprintf/hs_strcpy）；边类型 `reads_table`/`writes_table` |
+| **增加更丰富的模型适配器** | ✅ 完成 | `llm.py` 实现 `OpenAICompatibleLlm`，支持任意 OpenAI-compatible API；环境变量配置 `USES_INDEXER_LLM_*` |
+| **增加更强的 MCP 能力和更细粒度的工具** | ✅ 完成 | MCP Server 提供 5 个工具：db_summary、query_codebase、assemble_evidence、ask_codebase、answer_codebase |
+
+### 额外完成的功能
+
+| 功能 | 说明 |
+|-----|------|
+| **元数据索引** | 支持解析 metadata 目录下的标准字段、常量、错误号、宏、主题域、缓存表、组件、字典等 |
+| **意图感知重排** | 识别问题类型（表访问/变量赋值/调用链/失败处理），动态调整排序权重 |
+| **两跳调用链扩展** | 支持调用链扩展和重排 |
+| **块级关系摘要** | `block_edges` 表聚合块内调用、表访问、控制流关系 |
+| **消息中心主题发布** | 支持 `[同步消息发布]` 和 `[消息发布]` 的 topic 提取 |
+| **完整的评测框架** | `eval-retrieval` + `compare-eval` 支持 A/B 对比 |
+| **完善的文档** | OVERVIEW、QUICKSTART、TECH_SELECTION、DEVELOPMENT_NOTES、METADATA_INDEXING |
