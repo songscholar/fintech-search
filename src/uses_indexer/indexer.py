@@ -2322,7 +2322,9 @@ class SQLiteIndexer:
         call_chain_multiplier = _call_chain_bonus_multiplier(query_analysis)
 
         # Configurable depth bonus - deeper hops get less weight
-        depth_bonus = {1: 3.0, 2: 1.5, 3: 0.8, 4: 0.4, 5: 0.2}
+        # Depth bonus weights - deeper hops get progressively less weight
+        # 1-3: strong signal, 4-6: moderate signal, 7-10: weak but still relevant
+        depth_bonus = {1: 3.0, 2: 1.5, 3: 1.0, 4: 0.6, 5: 0.4, 6: 0.25, 7: 0.15, 8: 0.1, 9: 0.05, 10: 0.02}
 
         for candidate in ranked:
             procedure_name = str(candidate.get("procedure_name") or "")
@@ -2397,7 +2399,7 @@ class SQLiteIndexer:
         conn: sqlite3.Connection,
         *,
         procedure_name: str,
-        max_depth: int = 5,
+        max_depth: int = 10,
     ) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
         """
         Find all neighbors at each depth level using BFS.
