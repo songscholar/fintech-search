@@ -11,6 +11,14 @@
 - 返回结果应该怎么看
 - 什么时候要继续深挖
 
+当前默认库不只覆盖业务 DSL 代码，也覆盖 `metadata` 目录中的元数据文件，所以它既能回答：
+
+- “哪些流程调用证券代码获取”
+- “`CNST_MC_UFT_OPTSYNC` 对应什么 topic”
+- “`手工打包头` 宏定义在哪里”
+- “`查询缓存表` / `通用SQL执行` 这些宏在自定义宏里怎么定义”
+- “`pbs_init_config` 这个缓存表是怎么定义的”
+
 当前推荐默认库：
 
 - `/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db`
@@ -100,6 +108,9 @@ python3 -m uses_indexer answer-codebase \
 - “`uses_entrust` 在哪里查询”
 - “`ERR_xxx` 在哪里报错”
 - “`证券代码获取` 的逻辑在哪里”
+- “`手工打包头` 宏定义在哪里”
+- “`CNST_MC_UFT_OPTSYNC` 对应什么主题”
+- “`upbs_arg` 缓存表定义在哪里”
 
 ### 更好的表达方式
 

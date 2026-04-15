@@ -1,11 +1,12 @@
 # USES Indexer
 
-`uses-indexer` 是一个面向 USES/UFT DSL 代码库的本地索引器原型。
+`uses-indexer` 是一个面向 USES/UFT DSL 代码库与 `metadata` 元数据目录的本地索引器原型。
 
 当前已经完成两层基础能力：
 
 1. 解析 XML 外壳 + `CDATA` DSL 代码体。
-2. 把解析结果写入 SQLite，并提供混合检索、问答包、本地 API/回答接口和 MCP 插件入口。
+2. 解析 `metadata` 目录下的标准字段、常量、错误号、宏、主题域、缓存表、组件、字典等元数据文件。
+3. 把解析结果写入 SQLite，并提供混合检索、问答包、本地 API/回答接口和 MCP 插件入口。
 
 这还不是最终版问答系统，但已经具备了“理解仓库结构并沉淀索引”的第一版基础设施。
 
@@ -48,8 +49,18 @@ flowchart LR
 ## 当前已实现
 
 - 解析 `LF / LS / AF / RS` 文件
+- 解析 `metadata` 目录下的所有元数据文件，而不是只把它们当普通文本跳过
 - 提取文件级元数据
 - 提取 `histories / inputParameters / outputParameters / internalParams`
+- 提取元数据条目：
+  - 标准字段
+  - 标准组件与组件字段
+  - 业务数据类型 / 标准数据类型 / 默认值
+  - 数据字典 / 用户常量 / 标准错误号
+  - 系统宏 / 用户宏
+  - 主题域 / 业务状态域 / 组播域
+  - 缓存表 / 表数据组件 / 标准对象字段
+  - 接口结构体 / 用户上下文 / 序列号 / 系统配置
 - 提取代码体中的：
   - 注释
   - DSL 动作语句
@@ -86,6 +97,8 @@ flowchart LR
 - 已在完整目录 `/Users/songzuoqiang/Documents/agent/code` 上完成一次全量扫描和索引验证，并保留 `uses_codes` 子库索引用于回归评测
 - 已把 `LS/LF/AF` 前缀调用规则正式编码进索引器，用于区分本地函数调用和系统间 RPC 调用
 - 已把 `同步消息发布 / 消息发布` + `topic_name` 规则编码进索引器，用于识别消息中心跨核心发布
+- 已把 `metadata` 目录正式纳入索引范围，不再只索引 UFT 代码文件
+- 已把元数据条目写成 `metadata_item` 语句与语义块，并建立定义、映射、字段包含、宏引用等关系边
 
 ## 当前验证结果
 
@@ -131,6 +144,7 @@ flowchart LR
 说明：
 
 - 这个完整根目录库现在是 CLI、HTTP API、MCP、Codex skill/plugin 的推荐默认库
+- 这个完整根目录库现在同时覆盖业务 DSL 文件和 `metadata` 目录里的元数据文件
 - `examples/uses_codes_index.db` 继续保留，用于更小范围的评测和回归验证
 
 ### uses_codes 子库解析层摘要

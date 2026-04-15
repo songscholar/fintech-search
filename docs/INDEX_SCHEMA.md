@@ -22,7 +22,7 @@
 
 ### `files`
 
-每个 DSL 文件一条记录。
+每个索引文件一条记录，既包括 `*.uftfunction / *.uftservice / *.uftatomfunction ...` 这类 DSL 文件，也包括 `metadata` 目录下的元数据文件。
 
 主要字段：
 
@@ -38,7 +38,10 @@
 
 ### `procedures`
 
-当前和文件基本一一对应，用来表示“可调用过程”的主实体。
+当前和文件基本一一对应。
+
+- 对 DSL 文件，它表示“可调用过程”的主实体。
+- 对 `metadata` 文件，它表示“可检索的元数据文件单元”，名称通常是 `META_<core>_<file>`。
 
 主要字段：
 
@@ -72,6 +75,8 @@
 
 当前最重要的一张表，保存结构化语句流。
 
+它现在既包含 DSL 代码语句，也包含 `metadata_item` 条目级语句。
+
 主要字段：
 
 - `kind`
@@ -87,9 +92,24 @@
 - `reads_json`
 - `writes_json`
 
+其中：
+
+- DSL 语句的 `kind` 主要是 `action / call / control / assignment / raw / goto / label`
+- 元数据条目的 `kind` 是 `metadata_item`
+- 元数据条目的 `tag` 会进一步区分类型，例如：
+  - `metadata_macro`
+  - `metadata_topic`
+  - `metadata_constant`
+  - `metadata_errorno`
+  - `metadata_standard_field`
+  - `metadata_component`
+  - `metadata_memory_table`
+
 ### `actions`
 
 从 `statements` 中投影出来的动作/调用记录，方便检索和关系计算。
+
+这里现在也会投影 `metadata_item`，让宏名、主题别名、缓存表名、常量名这类元数据条目能复用 `actions_fts` 的精确名称检索能力。
 
 主要字段：
 
@@ -119,6 +139,26 @@
 - `target_name`
 - `target_kind`
 - `detail_json`
+
+除 DSL 代码边以外，现在还会写入元数据定义与映射关系，例如：
+
+- `defines_macro`
+- `defines_topic_alias`
+- `defines_constant`
+- `defines_error_code`
+- `defines_standard_field`
+- `defines_component`
+- `defines_memory_table`
+- `maps_topic_name`
+- `maps_db_table`
+- `maps_sync_table`
+- `maps_error_number`
+- `contains_field`
+- `contains_index`
+- `references_constant`
+- `references_component`
+- `references_datatype`
+- `references_topic_name`
 
 其中 `calls_procedure` 的 `detail_json` 现在还会记录调用语义：
 
@@ -157,6 +197,8 @@
 ### `chunks`
 
 按过程内语义块切出来的检索单元。
+
+对 `metadata_item`，当前会默认按“单条条目一个 chunk”切分，保证宏定义、主题项、缓存表定义、标准字段定义等命中后能直接拿到条目级上下文。
 
 主要字段：
 

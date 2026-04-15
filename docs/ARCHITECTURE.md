@@ -4,6 +4,8 @@
 
 这个项目面向 `/Users/songzuoqiang/Documents/agent/code` 这样的完整 UFT/USES DSL 代码根目录，也兼容 `uses_codes` 这类单独子目录。
 
+当前输入源不再只有业务 DSL 文件，还包括各核心 `metadata` 目录下的标准字段、常量、错误号、宏、主题域、缓存表、组件、字典等元数据文件。
+
 第一阶段目标不是“直接问答”，而是先建立一个可靠的解析层，让后续索引和问答建立在结构化数据上。
 
 ## 当前阶段范围
@@ -13,6 +15,7 @@
 - 识别文件类型：`LF / LS / AF / RS`
 - 解析 XML 元信息
 - 解析 `CDATA` 中的 DSL 代码体
+- 解析 `metadata` 目录中的元数据文件与条目级对象
 - 产出统一的 JSON 结构
 - 把解析结果落入 SQLite
 - 提供 SQLite FTS
@@ -59,8 +62,8 @@
 
 ```mermaid
 flowchart LR
-    SRC["USES/UFT 源码目录"]
-    PARSER["Parser 解析 XML 与 CDATA DSL"]
+    SRC["USES/UFT 源码目录 + metadata 元数据目录"]
+    PARSER["Parser 解析 XML 与 CDATA DSL / metadata 条目"]
     IR["结构化中间表示 ParsedUnit"]
     INDEXER["Indexer 建库与关系恢复"]
     DB[("SQLite 索引库")]

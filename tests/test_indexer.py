@@ -145,6 +145,31 @@ MC_PUBLISH_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Service>
 """
 
+SYSTEMMACRO_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<usermacro:UserMacro xmlns:usermacro="http://www.hundsun.com/ares/studio/usermacro/1.0.0">
+  <histories modifiedDate="2026-04-09 10:00:00" version="V1" orderNumber="T20" modifiedBy="Tester" modified="新增系统宏"/>
+  <macroItems
+    name="手工打包头"
+    sequence="[标准字段列表]{[打包变量]}"
+    content="[手工打包头][fund_account, money_type]\n[查询缓存表][upbs_arg]\n[通用SQL执行][select * from upbs_arg][]"
+    description="用于演示宏定义、缓存表和 SQL 宏引用"/>
+</usermacro:UserMacro>
+"""
+
+TOPIC_METADATA_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<uftmetadataext:TopicItemList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:uftmetadataext="http://www.hundsun.com/ares/studio/uft/uftmetadataext/1.0.0">
+  <items xsi:type="uftmetadataext:TopicItem" aliasName="CNST_MC_UFT_OPTSYNC" topicName="uft30.optsync" condition1="branch_no" condition2="fund_account"/>
+</uftmetadataext:TopicItemList>
+"""
+
+MEMOP_METADATA_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<uftmetadataext:MemoryTableList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:uftmetadataext="http://www.hundsun.com/ares/studio/uft/uftmetadataext/1.0.0">
+  <items xsi:type="uftmetadataext:MemoryTable" dbTableName="pbs_init_config" memoryTableName="pbs_init_config" memoryTableComment="初始化配置表" user="pbssvr" fields="service_name,table_name" syncTableName="pbs_init_config">
+    <indexs name="uk_init_config" fields="service_name,table_name"/>
+  </items>
+</uftmetadataext:MemoryTableList>
+"""
+
 
 def _write_sample_sources(tmp_path: Path) -> Path:
     source_dir = tmp_path / "src"
@@ -185,6 +210,19 @@ def _build_mc_publish_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
     source_dir.mkdir()
     (source_dir / "LS_MC_PUBLISH.uftservice").write_text(MC_PUBLISH_XML, encoding="utf-8")
     db_path = tmp_path / "mc_index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    return indexer, db_path
+
+
+def _build_metadata_index(tmp_path: Path) -> tuple[SQLiteIndexer, Path]:
+    source_dir = tmp_path / "metadata_src"
+    metadata_dir = source_dir / "upub_codes" / "metadata"
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / "systemmacro.xml").write_text(SYSTEMMACRO_XML, encoding="utf-8")
+    (metadata_dir / "topic.xml").write_text(TOPIC_METADATA_XML, encoding="utf-8")
+    (metadata_dir / "memoperation.xml").write_text(MEMOP_METADATA_XML, encoding="utf-8")
+    db_path = tmp_path / "metadata_index.db"
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     return indexer, db_path
@@ -471,6 +509,44 @@ def test_related_context_exposes_mc_published_topics(tmp_path: Path) -> None:
 
     assert "Published MC topics:" in llm_context
     assert "CNST_MC_UFT_OPTSYNC(消息中心主题发布 异步发布)" in llm_context
+
+
+def test_metadata_files_are_indexed_and_summarized(tmp_path: Path) -> None:
+    indexer, db_path = _build_metadata_index(tmp_path)
+
+    summary = indexer.summarize_db(db_path)
+
+    assert summary["metadata_files"] == 3
+    assert summary["metadata_entries"] >= 3
+    assert summary["metadata_entry_tag_counts"]["metadata_macro"] >= 1
+    assert summary["metadata_entry_tag_counts"]["metadata_topic"] >= 1
+    assert summary["metadata_entry_tag_counts"]["metadata_memory_table"] >= 1
+
+
+def test_query_index_can_retrieve_metadata_macros(tmp_path: Path) -> None:
+    indexer, db_path = _build_metadata_index(tmp_path)
+
+    result = indexer.query_index(db_path, "手工打包头 查询缓存表 通用SQL执行", limit=6)
+
+    assert result["hit_count"] >= 1
+    assert any("metadata/systemmacro.xml" in str(hit["file_path"]) for hit in result["hits"])
+    assert any("手工打包头" in str(hit["matched_text"]) for hit in result["hits"])
+
+
+def test_assemble_evidence_exposes_metadata_relations(tmp_path: Path) -> None:
+    indexer, db_path = _build_metadata_index(tmp_path)
+
+    result = indexer.assemble_evidence(db_path, "CNST_MC_UFT_OPTSYNC 对应什么主题", limit=3, context_window=0, related_limit=4)
+
+    assert result["evidence_count"] >= 1
+    topic_block = next(block for block in result["evidence"] if "metadata/topic.xml" in str(block["file_path"]))
+    relation_pairs = {
+        (item["edge_type"], item["target_name"])
+        for item in topic_block["related_context"]["metadata_relations"]
+    }
+    assert ("maps_topic_name", "uft30.optsync") in relation_pairs
+    assert ("topic_filter_field", "branch_no") in relation_pairs
+    assert "Metadata relations:" in result["llm_context"]
 
 
 def test_query_index_includes_control_flow_hits_for_exit_labels(tmp_path: Path) -> None:

@@ -4,15 +4,17 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from .metadata_parser import MetadataFileParser, SUPPORTED_METADATA_SUFFIXES, is_metadata_path
 from .models import CodeStatement, HistoryEntry, ParameterDecl, ParsedUnit
 
-SUPPORTED_SUFFIXES = {
+SUPPORTED_CODE_SUFFIXES = {
     ".uftfunction",
     ".uftservice",
     ".uftatomfunction",
     ".uftatomservice",
     ".uftfactorservice",
 }
+SUPPORTED_SUFFIXES = SUPPORTED_CODE_SUFFIXES | SUPPORTED_METADATA_SUFFIXES
 
 CALL_PREFIXES = ("LF_", "LS_", "AF_", "AS_", "RS_")
 PARAM_TAG_MAP = {
@@ -36,9 +38,15 @@ WRITE_CALL_PATTERNS = [
 
 
 class UftDslParser:
+    def __init__(self) -> None:
+        self.metadata_parser = MetadataFileParser()
+
     def parse_path(self, path: str | Path) -> ParsedUnit:
         file_path = Path(path)
-        if file_path.suffix not in SUPPORTED_SUFFIXES:
+        if is_metadata_path(file_path):
+            return self.metadata_parser.parse_path(file_path)
+
+        if file_path.suffix not in SUPPORTED_CODE_SUFFIXES:
             raise ValueError(f"Unsupported file suffix: {file_path.suffix}")
 
         root = ET.parse(file_path).getroot()
@@ -361,6 +369,11 @@ class UftDslParser:
             reads=_extract_reads(raw),
             writes=writes or _extract_writes(raw),
         )
+
+
+def is_supported_path(path: str | Path) -> bool:
+    file_path = Path(path)
+    return file_path.suffix in SUPPORTED_CODE_SUFFIXES or is_metadata_path(file_path)
 
 
 def _local_name(tag: str) -> str:
