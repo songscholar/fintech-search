@@ -423,7 +423,44 @@ python3 -m uses_indexer build-index /path/to/code --db test.db
 
 ---
 
-## 11. 相关文档
+## 11. 重要知识点：SQLite WAL 模式
+
+### 什么是 WAL 模式？
+
+项目使用 SQLite 的 **WAL（Write-Ahead Logging）模式** 来提高索引构建和查询性能。
+
+### 三个文件的作用
+
+当构建索引时，会看到三个文件：
+
+| 文件名 | 说明 |
+|--------|------|
+| `xxx.db` | **主数据库文件**，存储持久化数据 |
+| `xxx.db-wal` | **Write-Ahead Log 文件**，所有写入操作首先记录到这个文件 |
+| `xxx.db-shm` | **Shared Memory 文件**，用于协调多个进程访问 |
+
+### 为什么 .db-wal 文件大小一直在增加？
+
+**这是正常行为！** 不要终止程序！
+
+在 WAL 模式下：
+1. 所有写入操作先写入 `.db-wal` 文件
+2. 主数据库 `.db` 保持不变（或只在 checkpoint 时更新）
+3. 当索引构建完成后，SQLite 会自动执行 checkpoint，将 `.db-wal` 数据合并到 `.db`
+
+### 监控要点
+
+构建索引时：
+- ✅ **正常情况**：`.db-wal` 文件大小持续增加，程序正在正常运行
+- ❌ **异常情况**：文件大小长时间不变或程序报错
+
+### 如何确认完成？
+
+- 等待程序正常结束
+- 程序结束后，`.db-wal` 文件会变小或消失
+- 主要数据会合并到 `.db` 文件中
+
+## 12. 相关文档
 
 - [USAGE.md](USAGE.md) - 详细使用说明
 - [ARCHITECTURE.md](ARCHITECTURE.md) - 架构设计
