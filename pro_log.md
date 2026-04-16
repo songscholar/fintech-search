@@ -1,5 +1,40 @@
 # 项目变更日志
 
+## [1.0.7] - 2026-04-16
+
+### 新增功能
+
+1. **Skills 识别逻辑优化**
+   - 优化配置开关识别：识别 char_config_xxx、int_config_xxx、str_config_xxx 等格式的配置变量
+   - 优化表操作识别：识别 [宏定义][表名字/sql语句][执行结果] 格式的表操作
+   - 优化错误信息识别：识别 [业务报错返回][ERR_xxx] 格式的错误信息
+   - 更新 uses-codebase-multi-index/SKILL.md 中的识别逻辑
+
+### 修改的文件
+
+- `skills/uses-codebase-multi-index/SKILL.md`: 
+  - 更新配置开关识别逻辑，从纯数字改为 char_config_xxx、int_config_xxx、str_config_xxx 等格式
+  - 新增表操作识别：识别 [宏定义][表名字/sql语句][执行结果] 格式
+  - 新增错误信息识别：识别 [业务报错返回][ERR_xxx] 格式
+  - 优化多索引查询工作流的分析步骤
+
+### 技术细节
+
+1. **配置开关识别优化**
+   - 之前：纯数字识别（如 "3674"）
+   - 现在：识别 char_config_xxx、int_config_xxx、str_config_xxx 等格式（如 "str_config_3588"、"int_config_1234"）
+   - 提高了配置变量识别的准确性和针对性
+
+2. **表操作识别新增**
+   - 识别模式：[宏定义][表名字/sql语句][执行结果]
+   - 示例：[查询表][uses_stkcode][查询成功]
+   - 帮助系统准确识别表的增删改查操作
+
+3. **错误信息识别优化**
+   - 识别模式：[业务报错返回][ERR_xxx]
+   - 示例：[业务报错返回][ERR_USER_TABLERECORD_NOTEXISTS]
+   - 提高了错误信息识别的准确性
+
 ## [1.0.6] - 2026-04-16
 
 ### 新增功能
