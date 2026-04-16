@@ -403,7 +403,7 @@ class SQLiteIndexer:
 
         def is_code_path(path: Path) -> bool:
             """Check if a path is a code file."""
-            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface")
+            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface") and "metadata" not in str(path).lower()
 
         files = sorted(
             path for path in root.rglob("*")
@@ -2296,13 +2296,27 @@ class SQLiteIndexer:
             score += 9.0
             reasons.append("exact_match_in_context")
 
-        if normalized_query and normalized_query in procedure_name:
+        # 增加英文名（procedure_name）匹配的权重
+        if normalized_query and normalized_query.lower() == procedure_name.lower():
+            score += 100.0
+            reasons.append("procedure_name_exact_match")
+        elif normalized_query and normalized_query in procedure_name:
             score += 8.0
             reasons.append("procedure_name_match")
+
+        # 增加中文名匹配的权重
+        if candidate.get("chinese_name") and normalized_query and normalized_query in candidate.get("chinese_name"):
+            score += 90.0
+            reasons.append("chinese_name_match")
 
         if normalized_query and normalized_query in file_path:
             score += 4.0
             reasons.append("file_path_match")
+
+        # 增加object_id匹配的权重
+        if candidate.get("object_id") == normalized_query:
+            score += 100.0
+            reasons.append("object_id_exact_match")
 
         if candidate["hit_type"] == "chunk":
             score += 5.0
@@ -4370,7 +4384,7 @@ def _metadata_edges_for_statement(statement: CodeStatement) -> list[dict[str, ob
 
 
 def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
-    return {
+    result = {
         "hit_type": str(row["hit_type"]),
         "entity_id": _maybe_int(row["entity_id"]),
         "procedure_id": int(row["procedure_id"]),
@@ -4388,6 +4402,11 @@ def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
         "search_text": str(row["search_text"]),
         "reasons": [],
     }
+    if "chinese_name" in row.keys():
+        result["chinese_name"] = row["chinese_name"] if row["chinese_name"] else None
+    if "object_id" in row.keys():
+        result["object_id"] = row["object_id"] if row["object_id"] else None
+    return result
 
 
 def _merge_candidate(
