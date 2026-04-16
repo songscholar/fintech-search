@@ -89,18 +89,49 @@ python3 -m uses_indexer scan-dir \
 
 ### 2.3 构建索引
 
-项目支持四种索引类型：
+项目提供两种方式构建索引：使用 CLI 命令逐个构建，或使用便捷脚本 `build_indexes.py` 批量构建。
 
-#### 方式一：全量索引（包含代码和元数据）
+#### 方式一：使用便捷脚本 build_indexes.py（推荐）
+
+这个脚本支持 6 种构建模式，特别适合批量构建多个索引：
+
+##### 场景 1：分别构建单个索引
 
 ```bash
-PYTHONPATH=src python3 -m uses_indexer build-index \
-  /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_full_index.db \
-  --index-type all
+# 仅构建代码索引
+python3 build_indexes.py --mode code
+
+# 仅构建元数据索引
+python3 build_indexes.py --mode metadata
+
+# 仅构建表结构索引
+python3 build_indexes.py --mode table
+
+# 仅构建全量索引（包含代码和元数据）
+python3 build_indexes.py --mode full
 ```
 
-#### 方式二：代码专用索引（仅代码文件）
+##### 场景 2：一次构建三个专用索引（推荐）
+
+```bash
+# 同时构建代码索引、元数据索引、表结构索引
+python3 build_indexes.py --mode three
+```
+
+这个模式会按顺序构建三个索引，包含完整的错误处理和进度监控。
+
+##### 场景 3：构建所有四个索引
+
+```bash
+# 构建所有四个索引：代码、元数据、全量、表结构
+python3 build_indexes.py --mode all
+```
+
+#### 方式二：使用 CLI 命令逐个构建
+
+如果需要更精细的控制，可以使用 CLI 命令逐个构建：
+
+##### 构建代码专用索引（仅代码文件）
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
@@ -109,7 +140,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   --index-type code
 ```
 
-#### 方式三：元数据专用索引（仅元数据文件）
+##### 构建元数据专用索引（仅元数据文件）
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
@@ -118,12 +149,18 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   --index-type metadata
 ```
 
-**注意**：首次建库需要较长时间（取决于代码库规模）
-
-### 2.4 构建表结构索引
+##### 构建全量索引（包含代码和元数据）
 
 ```bash
-# 构建表结构索引
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db ./examples/business_full_index.db \
+  --index-type all
+```
+
+##### 构建表结构索引
+
+```bash
 PYTHONPATH=src python3 -m uses_indexer build-table-index \
   /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure \
   --db ./examples/business_table_index.db \
@@ -134,6 +171,8 @@ PYTHONPATH=src python3 -m uses_indexer build-table-index \
 **参数说明**：
 - `stdfield`：标准字段定义文件路径
 - `mdbobject`：表空间关系配置文件路径
+
+**注意**：首次建库需要较长时间（取决于代码库规模）
 
 ### 2.5 查看索引摘要
 
