@@ -10,6 +10,7 @@ from .constants import (
     FAILURE_MATCH_HINTS,
     FOCUS_EXCLUDED_QUERY_TERMS,
     GENERIC_QUERY_TERMS,
+    METADATA_INTENT_KEYWORDS,
     PROCEDURE_INTENT_KEYWORDS,
     QUERY_PROCEDURE_RE,
     QUERY_TOKEN_RE,
@@ -19,6 +20,7 @@ from .constants import (
     SQL_WRITE_HINTS,
     TABLE_INTENT_KEYWORDS,
     TABLE_TOKEN_PREFIXES,
+    TOPIC_INTENT_KEYWORDS,
     VARIABLE_INTENT_KEYWORDS,
     WRITE_INTENT_KEYWORDS,
 )
@@ -56,6 +58,24 @@ def analyze_query(query: str) -> dict[str, object]:
     wants_callers = contains_any(lowered, ("被谁调用", "谁调用", "上游", "入口"))
     wants_failure_flow = contains_any(lowered, FAILURE_INTENT_KEYWORDS)
     wants_procedure = bool(procedure_terms) or contains_any(lowered, PROCEDURE_INTENT_KEYWORDS)
+    wants_metadata = contains_any(lowered, METADATA_INTENT_KEYWORDS)
+    wants_topic = contains_any(lowered, TOPIC_INTENT_KEYWORDS)
+    wants_variable_write = wants_variable and contains_any(lowered, WRITE_INTENT_KEYWORDS + ("赋值",))
+    wants_variable_read = wants_variable and contains_any(lowered, READ_INTENT_KEYWORDS + ("读取",))
+    query_type = _classify_query_type(
+        wants_table_sql=wants_table_sql,
+        wants_table_write=wants_table_write,
+        wants_table_read=wants_table_read,
+        wants_variable=wants_variable,
+        wants_variable_write=wants_variable_write,
+        wants_variable_read=wants_variable_read,
+        wants_call_chain=wants_call_chain,
+        wants_callers=wants_callers,
+        wants_failure_flow=wants_failure_flow,
+        wants_metadata=wants_metadata,
+        wants_topic=wants_topic,
+        wants_procedure=wants_procedure,
+    )
     focus_terms = {
         token
         for token in token_set
@@ -74,6 +94,8 @@ def analyze_query(query: str) -> dict[str, object]:
         ("variable", wants_variable),
         ("call_chain", wants_call_chain),
         ("failure_flow", wants_failure_flow),
+        ("metadata", wants_metadata),
+        ("topic", wants_topic),
         ("procedure", wants_procedure),
     ):
         if enabled:
@@ -94,7 +116,12 @@ def analyze_query(query: str) -> dict[str, object]:
         "wants_call_chain": wants_call_chain,
         "wants_callers": wants_callers,
         "wants_failure_flow": wants_failure_flow,
+        "wants_metadata": wants_metadata,
+        "wants_topic": wants_topic,
+        "wants_variable_write": wants_variable_write,
+        "wants_variable_read": wants_variable_read,
         "wants_procedure": wants_procedure,
+        "query_type": query_type,
     }
 
 
@@ -139,6 +166,9 @@ def rerank_candidate(
     matched_text = str(candidate.get("matched_text") or "").lower()
     procedure_name = str(candidate.get("procedure_name") or "").lower()
     file_path = str(candidate.get("file_path") or "").lower()
+    chunk_role = str(candidate.get("chunk_role") or "")
+    chunk_features = dict(candidate.get("chunk_features") or {})
+    feature_flags = dict(candidate.get("feature_flags") or {})
 
     overlap_tokens = [token for token in query_tokens if token in search_text]
     coverage = len(set(overlap_tokens))
@@ -158,6 +188,7 @@ def rerank_candidate(
         "vector_penalty": 0.0,
         "type_bonus": 0.0,
         "multi_source_bonus": 0.0,
+        "feature_bonus": 0.0,
     }
 
     if str(candidate["retrieval_source"]).startswith("fts"):
@@ -246,6 +277,17 @@ def rerank_candidate(
     score += intent_bonus
     score_breakdown["intent_bonus"] += intent_bonus
     reasons.extend(intent_reasons)
+
+    feature_bonus, feature_reasons = _feature_bonus(
+        query_analysis=query_analysis,
+        hit_type=hit_type(candidate),
+        chunk_role=chunk_role,
+        chunk_features=chunk_features,
+        feature_flags=feature_flags,
+    )
+    score += feature_bonus
+    score_breakdown["feature_bonus"] += feature_bonus
+    reasons.extend(feature_reasons)
 
     if (
         candidate.get("retrieval_source") == "vector_chunk"
@@ -444,7 +486,7 @@ def _intent_bonus(
             bonus += 28.0
             reasons.append("intent_table_edge")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
-            bonus += 20.0
+            bonus += 30.0
             reasons.append("intent_sql_block")
         elif hit_type == "action" and _looks_like_sql_evidence(combined):
             bonus += 8.0
@@ -471,13 +513,19 @@ def _intent_bonus(
         if "=" in combined or "writes_variable" in combined or match_source == "write":
             bonus += 8.0
             reasons.append("variable_write_match")
+        if query_analysis.get("wants_variable_read") and match_source == "read":
+            bonus += 10.0
+            reasons.append("variable_read_match")
+        if query_analysis.get("wants_variable_write") and ("writes_variable" in combined or match_source == "write"):
+            bonus += 10.0
+            reasons.append("variable_write_focus")
 
     if query_analysis["wants_failure_flow"]:
         if hit_type == "block":
-            bonus += 16.0
+            bonus += 36.0
             reasons.append("intent_failure_block")
         elif hit_type == "chunk" and contains_any(combined, FAILURE_MATCH_HINTS):
-            bonus += 8.0
+            bonus += 4.0
             reasons.append("intent_failure_chunk")
 
         if contains_any(combined, FAILURE_MATCH_HINTS):
@@ -499,6 +547,16 @@ def _intent_bonus(
             reasons.append("intent_call_chain")
             if has_text_focus:
                 reasons.append("intent_call_chain_focus")
+
+    if query_analysis.get("wants_metadata"):
+        if "references_" in combined or "metadata" in combined:
+            bonus += 12.0
+            reasons.append("intent_metadata")
+
+    if query_analysis.get("wants_topic"):
+        if "publishes_mc_topic" in combined or "mc_topic" in combined or "topic" in combined:
+            bonus += 14.0
+            reasons.append("intent_topic")
 
     if query_analysis["wants_procedure"] and not query_analysis["wants_call_chain"]:
         if hit_type == "procedure":
@@ -531,3 +589,104 @@ def _call_chain_bonus_multiplier(query_analysis: dict[str, object]) -> float:
     if query_analysis["wants_table_sql"]:
         return 0.6
     return 1.0
+
+
+def _feature_bonus(
+    *,
+    query_analysis: dict[str, object],
+    hit_type: str,
+    chunk_role: str,
+    chunk_features: dict[str, object],
+    feature_flags: dict[str, object],
+) -> tuple[float, list[str]]:
+    bonus = 0.0
+    reasons: list[str] = []
+    query_type = str(query_analysis.get("query_type") or "")
+
+    if query_type in {"table_write", "table_read"}:
+        if chunk_role == "table_access":
+            bonus += 10.0
+            reasons.append("feature_table_access_chunk")
+        if bool(feature_flags.get("has_table_reads")) or bool(feature_flags.get("has_table_writes")):
+            bonus += 12.0
+            reasons.append("feature_table_procedure")
+
+    if query_type in {"variable_write", "variable_read", "variable"}:
+        if chunk_role == "variable_flow":
+            bonus += 12.0
+            reasons.append("feature_variable_flow_chunk")
+        if bool(feature_flags.get("has_variable_writes")):
+            bonus += 14.0 if hit_type == "procedure" else 8.0
+            reasons.append("feature_variable_procedure")
+
+    if query_type in {"callers", "callees"}:
+        if chunk_role == "call_chain":
+            bonus += 12.0
+            reasons.append("feature_call_chain_chunk")
+        if bool(feature_flags.get("has_calls")):
+            bonus += 10.0
+            reasons.append("feature_call_procedure")
+
+    if query_type == "failure_flow":
+        if chunk_role == "failure_flow" or bool(chunk_features.get("has_failure_markers")):
+            bonus += 16.0
+            reasons.append("feature_failure_chunk")
+        if bool(feature_flags.get("has_failure_chunks")):
+            bonus += 10.0
+            reasons.append("feature_failure_procedure")
+
+    if query_type == "metadata" and bool(feature_flags.get("has_metadata_refs")):
+        bonus += 10.0
+        reasons.append("feature_metadata_procedure")
+
+    if query_type == "topic" and bool(feature_flags.get("has_mc_topics")):
+        bonus += 12.0
+        reasons.append("feature_topic_procedure")
+
+    if hit_type == "chunk" and float(chunk_features.get("action_density") or 0.0) >= 0.5:
+        bonus += 2.0
+        reasons.append("feature_dense_chunk")
+
+    return bonus, reasons
+
+
+def hit_type(candidate: dict[str, object]) -> str:
+    return str(candidate.get("hit_type") or "")
+
+
+def _classify_query_type(
+    *,
+    wants_table_sql: bool,
+    wants_table_write: bool,
+    wants_table_read: bool,
+    wants_variable: bool,
+    wants_variable_write: bool,
+    wants_variable_read: bool,
+    wants_call_chain: bool,
+    wants_callers: bool,
+    wants_failure_flow: bool,
+    wants_metadata: bool,
+    wants_topic: bool,
+    wants_procedure: bool,
+) -> str:
+    if wants_call_chain:
+        return "callers" if wants_callers else "callees"
+    if wants_failure_flow:
+        return "failure_flow"
+    if wants_table_sql and wants_table_write:
+        return "table_write"
+    if wants_table_sql and wants_table_read:
+        return "table_read"
+    if wants_variable_write:
+        return "variable_write"
+    if wants_variable_read:
+        return "variable_read"
+    if wants_metadata:
+        return "metadata"
+    if wants_topic:
+        return "topic"
+    if wants_variable:
+        return "variable"
+    if wants_procedure:
+        return "procedure"
+    return "location"

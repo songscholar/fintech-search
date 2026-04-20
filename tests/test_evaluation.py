@@ -75,12 +75,16 @@ def test_retrieval_evaluator_reports_pass_at_k_and_recall(tmp_path: Path) -> Non
     assert report["summary"]["top_three_expectation_coverage"] == 11 / 12
     assert report["summary"]["avg_candidate_count"] >= 4.0
     assert report["summary"]["avg_evidence_count"] >= 1.0
+    assert report["summary"]["avg_feature_rerank_hit_count"] >= 1.0
     assert report["summary"]["by_tag"]["variable"]["matched_cases"] == 1
     assert report["summary"]["by_tag"]["variable"]["evidence_coverage"] == 2 / 3
+    assert report["summary"]["by_query_type"]["variable_write"]["matched_cases"] == 1
+    assert report["summary"]["by_query_type"]["callers"]["matched_cases"] == 1
     assert report["cases"][0]["first_relevant_rank"] == 1
     assert report["cases"][0]["expectations"][0]["matched"] is True
     assert report["cases"][0]["evidence"]["coverage"] == 2 / 3
     assert report["cases"][0]["retrieval"]["top_hit_expectation_coverage"] == 2 / 3
+    assert report["cases"][0]["retrieval"]["query_type"] == "variable_write"
     assert report["cases"][0]["top_hits"]
 
 

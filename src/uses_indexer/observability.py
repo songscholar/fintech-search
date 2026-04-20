@@ -34,12 +34,20 @@ def build_retrieval_debug_payload(
     reranked: list[dict[str, object]],
     elapsed_ms: float | None = None,
 ) -> dict[str, object]:
+    rank_by_entity = {
+        (str(item.get("hit_type") or ""), int(item.get("entity_id") or 0)): index
+        for index, item in enumerate(reranked, start=1)
+    }
     rerank_preview = [
         {
             "procedure_name": str(item.get("procedure_name") or ""),
             "matched_text": str(item.get("matched_text") or ""),
+            "rank_after": rank_by_entity.get((str(item.get("hit_type") or ""), int(item.get("entity_id") or 0))),
             "score": round(float(item.get("score") or 0.0), 6),
             "reasons": list(item.get("reasons") or []),
+            "score_before_rerank": round(float((item.get("debug_rerank") or {}).get("score_before_rerank") or 0.0), 6),
+            "score_after_rerank": round(float((item.get("debug_rerank") or {}).get("score_after_rerank") or 0.0), 6),
+            "score_after_call_chain": round(float((item.get("debug_rerank") or {}).get("score_after_call_chain") or item.get("score") or 0.0), 6),
             "breakdown": dict((item.get("debug_rerank") or {}).get("score_breakdown") or {}),
         }
         for item in reranked[:20]

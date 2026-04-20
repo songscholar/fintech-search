@@ -111,6 +111,12 @@ class RetrievalService:
         for candidate in like_candidates:
             merge_candidate(candidates, candidate)
 
+        relation_candidates = self._run_relation_queries(conn, query_analysis=query_analysis, limit=candidate_limit)
+        source_trace["relation"] = [self._trace_candidate(item) for item in relation_candidates[:20]]
+        source_counts["relation"] = len(relation_candidates)
+        for candidate in relation_candidates:
+            merge_candidate(candidates, candidate)
+
         merged = list(candidates.values())
         for candidate in merged:
             candidate["debug_retrieval"] = {
@@ -348,6 +354,37 @@ class RetrievalService:
             (
                 """
                 SELECT
+                  'procedure' AS hit_type,
+                  109.0 AS base_score,
+                  'fts_procedure_feature' AS retrieval_source,
+                  pf.procedure_id AS entity_id,
+                  pf.procedure_id AS procedure_id,
+                  pf.file_id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  NULL AS line_start,
+                  NULL AS line_end,
+                  pf.summary_text AS matched_text,
+                  'procedure_feature_summary' AS match_source,
+                  -bm25(procedure_features_fts, 5.0, 3.0) AS source_rank,
+                  pf.summary_text AS search_text,
+                  pf.summary_text AS procedure_summary,
+                  pf.feature_flags_json AS feature_flags_json
+                FROM procedure_features_fts
+                JOIN procedure_features pf ON pf.procedure_id = procedure_features_fts.rowid
+                JOIN procedures p ON p.id = pf.procedure_id
+                JOIN files f ON f.id = pf.file_id
+                WHERE procedure_features_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
                   'block' AS hit_type,
                   113.0 AS base_score,
                   'fts_block' AS retrieval_source,
@@ -392,8 +429,10 @@ class RetrievalService:
                   c.line_end AS line_end,
                   COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
                   'chunk_summary' AS match_source,
-                  -bm25(chunks_fts, 2.0, 1.5, 1.0, 6.0, 4.0) AS source_rank,
-                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                  -bm25(chunks_fts, 2.0, 1.0, 1.5, 1.0, 6.0, 4.0) AS source_rank,
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.embedding_text, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text,
+                  c.chunk_role AS chunk_role,
+                  c.chunk_features_json AS chunk_features_json
                 FROM chunks_fts
                 JOIN chunks c ON c.id = chunks_fts.rowid
                 JOIN procedures p ON p.id = c.procedure_id
@@ -595,7 +634,9 @@ class RetrievalService:
                   COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
                   'chunk_summary' AS match_source,
                   0.0 AS source_rank,
-                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.embedding_text, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text,
+                  c.chunk_role AS chunk_role,
+                  c.chunk_features_json AS chunk_features_json
                 FROM chunks c
                 JOIN procedures p ON p.id = c.procedure_id
                 JOIN files f ON f.id = c.file_id
@@ -770,6 +811,163 @@ class RetrievalService:
             hits.extend(_row_to_hit(row) for row in rows)
         return hits
 
+    def _run_relation_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[int, str]] = set()
+
+        def add_procedure_candidates(
+            term: str,
+            field_name: str,
+            score: float,
+            reason: str,
+            *,
+            where_sql: str,
+            params: tuple[object, ...],
+        ) -> None:
+            rows = conn.execute(
+                f"""
+                SELECT
+                  pf.procedure_id,
+                  pf.file_id,
+                  pf.procedure_name,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path
+                FROM procedure_features pf
+                JOIN procedures p ON p.id = pf.procedure_id
+                JOIN files f ON f.id = pf.file_id
+                WHERE {where_sql}
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+            for row in rows:
+                key = (int(row[0]), field_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[7]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[5] if row[5] else None,
+                        "object_id": row[6] if row[6] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": str(row[3]),
+                        "match_source": field_name,
+                        "retrieval_source": "relation_procedure_feature",
+                        "base_score": score,
+                        "source_rank": score / 10.0,
+                        "search_text": str(row[3]),
+                        "procedure_summary": str(row[3]),
+                        "feature_flags": json.loads(str(row[4] or "{}")),
+                        "reasons": [f"{reason}={term}"],
+                    }
+                )
+
+        for term in query_analysis.get("procedure_terms", []):
+            lowered = f"%{str(term).lower()}%"
+            add_procedure_candidates(
+                str(term),
+                "procedure_relation",
+                89.0,
+                "procedure_relation",
+                where_sql="""
+                lower(pf.procedure_name) LIKE ?
+                OR lower(COALESCE(p.chinese_name, '')) LIKE ?
+                OR lower(COALESCE(p.object_id, '')) LIKE ?
+                OR lower(pf.summary_text) LIKE ?
+                """,
+                params=(lowered, lowered, lowered, lowered),
+            )
+        for term in query_analysis.get("table_terms", []):
+            lowered = f"%{str(term).lower()}%"
+            add_procedure_candidates(
+                str(term),
+                "table_relation",
+                91.0,
+                "table_relation",
+                where_sql="""
+                lower(pf.read_tables_json) LIKE ?
+                OR lower(pf.write_tables_json) LIKE ?
+                OR lower(pf.summary_text) LIKE ?
+                """,
+                params=(lowered, lowered, lowered),
+            )
+        for term in query_analysis.get("variable_terms", []):
+            lowered = f"%{str(term).lower()}%"
+            add_procedure_candidates(
+                str(term),
+                "variable_relation",
+                88.0,
+                "variable_relation",
+                where_sql="""
+                lower(pf.variable_reads_json) LIKE ?
+                OR lower(pf.variable_writes_json) LIKE ?
+                OR lower(pf.summary_text) LIKE ?
+                """,
+                params=(lowered, lowered, lowered),
+            )
+        if query_analysis.get("wants_metadata"):
+            for term in query_analysis.get("focus_terms", [])[:6]:
+                lowered = f"%{str(term).lower()}%"
+                add_procedure_candidates(
+                    str(term),
+                    "metadata_relation",
+                    90.0,
+                    "metadata_relation",
+                    where_sql="""
+                    lower(pf.metadata_refs_json) LIKE ?
+                    OR lower(pf.summary_text) LIKE ?
+                    """,
+                    params=(lowered, lowered),
+                )
+        if query_analysis.get("wants_topic"):
+            for term in [*query_analysis.get("focus_terms", [])[:6], *query_analysis.get("procedure_terms", [])[:2]]:
+                lowered = f"%{str(term).lower()}%"
+                add_procedure_candidates(
+                    str(term),
+                    "topic_relation",
+                    92.0,
+                    "topic_relation",
+                    where_sql="""
+                    lower(pf.mc_topics_json) LIKE ?
+                    OR lower(pf.summary_text) LIKE ?
+                    """,
+                    params=(lowered, lowered),
+                )
+        for term in query_analysis.get("focus_terms", [])[:6]:
+            lowered = f"%{str(term).lower()}%"
+            add_procedure_candidates(
+                str(term),
+                "focus_relation",
+                82.0,
+                "focus_relation",
+                where_sql="""
+                lower(pf.summary_text) LIKE ?
+                OR lower(pf.actions_json) LIKE ?
+                OR lower(pf.outgoing_calls_json) LIKE ?
+                OR lower(pf.incoming_callers_json) LIKE ?
+                """,
+                params=(lowered, lowered, lowered, lowered),
+            )
+
+        return candidates[:limit]
+
     def _trace_candidate(self, candidate: dict[str, object]) -> dict[str, object]:
         return {
             "hit_type": str(candidate.get("hit_type") or ""),
@@ -784,7 +982,7 @@ class RetrievalService:
 
 
 def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
-    return {
+    result = {
         "hit_type": str(row["hit_type"]),
         "entity_id": int(row["entity_id"]),
         "procedure_id": int(row["procedure_id"]),
@@ -804,6 +1002,15 @@ def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
         "search_text": str(row["search_text"]),
         "reasons": [],
     }
+    if "chunk_role" in row.keys() and row["chunk_role"] is not None:
+        result["chunk_role"] = str(row["chunk_role"])
+    if "chunk_features_json" in row.keys() and row["chunk_features_json"]:
+        result["chunk_features"] = json.loads(str(row["chunk_features_json"]))
+    if "procedure_summary" in row.keys() and row["procedure_summary"]:
+        result["procedure_summary"] = str(row["procedure_summary"])
+    if "feature_flags_json" in row.keys() and row["feature_flags_json"]:
+        result["feature_flags"] = json.loads(str(row["feature_flags_json"]))
+    return result
 
 
 def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]:

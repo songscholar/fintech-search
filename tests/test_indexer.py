@@ -639,6 +639,20 @@ def test_query_index_applies_intent_aware_rerank(tmp_path: Path) -> None:
     assert "intent_failure_block" in failure_result["hits"][0]["reasons"]
 
 
+def test_query_index_uses_relation_expansion_and_feature_rerank(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@deep_flag 相关流程", limit=12)
+
+    assert result["hit_count"] >= 1
+    relation_hits = [hit for hit in result["hits"] if hit["retrieval_source"] == "relation_procedure_feature"]
+    assert relation_hits
+    assert any(
+        "feature_variable_procedure" in hit["reasons"] or "variable_relation=@deep_flag" in " ".join(hit["reasons"])
+        for hit in relation_hits
+    )
+
+
 def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 
@@ -757,6 +771,8 @@ def test_query_index_debug_includes_retrieval_trace(tmp_path: Path) -> None:
     assert debug["trace"]["summary"]["reranked_candidate_count"] >= result["hit_count"]
     assert debug["trace"]["rerank"]["candidate_count"] >= result["hit_count"]
     assert "call_chain" in debug["query_analysis"]["intents"]
+    assert "score_before_rerank" in debug["rerank_preview"][0]
+    assert "score_after_rerank" in debug["rerank_preview"][0]
 
 
 def test_assemble_evidence_debug_includes_pruning_trace(tmp_path: Path) -> None:

@@ -1483,3 +1483,94 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 索引构建阶段现在已经开始直接产出可供 retrieval/rerank 使用的语义特征
 - 向量输入从“原始文本”升级成了“结构化语义摘要”
 - procedure 级关系预计算已经具备，可直接支撑下一步 relation retrieval 和 feature rerank
+
+## [1.2.16] - 2026-04-21
+
+### Step 23: 升级检索链路与质量评测
+
+### 本步目标
+
+- 把 query understanding 从“几个粗 intent”升级成更细的 `query_type`
+- 让 retrieval 不只查文本，还能利用 procedure 级关系特征做 relation expansion
+- 让 rerank 真正使用 chunk/procedure feature
+- 让评测报告能看出不同问题类型和 rerank 质量信号
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/constants.py`
+   - 补充 metadata / topic 相关 intent 关键词
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - `analyze_query()` 新增：
+     - `wants_metadata`
+     - `wants_topic`
+     - `wants_variable_write`
+     - `wants_variable_read`
+     - `query_type`
+   - `_intent_bonus()` 加强：
+     - table write/read
+     - variable read/write
+     - metadata
+     - topic
+     - failure block
+   - `_feature_bonus()` 现在真正消费：
+     - `chunk_role`
+     - `chunk_features`
+     - `feature_flags`
+
+3. 更新 `src/uses_indexer/retrieval.py`
+   - 增加 `procedure_features_fts` 检索
+   - chunk 检索统一使用结构化 `embedding_text`
+   - 新增 `relation_procedure_feature` 召回通道
+   - relation expansion 按字段区分：
+     - procedure relation
+     - table relation
+     - variable relation
+     - metadata relation
+     - topic relation
+     - focus relation
+   - `_row_to_hit()` 透传：
+     - `chunk_role`
+     - `chunk_features`
+     - `procedure_summary`
+     - `feature_flags`
+
+4. 更新 `src/uses_indexer/observability.py`
+   - retrieval trace 补充：
+     - `score_before_rerank`
+     - `score_after_rerank`
+     - `score_after_call_chain`
+     - `rank_after`
+
+5. 更新 `src/uses_indexer/evaluation.py`
+   - evaluator 改为消费 `query_index(..., debug=True)`
+   - case 结果新增：
+     - `query_type`
+     - `relation_hit_count`
+     - `fts_hit_count`
+     - `vector_hit_count`
+     - `rerank_feature_hit_count`
+   - summary 新增：
+     - `avg_relation_hit_count`
+     - `avg_feature_rerank_hit_count`
+     - `by_query_type`
+
+6. 更新测试
+   - `tests/test_indexer.py`
+     - 新增 relation expansion + feature rerank 回归
+     - debug trace 校验 rerank 前后分数字段
+   - `tests/test_evaluation.py`
+     - 校验 `by_query_type`
+     - 校验新的 feature rerank 质量指标
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evaluation.py src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/observability.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py tests/test_indexer.py::test_query_index_uses_relation_expansion_and_feature_rerank tests/test_indexer.py::test_query_index_debug_includes_retrieval_trace tests/test_indexer.py::test_query_index_applies_intent_aware_rerank` 通过
+- 结果：`8 passed`
+
+### 结论
+
+- 检索链路现在已经开始把“关系”和“语义特征”当一等公民，而不只是关键词命中
+- rerank trace 现在能直接看出分数前后变化
+- 评测层已经能按 query type 观察检索质量，不再只有整体平均值

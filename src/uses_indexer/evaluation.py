@@ -49,10 +49,12 @@ class RetrievalEvaluator:
     ) -> dict[str, object]:
         question = str(case["question"])
         expected = _normalize_expected(case.get("expected", {}))
-        query_result = self.indexer.query_index(db_path, question, limit=limit)
+        query_result = self.indexer.query_index(db_path, question, limit=limit, debug=True)
         evidence_result = self.indexer.assemble_evidence(db_path, question, limit=min(5, limit))
         hits = list(query_result["hits"])
         evidence_blocks = list(evidence_result["evidence"])
+        debug_payload = dict(query_result.get("debug") or {})
+        query_analysis = dict(debug_payload.get("query_analysis") or {})
         expectations = _flatten_expectations(expected)
         match_details = [
             _match_expectation(expectation, hits)
@@ -94,6 +96,7 @@ class RetrievalEvaluator:
             "id": case.get("id") or question,
             "question": question,
             "tags": list(case.get("tags", [])),
+            "query_type": str(query_analysis.get("query_type") or "unknown"),
             "expected_count": len(expectations),
             "matched_count": sum(1 for detail in match_details if detail["matched"]),
             "first_relevant_rank": first_rank,
@@ -137,6 +140,15 @@ class RetrievalEvaluator:
                 "vector_status": query_result["vector_status"],
                 "top_hit_expectation_coverage": top_hit_matches / max(len(expectations), 1),
                 "top_three_expectation_coverage": top_three_matches / max(len(expectations), 1),
+                "query_type": str(query_analysis.get("query_type") or "unknown"),
+                "relation_hit_count": sum(1 for hit in hits if str(hit.get("retrieval_source")) == "relation_procedure_feature"),
+                "fts_hit_count": sum(1 for hit in hits if str(hit.get("retrieval_source")).startswith("fts_")),
+                "vector_hit_count": sum(1 for hit in hits if str(hit.get("retrieval_source")) == "vector_chunk"),
+                "rerank_feature_hit_count": sum(
+                    1
+                    for hit in hits
+                    if any(str(reason).startswith("feature_") for reason in hit.get("reasons", []))
+                ),
             },
         }
 
@@ -632,6 +644,20 @@ def _summarize_by_tag(
     }
 
 
+def _summarize_by_query_type(
+    case_results: list[dict[str, object]],
+    *,
+    top_k: tuple[int, ...],
+) -> dict[str, object]:
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for case in case_results:
+        grouped.setdefault(str(case.get("query_type") or "unknown"), []).append(case)
+    return {
+        query_type: _summarize_case_results(query_cases, top_k=top_k, include_by_tag=False)
+        for query_type, query_cases in sorted(grouped.items())
+    }
+
+
 def _summarize_case_results(
     case_results: list[dict[str, object]],
     *,
@@ -650,7 +676,10 @@ def _summarize_case_results(
             "top_three_expectation_coverage": 0.0,
             "avg_candidate_count": 0.0,
             "avg_evidence_count": 0.0,
+            "avg_relation_hit_count": 0.0,
+            "avg_feature_rerank_hit_count": 0.0,
             "by_tag": {} if include_by_tag else None,
+            "by_query_type": {} if include_by_tag else None,
         }
 
     pass_at_k = {
@@ -689,7 +718,14 @@ def _summarize_case_results(
         "avg_evidence_count": (
             sum(float(case["evidence"]["evidence_count"]) for case in case_results) / case_count
         ),
+        "avg_relation_hit_count": (
+            sum(float(case["retrieval"].get("relation_hit_count", 0.0)) for case in case_results) / case_count
+        ),
+        "avg_feature_rerank_hit_count": (
+            sum(float(case["retrieval"].get("rerank_feature_hit_count", 0.0)) for case in case_results) / case_count
+        ),
         "by_tag": _summarize_by_tag(case_results, top_k=top_k) if include_by_tag else None,
+        "by_query_type": _summarize_by_query_type(case_results, top_k=top_k) if include_by_tag else None,
     }
 
 
