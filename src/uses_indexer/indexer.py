@@ -16,6 +16,7 @@ from .embeddings import (
     create_embedder_from_env,
     dot_similarity,
 )
+from .context_fetch import ContextFetchService
 from .evidence import EvidenceService
 from .index_build import IndexBuildService
 from .models import CodeStatement, ParsedUnit
@@ -399,6 +400,7 @@ class SQLiteIndexer:
         self._index_build_service = IndexBuildService(self)
         self._retrieval_service = RetrievalService(self)
         self._evidence_service = EvidenceService(self)
+        self._context_fetch_service = ContextFetchService(self)
 
     def build_index(
         self,
@@ -2259,114 +2261,11 @@ class SQLiteIndexer:
         procedure_name: str,
         max_depth: int = 10,
     ) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
-        """
-        Find all neighbors at each depth level using BFS.
-
-        Returns:
-            outgoing_hops: dict mapping depth -> set of procedure names (this -> others)
-            incoming_hops: dict mapping depth -> set of procedure names (others -> this)
-        """
-        outgoing_hops: dict[int, set[str]] = {1: set()}
-        incoming_hops: dict[int, set[str]] = {1: set()}
-
-        # Get direct neighbors (depth 1)
-        outgoing_hops[1] = {
-            self._resolve_procedure_name(conn, str(row[0]))
-            for row in conn.execute(
-                """
-                SELECT DISTINCT target_name
-                FROM edges
-                WHERE source_name = ? AND edge_type = 'calls_procedure'
-                """,
-                (procedure_name,),
-            ).fetchall()
-        }
-
-        aliases = self._procedure_aliases(conn, procedure_name=procedure_name)
-        incoming_hops[1] = {
-            str(row[0])
-            for row in conn.execute(
-                f"""
-                SELECT DISTINCT source_name
-                FROM edges
-                WHERE target_name IN ({",".join("?" for _ in aliases)}) AND edge_type = 'calls_procedure'
-                """,
-                aliases,
-            ).fetchall()
-        }
-
-        # BFS for multi-hop neighbors
-        visited: set[str] = {procedure_name}
-        visited.update(outgoing_hops[1])
-        visited.update(incoming_hops[1])
-
-        # Use a queue for BFS: (current_procedure, depth)
-        # Track both outgoing and incoming at each depth
-        current_outgoing = outgoing_hops[1].copy()
-        current_incoming = incoming_hops[1].copy()
-
-        for depth in range(2, max_depth + 1):
-            next_outgoing: set[str] = set()
-            next_incoming: set[str] = set()
-
-            # Expand from outgoing neighbors (this -> A -> B)
-            for neighbor_name in current_outgoing:
-                if neighbor_name in visited:
-                    continue
-
-                # Get outgoing calls from this neighbor
-                next_level_out = {
-                    self._resolve_procedure_name(conn, str(row[0]))
-                    for row in conn.execute(
-                        """
-                        SELECT DISTINCT target_name
-                        FROM edges
-                        WHERE source_name = ? AND edge_type = 'calls_procedure'
-                        """,
-                        (neighbor_name,),
-                    ).fetchall()
-                }
-                next_outgoing.update(next_level_out - visited)
-
-            # Expand from incoming neighbors (C -> A -> this)
-            for neighbor_name in current_incoming:
-                if neighbor_name in visited:
-                    continue
-
-                # Get incoming calls to this neighbor
-                neighbor_aliases = self._procedure_aliases(conn, procedure_name=neighbor_name)
-                next_level_in = {
-                    str(row[0])
-                    for row in conn.execute(
-                        f"""
-                        SELECT DISTINCT source_name
-                        FROM edges
-                        WHERE target_name IN ({",".join("?" for _ in neighbor_aliases)}) AND edge_type = 'calls_procedure'
-                        """,
-                        neighbor_aliases,
-                    ).fetchall()
-                }
-                next_incoming.update(next_level_in - visited)
-
-            # Update visited
-            visited.update(next_outgoing)
-            visited.update(next_incoming)
-
-            # Only add if we have new nodes
-            if next_outgoing:
-                outgoing_hops[depth] = next_outgoing
-            if next_incoming:
-                incoming_hops[depth] = next_incoming
-
-            # Update current level for next iteration
-            current_outgoing = next_outgoing
-            current_incoming = next_incoming
-
-            # Stop if no more neighbors found
-            if not current_outgoing and not current_incoming:
-                break
-
-        return outgoing_hops, incoming_hops
+        return self._context_fetch_service.procedure_call_neighbors(
+            conn,
+            procedure_name=procedure_name,
+            max_depth=max_depth,
+        )
 
     def _fetch_context_block(
         self,
@@ -2376,70 +2275,12 @@ class SQLiteIndexer:
         statement_id: int | None,
         context_window: int,
     ) -> dict[str, object]:
-        if statement_id is not None:
-            anchor = conn.execute(
-                "SELECT seq FROM statements WHERE id = ?",
-                (statement_id,),
-            ).fetchone()
-        else:
-            anchor = None
-
-        if anchor is not None:
-            start_seq = max(int(anchor["seq"]) - context_window, 1)
-            end_seq = int(anchor["seq"]) + context_window
-            rows = conn.execute(
-                """
-                SELECT id, seq, kind, line_start, line_end, raw
-                FROM statements
-                WHERE procedure_id = ? AND seq BETWEEN ? AND ?
-                ORDER BY seq
-                """,
-                (procedure_id, start_seq, end_seq),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT id, seq, kind, line_start, line_end, raw
-                FROM statements
-                WHERE procedure_id = ? AND kind != 'brace'
-                ORDER BY seq
-                LIMIT ?
-                """,
-                (procedure_id, max(context_window * 2 + 1, 5)),
-            ).fetchall()
-
-        if not rows:
-            rows = conn.execute(
-                """
-                SELECT id, seq, kind, line_start, line_end, raw
-                FROM statements
-                WHERE procedure_id = ?
-                ORDER BY seq
-                LIMIT 5
-                """,
-                (procedure_id,),
-            ).fetchall()
-
-        statements = [
-            {
-                "statement_id": int(row["id"]),
-                "seq": int(row["seq"]),
-                "kind": str(row["kind"]),
-                "line_start": int(row["line_start"]),
-                "line_end": int(row["line_end"]),
-                "raw": str(row["raw"]),
-            }
-            for row in rows
-        ]
-        line_start = min((item["line_start"] for item in statements), default=0)
-        line_end = max((item["line_end"] for item in statements), default=0)
-
-        return {
-            "line_start": line_start,
-            "line_end": line_end,
-            "statements": statements,
-            "excerpt": format_excerpt(statements),
-        }
+        return self._context_fetch_service.fetch_context_block(
+            conn,
+            procedure_id=procedure_id,
+            statement_id=statement_id,
+            context_window=context_window,
+        )
 
     def _fetch_chunk_block(
         self,
@@ -2447,57 +2288,7 @@ class SQLiteIndexer:
         *,
         chunk_id: int,
     ) -> dict[str, object]:
-        chunk_row = conn.execute(
-            """
-            SELECT
-              procedure_id,
-              chunk_type,
-              line_start,
-              line_end,
-              statement_start_seq,
-              statement_end_seq,
-              summary_text
-            FROM chunks
-            WHERE id = ?
-            """,
-            (chunk_id,),
-        ).fetchone()
-        if chunk_row is None:
-            raise ValueError(f"Chunk does not exist: {chunk_id}")
-
-        rows = conn.execute(
-            """
-            SELECT id, seq, kind, line_start, line_end, raw
-            FROM statements
-            WHERE procedure_id = ? AND seq BETWEEN ? AND ?
-            ORDER BY seq
-            """,
-            (
-                int(chunk_row["procedure_id"]),
-                int(chunk_row["statement_start_seq"]),
-                int(chunk_row["statement_end_seq"]),
-            ),
-        ).fetchall()
-
-        statements = [
-            {
-                "statement_id": int(row["id"]),
-                "seq": int(row["seq"]),
-                "kind": str(row["kind"]),
-                "line_start": int(row["line_start"]),
-                "line_end": int(row["line_end"]),
-                "raw": str(row["raw"]),
-            }
-            for row in rows
-        ]
-        return {
-            "chunk_type": str(chunk_row["chunk_type"]),
-            "summary_text": str(chunk_row["summary_text"]),
-            "line_start": int(chunk_row["line_start"]),
-            "line_end": int(chunk_row["line_end"]),
-            "statements": statements,
-            "excerpt": format_excerpt(statements),
-        }
+        return self._context_fetch_service.fetch_chunk_block(conn, chunk_id=chunk_id)
 
     def _fetch_block_context(
         self,
@@ -2505,57 +2296,7 @@ class SQLiteIndexer:
         *,
         block_id: int,
     ) -> dict[str, object]:
-        block_row = conn.execute(
-            """
-            SELECT
-              procedure_id,
-              block_type,
-              summary_text,
-              line_start,
-              line_end,
-              statement_start_seq,
-              statement_end_seq
-            FROM blocks
-            WHERE id = ?
-            """,
-            (block_id,),
-        ).fetchone()
-        if block_row is None:
-            raise ValueError(f"Block does not exist: {block_id}")
-
-        rows = conn.execute(
-            """
-            SELECT id, seq, kind, line_start, line_end, raw
-            FROM statements
-            WHERE procedure_id = ? AND seq BETWEEN ? AND ?
-            ORDER BY seq
-            """,
-            (
-                int(block_row["procedure_id"]),
-                int(block_row["statement_start_seq"]),
-                int(block_row["statement_end_seq"]),
-            ),
-        ).fetchall()
-
-        statements = [
-            {
-                "statement_id": int(row["id"]),
-                "seq": int(row["seq"]),
-                "kind": str(row["kind"]),
-                "line_start": int(row["line_start"]),
-                "line_end": int(row["line_end"]),
-                "raw": str(row["raw"]),
-            }
-            for row in rows
-        ]
-        return {
-            "block_type": str(block_row["block_type"]),
-            "block_summary": str(block_row["summary_text"]),
-            "line_start": int(block_row["line_start"]),
-            "line_end": int(block_row["line_end"]),
-            "statements": statements,
-            "excerpt": format_excerpt(statements),
-        }
+        return self._context_fetch_service.fetch_block_context(conn, block_id=block_id)
 
     def _fetch_covering_blocks(
         self,
@@ -2566,39 +2307,13 @@ class SQLiteIndexer:
         line_end: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        rows = conn.execute(
-            """
-            SELECT
-              id,
-              block_type,
-              anchor_name,
-              line_start,
-              line_end,
-              summary_text
-            FROM blocks
-            WHERE procedure_id = ?
-              AND line_start <= ?
-              AND line_end >= ?
-            ORDER BY (line_end - line_start) ASC, line_start ASC
-            LIMIT ?
-            """,
-            (procedure_id, line_end, line_start, limit),
-        ).fetchall()
-
-        blocks = []
-        for row in rows:
-            block_id = int(row["id"])
-            blocks.append(
-                {
-                    "block_type": str(row["block_type"]),
-                    "anchor_name": str(row["anchor_name"]),
-                    "line_start": int(row["line_start"]),
-                    "line_end": int(row["line_end"]),
-                    "summary_text": str(row["summary_text"]),
-                    "relations": self._fetch_block_relation_summary(conn, block_id=block_id, limit=4),
-                }
-            )
-        return blocks
+        return self._context_fetch_service.fetch_covering_blocks(
+            conn,
+            procedure_id=procedure_id,
+            line_start=line_start,
+            line_end=line_end,
+            limit=limit,
+        )
 
     def _fetch_block_relation_summary(
         self,
@@ -2607,33 +2322,7 @@ class SQLiteIndexer:
         block_id: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        rows = conn.execute(
-            """
-            SELECT edge_type, target_name, target_kind
-            FROM block_edges
-            WHERE block_id = ?
-            ORDER BY
-              CASE edge_type
-                WHEN 'calls_procedure' THEN 0
-                WHEN 'reads_table' THEN 1
-                WHEN 'writes_table' THEN 2
-                WHEN 'reads_dynamic_table' THEN 3
-                WHEN 'writes_dynamic_table' THEN 4
-                ELSE 3
-              END,
-              target_name
-            LIMIT ?
-            """,
-            (block_id, limit),
-        ).fetchall()
-        return [
-            {
-                "edge_type": str(row["edge_type"]),
-                "target_name": str(row["target_name"]),
-                "target_kind": str(row["target_kind"]),
-            }
-            for row in rows
-        ]
+        return self._context_fetch_service.fetch_block_relation_summary(conn, block_id=block_id, limit=limit)
 
     def _fetch_related_context(
         self,
@@ -2643,139 +2332,12 @@ class SQLiteIndexer:
         procedure_name: str,
         related_limit: int,
     ) -> dict[str, object]:
-        aliases = self._procedure_aliases(conn, procedure_id=procedure_id, procedure_name=procedure_name)
-        outgoing_call_edges = self._fetch_related_call_edges(
+        return self._context_fetch_service.fetch_related_context(
             conn,
             procedure_id=procedure_id,
             procedure_name=procedure_name,
-            aliases=aliases,
-            direction="outgoing",
-            limit=related_limit,
-        )
-        outgoing_calls = [str(item["procedure_name"]) for item in outgoing_call_edges]
-
-        incoming_caller_edges = self._fetch_related_call_edges(
-            conn,
-            procedure_id=procedure_id,
-            procedure_name=procedure_name,
-            aliases=aliases,
-            direction="incoming",
-            limit=related_limit,
-        )
-        incoming_callers = [str(item["procedure_name"]) for item in incoming_caller_edges]
-
-        related_tables = [
-            {
-                "name": str(row["target_name"]),
-                "edge_type": str(row["edge_type"]),
-            }
-            for row in conn.execute(
-                """
-                SELECT DISTINCT target_name, edge_type
-                FROM edges
-                WHERE procedure_id = ? AND edge_type IN ('reads_table', 'writes_table', 'reads_dynamic_table', 'writes_dynamic_table')
-                ORDER BY target_name
-                LIMIT ?
-                """,
-                (procedure_id, related_limit),
-            ).fetchall()
-        ]
-
-        related_actions = [
-            str(row["action_name"])
-            for row in conn.execute(
-                """
-                SELECT DISTINCT action_name
-                FROM actions
-                WHERE procedure_id = ? AND kind = 'action'
-                ORDER BY action_name
-                LIMIT ?
-                """,
-                (procedure_id, related_limit),
-            ).fetchall()
-        ]
-
-        control_flow = [
-            {
-                "edge_type": str(row["edge_type"]),
-                "target_name": str(row["target_name"]),
-            }
-            for row in conn.execute(
-                """
-                SELECT DISTINCT edge_type, target_name
-                FROM edges
-                WHERE procedure_id = ?
-                  AND edge_type IN ('jumps_to_label', 'jumps_to_exit', 'defines_label')
-                ORDER BY edge_type, target_name
-                LIMIT ?
-                """,
-                (procedure_id, related_limit),
-            ).fetchall()
-        ]
-
-        # Get multi-hop call chains using BFS
-        outgoing_hops, incoming_hops = self._procedure_call_neighbors(
-            conn,
-            procedure_name=procedure_name,
-            max_depth=5,
-        )
-
-        # Build multi-hop call chain paths for evidence
-        multi_hop_outgoing: list[dict[str, object]] = []
-        multi_hop_incoming: list[dict[str, object]] = []
-
-        for depth in range(2, 6):
-            depth_out = outgoing_hops.get(depth, set())
-            depth_in = incoming_hops.get(depth, set())
-
-            # Get procedure summaries for outgoing at this depth
-            for proc_name in list(depth_out)[:related_limit]:
-                summary = self._lookup_procedure_summary(conn, proc_name)
-                if summary:
-                    summary["hop_depth"] = depth
-                    summary["direction"] = "outgoing"
-                    multi_hop_outgoing.append(summary)
-
-            # Get procedure summaries for incoming at this depth
-            for proc_name in list(depth_in)[:related_limit]:
-                summary = self._lookup_procedure_summary(conn, proc_name)
-                if summary:
-                    summary["hop_depth"] = depth
-                    summary["direction"] = "incoming"
-                    multi_hop_incoming.append(summary)
-
-        related_procedures = self._fetch_related_procedure_summaries(
-            conn,
-            outgoing_calls=outgoing_calls,
-            incoming_callers=incoming_callers,
             related_limit=related_limit,
         )
-
-        published_mc_topics = self._fetch_related_mc_topics(
-            conn,
-            procedure_id=procedure_id,
-            limit=related_limit,
-        )
-        metadata_relations = self._fetch_related_metadata_relations(
-            conn,
-            procedure_id=procedure_id,
-            limit=related_limit,
-        )
-
-        return {
-            "outgoing_calls": outgoing_calls,
-            "incoming_callers": incoming_callers,
-            "outgoing_call_edges": outgoing_call_edges,
-            "incoming_caller_edges": incoming_caller_edges,
-            "published_mc_topics": published_mc_topics,
-            "metadata_relations": metadata_relations,
-            "related_tables": related_tables,
-            "related_actions": related_actions,
-            "control_flow": control_flow,
-            "multi_hop_outgoing": multi_hop_outgoing,
-            "multi_hop_incoming": multi_hop_incoming,
-            "related_procedures": related_procedures,
-        }
 
     def _fetch_related_metadata_relations(
         self,
@@ -2784,31 +2346,11 @@ class SQLiteIndexer:
         procedure_id: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT edge_type, target_name, target_kind
-            FROM edges
-            WHERE procedure_id = ?
-              AND (
-                edge_type LIKE 'defines_%'
-                OR edge_type LIKE 'references_%'
-                OR edge_type LIKE 'maps_%'
-                OR edge_type LIKE 'contains_%'
-                OR edge_type IN ('uses_datatype', 'uses_default_value', 'uses_standard_type', 'topic_filter_field')
-              )
-            ORDER BY edge_type, target_name
-            LIMIT ?
-            """,
-            (procedure_id, limit),
-        ).fetchall()
-        return [
-            {
-                "edge_type": str(row["edge_type"]),
-                "target_name": str(row["target_name"]),
-                "target_kind": str(row["target_kind"]),
-            }
-            for row in rows
-        ]
+        return self._context_fetch_service.fetch_related_metadata_relations(
+            conn,
+            procedure_id=procedure_id,
+            limit=limit,
+        )
 
     def _fetch_related_mc_topics(
         self,
@@ -2817,34 +2359,7 @@ class SQLiteIndexer:
         procedure_id: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT target_name, detail_json
-            FROM edges
-            WHERE procedure_id = ? AND edge_type = 'publishes_mc_topic'
-            ORDER BY target_name
-            LIMIT ?
-            """,
-            (procedure_id, limit),
-        ).fetchall()
-        topics: list[dict[str, object]] = []
-        seen_names: set[str] = set()
-        for row in rows:
-            topic_name = str(row["target_name"])
-            if topic_name in seen_names:
-                continue
-            seen_names.add(topic_name)
-            detail = _json_loads(str(row["detail_json"]))
-            topics.append(
-                {
-                    "topic_name": topic_name,
-                    "publish_mode": str(detail.get("publish_mode") or "unknown"),
-                    "publish_mode_label": str(detail.get("publish_mode_label") or "未知发布方式"),
-                    "message_label": str(detail.get("message_label") or "消息中心主题发布"),
-                    "communication_label": str(detail.get("communication_label") or "跨核心消息发布"),
-                }
-            )
-        return topics
+        return self._context_fetch_service.fetch_related_mc_topics(conn, procedure_id=procedure_id, limit=limit)
 
     def _fetch_related_call_edges(
         self,
@@ -2856,60 +2371,14 @@ class SQLiteIndexer:
         direction: str,
         limit: int,
     ) -> list[dict[str, object]]:
-        if direction == "outgoing":
-            rows = conn.execute(
-                """
-                SELECT DISTINCT target_name, detail_json
-                FROM edges
-                WHERE procedure_id = ? AND edge_type = 'calls_procedure'
-                ORDER BY target_name
-                LIMIT ?
-                """,
-                (procedure_id, limit),
-            ).fetchall()
-            items: list[dict[str, object]] = []
-            seen_names: set[str] = set()
-            for row in rows:
-                target_name = self._resolve_procedure_name(conn, str(row["target_name"]))
-                if target_name in seen_names:
-                    continue
-                seen_names.add(target_name)
-                detail = _json_loads(str(row["detail_json"]))
-                semantic = _coerce_call_semantics(detail, source_name=procedure_name, target_name=target_name)
-                items.append(
-                    {
-                        "procedure_name": target_name,
-                        **semantic,
-                    }
-                )
-            return items
-
-        rows = conn.execute(
-            f"""
-            SELECT DISTINCT source_name, detail_json
-            FROM edges
-            WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in aliases)})
-            ORDER BY source_name
-            LIMIT ?
-            """,
-            (*aliases, limit),
-        ).fetchall()
-        items = []
-        seen_names: set[str] = set()
-        for row in rows:
-            source_name = str(row["source_name"])
-            if source_name in seen_names:
-                continue
-            seen_names.add(source_name)
-            detail = _json_loads(str(row["detail_json"]))
-            semantic = _coerce_call_semantics(detail, source_name=source_name, target_name=procedure_name)
-            items.append(
-                {
-                    "procedure_name": source_name,
-                    **semantic,
-                }
-            )
-        return items
+        return self._context_fetch_service.fetch_related_call_edges(
+            conn,
+            procedure_id=procedure_id,
+            procedure_name=procedure_name,
+            aliases=aliases,
+            direction=direction,
+            limit=limit,
+        )
 
     def _fetch_call_chain_paths(
         self,
@@ -3009,38 +2478,14 @@ class SQLiteIndexer:
         procedure_id: int | None = None,
         procedure_name: str | None = None,
     ) -> tuple[str, ...]:
-        if procedure_id is not None:
-            row = conn.execute(
-                "SELECT name, chinese_name FROM procedures WHERE id = ?",
-                (procedure_id,),
-            ).fetchone()
-        elif procedure_name is not None:
-            row = conn.execute(
-                """
-                SELECT name, chinese_name
-                FROM procedures
-                WHERE name = ? OR chinese_name = ?
-                ORDER BY CASE WHEN name = ? THEN 0 ELSE 1 END
-                LIMIT 1
-                """,
-                (procedure_name, procedure_name, procedure_name),
-            ).fetchone()
-        else:
-            row = None
-
-        if row is None:
-            return tuple(name for name in [procedure_name] if name)
-
-        aliases = [str(row["name"])]
-        if row["chinese_name"]:
-            aliases.append(str(row["chinese_name"]))
-        return tuple(dict.fromkeys(item for item in aliases if item))
+        return self._context_fetch_service.procedure_aliases(
+            conn,
+            procedure_id=procedure_id,
+            procedure_name=procedure_name,
+        )
 
     def _resolve_procedure_name(self, conn: sqlite3.Connection, raw_name: str) -> str:
-        aliases = self._procedure_aliases(conn, procedure_name=raw_name)
-        if aliases:
-            return aliases[0]
-        return raw_name
+        return self._context_fetch_service.resolve_procedure_name(conn, raw_name)
 
     def _fetch_related_procedure_summaries(
         self,
@@ -3050,59 +2495,19 @@ class SQLiteIndexer:
         incoming_callers: list[str],
         related_limit: int,
     ) -> list[dict[str, object]]:
-        related: list[dict[str, object]] = []
-        seen: set[tuple[str, str]] = set()
-
-        for relation_type, names in (("calls", outgoing_calls), ("called_by", incoming_callers)):
-            for procedure_name in names[:related_limit]:
-                info = self._lookup_procedure_summary(conn, procedure_name)
-                if info is None:
-                    continue
-                key = (relation_type, str(info["procedure_name"]))
-                if key in seen:
-                    continue
-                seen.add(key)
-                related.append({"relation_type": relation_type, **info})
-                if len(related) >= related_limit:
-                    return related
-
-        return related
+        return self._context_fetch_service.fetch_related_procedure_summaries(
+            conn,
+            outgoing_calls=outgoing_calls,
+            incoming_callers=incoming_callers,
+            related_limit=related_limit,
+        )
 
     def _lookup_procedure_summary(
         self,
         conn: sqlite3.Connection,
         procedure_name: str,
     ) -> dict[str, object] | None:
-        row = conn.execute(
-            """
-            SELECT
-              p.name AS procedure_name,
-              p.chinese_name AS chinese_name,
-              f.path AS file_path,
-              c.line_start AS line_start,
-              c.line_end AS line_end,
-              c.chunk_type AS chunk_type,
-              c.summary_text AS summary_text
-            FROM procedures p
-            JOIN files f ON f.id = p.file_id
-            LEFT JOIN chunks c ON c.procedure_id = p.id
-            WHERE p.name = ? OR p.chinese_name = ?
-            ORDER BY CASE WHEN p.name = ? THEN 0 ELSE 1 END, c.seq
-            LIMIT 1
-            """,
-            (procedure_name, procedure_name, procedure_name),
-        ).fetchone()
-        if row is None:
-            return None
-        return {
-            "procedure_name": str(row["procedure_name"]),
-            "chinese_name": str(row["chinese_name"]) if row["chinese_name"] is not None else None,
-            "file_path": str(row["file_path"]),
-            "line_start": _maybe_int(row["line_start"]),
-            "line_end": _maybe_int(row["line_end"]),
-            "chunk_type": str(row["chunk_type"]) if row["chunk_type"] is not None else None,
-            "summary_text": str(row["summary_text"]) if row["summary_text"] is not None else None,
-        }
+        return self._context_fetch_service.lookup_procedure_summary(conn, procedure_name)
 
 def _recover_blocks(statements: list[CodeStatement]) -> list[dict[str, object]]:
     if not statements:
