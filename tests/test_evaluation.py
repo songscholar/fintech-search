@@ -71,11 +71,16 @@ def test_retrieval_evaluator_reports_pass_at_k_and_recall(tmp_path: Path) -> Non
     assert report["summary"]["pass_at_k"]["5"] == 1.0
     assert report["summary"]["matched_cases"] == 4
     assert report["summary"]["evidence_coverage"] == 11 / 12
+    assert report["summary"]["top_hit_expectation_coverage"] == 19 / 24
+    assert report["summary"]["top_three_expectation_coverage"] == 11 / 12
+    assert report["summary"]["avg_candidate_count"] >= 4.0
+    assert report["summary"]["avg_evidence_count"] >= 1.0
     assert report["summary"]["by_tag"]["variable"]["matched_cases"] == 1
     assert report["summary"]["by_tag"]["variable"]["evidence_coverage"] == 2 / 3
     assert report["cases"][0]["first_relevant_rank"] == 1
     assert report["cases"][0]["expectations"][0]["matched"] is True
     assert report["cases"][0]["evidence"]["coverage"] == 2 / 3
+    assert report["cases"][0]["retrieval"]["top_hit_expectation_coverage"] == 2 / 3
     assert report["cases"][0]["top_hits"]
 
 
@@ -191,3 +196,46 @@ def test_compare_eval_reports_marks_case_regressions(tmp_path: Path) -> None:
     assert comparison["cases"][0]["change"] == "regressed"
     assert comparison["summary_delta"]["pass_at_k"]["1"] == -1.0
     assert comparison["summary_delta"]["mean_first_relevant_rank"]["delta"] == 2.0
+
+
+def test_compare_eval_reports_tracks_quality_metric_deltas(tmp_path: Path) -> None:
+    before = {
+        "top_k": [1, 3, 5],
+        "summary": {
+            "pass_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+            "expectation_recall_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+            "mean_first_relevant_rank": 1.0,
+            "matched_cases": 1,
+            "evidence_coverage": 1.0,
+            "top_hit_expectation_coverage": 1.0,
+            "top_three_expectation_coverage": 1.0,
+            "avg_candidate_count": 5.0,
+            "avg_evidence_count": 2.0,
+        },
+        "cases": [],
+    }
+    after = {
+        "top_k": [1, 3, 5],
+        "summary": {
+            "pass_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+            "expectation_recall_at_k": {"1": 1.0, "3": 1.0, "5": 1.0},
+            "mean_first_relevant_rank": 1.0,
+            "matched_cases": 1,
+            "evidence_coverage": 0.5,
+            "top_hit_expectation_coverage": 0.25,
+            "top_three_expectation_coverage": 0.75,
+            "avg_candidate_count": 8.0,
+            "avg_evidence_count": 4.0,
+        },
+        "cases": [],
+    }
+    before_path = tmp_path / "before_quality.json"
+    after_path = tmp_path / "after_quality.json"
+    before_path.write_text(json.dumps(before, ensure_ascii=False), encoding="utf-8")
+    after_path.write_text(json.dumps(after, ensure_ascii=False), encoding="utf-8")
+
+    comparison = compare_eval_reports(before_path, after_path)
+
+    assert comparison["summary_delta"]["evidence_coverage"]["delta"] == -0.5
+    assert comparison["summary_delta"]["top_hit_expectation_coverage"]["delta"] == -0.75
+    assert comparison["summary_delta"]["avg_candidate_count"]["delta"] == 3.0

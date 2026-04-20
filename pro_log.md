@@ -674,3 +674,42 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 文档入口现在已经不再只靠 README 承担
 - 新用户、继续开发的人、排障的人都可以直接进入对应路径
+
+## [1.2.1] - 2026-04-20
+
+### Step 8: 增强检索质量评测与趋势统计
+
+### 本步目标
+
+- 让评测报告更像“质量看板”，而不只是 pass/fail 汇总
+- 增加 top-hit / top-3 命中质量视角
+- 为后续检索和 rerank 调优提供更稳定的趋势指标
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/evaluation.py`
+   - 为每个 case 的 `retrieval` 新增：
+     - `top_hit_expectation_coverage`
+     - `top_three_expectation_coverage`
+   - 为 summary 新增：
+     - `top_hit_expectation_coverage`
+     - `top_three_expectation_coverage`
+     - `avg_candidate_count`
+     - `avg_evidence_count`
+   - 为 `compare_eval_reports()` 新增上述质量指标的 delta 对比
+
+2. 更新 `tests/test_evaluation.py`
+   - 覆盖新的 summary 质量指标
+   - 覆盖 case 级 top-hit 质量指标
+   - 覆盖 compare report 的质量指标 delta
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evaluation.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py` 通过
+- 结果：`5 passed`
+
+### 结论
+
+- 评测现在已经不仅能回答“有没有命中”，还可以回答“最前面的命中质量如何”
+- 后续 rerank 或 evidence 选择发生轻微退化时，会更容易被看板指标发现

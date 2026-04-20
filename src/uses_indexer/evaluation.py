@@ -81,6 +81,16 @@ class RetrievalEvaluator:
             str(k): _matched_count_at_k(match_details, k) / max(len(expectations), 1)
             for k in top_k
         }
+        top_hit_matches = sum(
+            1
+            for detail in match_details
+            if detail["matched"] and int(detail["first_rank"]) == 1
+        )
+        top_three_matches = sum(
+            1
+            for detail in match_details
+            if detail["matched"] and int(detail["first_rank"]) <= min(3, limit)
+        )
 
         return {
             "id": case.get("id") or question,
@@ -127,6 +137,8 @@ class RetrievalEvaluator:
                 "candidate_count": query_result["candidate_count"],
                 "hit_count": query_result["hit_count"],
                 "vector_status": query_result["vector_status"],
+                "top_hit_expectation_coverage": top_hit_matches / max(len(expectations), 1),
+                "top_three_expectation_coverage": top_three_matches / max(len(expectations), 1),
             },
         }
 
@@ -252,6 +264,20 @@ def _compare_summaries(before: object, after: object, *, top_k: tuple[int, ...])
             _as_int(before_summary.get("matched_cases")),
         ),
     }
+    for metric_name in (
+        "evidence_coverage",
+        "top_hit_expectation_coverage",
+        "top_three_expectation_coverage",
+        "avg_candidate_count",
+        "avg_evidence_count",
+    ):
+        before_value = _as_float(before_summary.get(metric_name))
+        after_value = _as_float(after_summary.get(metric_name))
+        result[metric_name] = {
+            "before": before_value,
+            "after": after_value,
+            "delta": _nullable_delta(after_value, before_value),
+        }
     return result
 
 
@@ -304,6 +330,15 @@ def _case_snapshot(case: dict[str, object] | None, *, top_k: tuple[int, ...]) ->
         "recall_at_k": {
             str(k): _metric_value(case.get("recall_at_k", {}), k)
             for k in top_k
+        },
+        "retrieval": {
+            "candidate_count": _as_int(_nested_get(case, "retrieval", "candidate_count")) or 0,
+            "top_hit_expectation_coverage": _as_float(_nested_get(case, "retrieval", "top_hit_expectation_coverage")) or 0.0,
+            "top_three_expectation_coverage": _as_float(_nested_get(case, "retrieval", "top_three_expectation_coverage")) or 0.0,
+        },
+        "evidence": {
+            "evidence_count": _as_int(_nested_get(case, "evidence", "evidence_count")) or 0,
+            "coverage": _as_float(_nested_get(case, "evidence", "coverage")) or 0.0,
         },
         "top_hit": _top_hit_snapshot(case),
     }
@@ -613,6 +648,10 @@ def _summarize_case_results(
             "mean_first_relevant_rank": None,
             "matched_cases": 0,
             "evidence_coverage": 0.0,
+            "top_hit_expectation_coverage": 0.0,
+            "top_three_expectation_coverage": 0.0,
+            "avg_candidate_count": 0.0,
+            "avg_evidence_count": 0.0,
             "by_tag": {} if include_by_tag else None,
         }
 
@@ -640,5 +679,26 @@ def _summarize_case_results(
         "evidence_coverage": (
             sum(float(case["evidence"]["coverage"]) for case in case_results) / case_count
         ),
+        "top_hit_expectation_coverage": (
+            sum(float(case["retrieval"]["top_hit_expectation_coverage"]) for case in case_results) / case_count
+        ),
+        "top_three_expectation_coverage": (
+            sum(float(case["retrieval"]["top_three_expectation_coverage"]) for case in case_results) / case_count
+        ),
+        "avg_candidate_count": (
+            sum(float(case["retrieval"]["candidate_count"]) for case in case_results) / case_count
+        ),
+        "avg_evidence_count": (
+            sum(float(case["evidence"]["evidence_count"]) for case in case_results) / case_count
+        ),
         "by_tag": _summarize_by_tag(case_results, top_k=top_k) if include_by_tag else None,
     }
+
+
+def _nested_get(payload: dict[str, object], *keys: str) -> object:
+    current: object = payload
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
