@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .embeddings import EmbeddingRequestError, dot_similarity
+from .observability import build_retrieval_debug_payload
 from .rerank import (
     analyze_query,
     apply_call_chain_rerank,
     rerank_candidate,
     vector_hint_tokens,
 )
+from .semantic_recovery import maybe_int
 
 
 VECTOR_SIMILARITY_THRESHOLD = 0.05
@@ -76,12 +78,14 @@ class RetrievalService:
         fts_query = self.owner._build_fts_query(query)
         query_analysis = analyze_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
-        vector_status = self.owner._vector_status(conn)
+        vector_status = self._vector_status(conn)
         source_trace: dict[str, list[dict[str, object]]] = {}
+        source_counts: dict[str, int] = {}
 
         if fts_query:
-            fts_candidates = self.owner._run_fts_queries(conn, raw_query=query, fts_query=fts_query, limit=candidate_limit)
+            fts_candidates = self._run_fts_queries(conn, raw_query=query, fts_query=fts_query, limit=candidate_limit)
             source_trace["fts"] = [self._trace_candidate(item) for item in fts_candidates[:20]]
+            source_counts["fts"] = len(fts_candidates)
             for candidate in fts_candidates:
                 self.owner._merge_candidate(candidates, candidate)
 
@@ -93,11 +97,13 @@ class RetrievalService:
             initial_status=vector_status,
         )
         source_trace["vector"] = [self._trace_candidate(item) for item in vector_candidates[:20]]
+        source_counts["vector"] = len(vector_candidates)
         for candidate in vector_candidates:
             self.owner._merge_candidate(candidates, candidate)
 
-        like_candidates = self.owner._run_like_queries(conn, query=query, limit=candidate_limit)
+        like_candidates = self._run_like_queries(conn, query=query, limit=candidate_limit)
         source_trace["like"] = [self._trace_candidate(item) for item in like_candidates[:20]]
+        source_counts["like"] = len(like_candidates)
         for candidate in like_candidates:
             self.owner._merge_candidate(candidates, candidate)
 
@@ -128,26 +134,15 @@ class RetrievalService:
 
         retrieval_debug = None
         if debug:
-            retrieval_debug = {
-                "query_analysis": query_analysis,
-                "retrieval_contributions": {
-                    source: {
-                        "candidate_count": len(items),
-                        "top_candidates": items,
-                    }
-                    for source, items in source_trace.items()
-                },
-                "rerank_preview": [
-                    {
-                        "procedure_name": str(item.get("procedure_name") or ""),
-                        "matched_text": str(item.get("matched_text") or ""),
-                        "score": round(float(item.get("score") or 0.0), 6),
-                        "reasons": list(item.get("reasons") or []),
-                        "breakdown": dict((item.get("debug_rerank") or {}).get("score_breakdown") or {}),
-                    }
-                    for item in reranked[:20]
-                ],
-            }
+            retrieval_debug = build_retrieval_debug_payload(
+                query=query,
+                fts_query=fts_query,
+                candidate_limit=candidate_limit,
+                query_analysis=query_analysis,
+                source_trace=source_trace,
+                source_counts=source_counts,
+                reranked=reranked,
+            )
 
         return reranked, fts_query, vector_status, retrieval_debug
 
@@ -183,7 +178,7 @@ class RetrievalService:
 
         candidates = []
         try:
-            vector_rows = self.owner._load_chunk_vector_cache(conn, db_path)
+            vector_rows = self._load_chunk_vector_cache(conn, db_path)
         except sqlite3.OperationalError:
             return [], {
                 **initial_status,
@@ -225,6 +220,551 @@ class RetrievalService:
             "reason": "enabled",
         }
 
+    def _vector_status(self, conn: sqlite3.Connection) -> dict[str, object]:
+        db_provider = self.owner._metadata(conn, "embedding_provider")
+        db_model = self.owner._metadata(conn, "embedding_model")
+        db_dimension_raw = self.owner._metadata(conn, "embedding_dimension")
+        vector_enabled = (self.owner._metadata(conn, "vector_enabled") or "").lower() == "true"
+        vector_count = int(conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0])
+
+        current_info = self.owner.embedder.info
+        status = {
+            "enabled": False,
+            "reason": "metadata_missing",
+            "index_provider": db_provider,
+            "index_model": db_model,
+            "index_dimension": maybe_int(db_dimension_raw),
+            "query_provider": current_info.provider,
+            "query_model": current_info.model,
+            "query_dimension": current_info.dimension,
+        }
+
+        if not vector_enabled or vector_count == 0:
+            status["reason"] = "vector_index_unavailable"
+            return status
+
+        if not db_provider or not db_model:
+            return status
+
+        if current_info.provider != db_provider or current_info.model != db_model:
+            status["reason"] = "embedding_space_mismatch"
+            return status
+
+        db_dimension = maybe_int(db_dimension_raw)
+        if db_dimension and current_info.dimension and current_info.dimension != db_dimension:
+            status["reason"] = "embedding_space_mismatch"
+            return status
+
+        status["enabled"] = True
+        status["reason"] = "compatible"
+        return status
+
+    def _load_chunk_vector_cache(
+        self,
+        conn: sqlite3.Connection,
+        db_path: str | Path,
+    ) -> list[dict[str, object]]:
+        db_file = Path(db_path)
+        stat = os.stat(db_file)
+        embedder_info = self.owner.embedder.info
+        cache_key = (
+            str(db_file.resolve()),
+            stat.st_mtime_ns,
+            stat.st_size,
+            embedder_info.provider,
+            embedder_info.model,
+        )
+        cached = self.owner._vector_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        self.owner._vector_cache = {
+            key: value
+            for key, value in self.owner._vector_cache.items()
+            if key == cache_key
+        }
+
+        rows = conn.execute(
+            """
+            SELECT
+              cv.chunk_id AS chunk_id,
+              c.procedure_id AS procedure_id,
+              c.file_id AS file_id,
+              f.path AS file_path,
+              p.name AS procedure_name,
+              p.chinese_name AS chinese_name,
+              p.object_id AS object_id,
+              c.line_start AS line_start,
+              c.line_end AS line_end,
+              c.summary_text AS summary_text,
+              c.content AS content,
+              cv.vector_json AS vector_json
+            FROM chunk_vectors cv
+            JOIN chunks c ON c.id = cv.chunk_id
+            JOIN procedures p ON p.id = c.procedure_id
+            JOIN files f ON f.id = c.file_id
+            WHERE cv.provider = ? AND cv.model = ?
+            """,
+            (
+                embedder_info.provider,
+                embedder_info.model,
+            ),
+        ).fetchall()
+
+        cached_rows = [
+            {
+                "chunk_id": int(row["chunk_id"]),
+                "procedure_id": int(row["procedure_id"]),
+                "file_id": int(row["file_id"]),
+                "file_path": str(row["file_path"]),
+                "procedure_name": str(row["procedure_name"]),
+                "chinese_name": row["chinese_name"] if row["chinese_name"] else None,
+                "object_id": row["object_id"] if row["object_id"] else None,
+                "line_start": int(row["line_start"]),
+                "line_end": int(row["line_end"]),
+                "summary_text": str(row["summary_text"]),
+                "content": str(row["content"]),
+                "vector": [float(value) for value in json.loads(row["vector_json"])],
+            }
+            for row in rows
+        ]
+        self.owner._vector_cache[cache_key] = cached_rows
+        return cached_rows
+
+    def _run_fts_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        raw_query: str,
+        fts_query: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        queries = [
+            (
+                """
+                SELECT
+                  'block' AS hit_type,
+                  113.0 AS base_score,
+                  'fts_block' AS retrieval_source,
+                  b.id AS entity_id,
+                  b.procedure_id AS procedure_id,
+                  b.file_id AS file_id,
+                  b.anchor_statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  b.line_start AS line_start,
+                  b.line_end AS line_end,
+                  COALESCE(NULLIF(b.summary_text, ''), b.block_type) AS matched_text,
+                  'block_summary' AS match_source,
+                  -bm25(blocks_fts, 2.0, 1.0, 1.0, 1.0, 6.0, 4.0) AS source_rank,
+                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM blocks_fts
+                JOIN blocks b ON b.id = blocks_fts.rowid
+                JOIN procedures p ON p.id = b.procedure_id
+                JOIN files f ON f.id = b.file_id
+                WHERE blocks_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
+                  'chunk' AS hit_type,
+                  111.0 AS base_score,
+                  'fts_chunk' AS retrieval_source,
+                  c.id AS entity_id,
+                  c.procedure_id AS procedure_id,
+                  c.file_id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  c.line_start AS line_start,
+                  c.line_end AS line_end,
+                  COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
+                  'chunk_summary' AS match_source,
+                  -bm25(chunks_fts, 2.0, 1.5, 1.0, 6.0, 4.0) AS source_rank,
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM chunks_fts
+                JOIN chunks c ON c.id = chunks_fts.rowid
+                JOIN procedures p ON p.id = c.procedure_id
+                JOIN files f ON f.id = c.file_id
+                WHERE chunks_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
+                  'procedure' AS hit_type,
+                  115.0 AS base_score,
+                  'fts_procedure' AS retrieval_source,
+                  p.id AS entity_id,
+                  p.id AS procedure_id,
+                  f.id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  NULL AS line_start,
+                  NULL AS line_end,
+                  COALESCE(NULLIF(p.chinese_name, ''), p.name) AS matched_text,
+                  'procedure_fts' AS match_source,
+                  -bm25(procedures_fts, 8.0, 5.0, 2.0) AS source_rank,
+                  COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') || ' ' || COALESCE(p.object_id, '') || ' ' || COALESCE(f.path, '') AS search_text
+                FROM procedures_fts
+                JOIN procedures p ON p.id = procedures_fts.rowid
+                JOIN files f ON f.id = p.file_id
+                WHERE procedures_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
+                  'action' AS hit_type,
+                  108.0 AS base_score,
+                  'fts_action' AS retrieval_source,
+                  a.id AS entity_id,
+                  a.procedure_id AS procedure_id,
+                  a.file_id AS file_id,
+                  a.statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  CASE
+                    WHEN instr(COALESCE(a.action_name, ''), ?) > 0 THEN COALESCE(a.action_name, '')
+                    WHEN instr(COALESCE(a.target_name, ''), ?) > 0 THEN COALESCE(a.target_name, '')
+                    ELSE COALESCE(NULLIF(a.target_name, ''), a.action_name)
+                  END AS matched_text,
+                  CASE
+                    WHEN instr(COALESCE(a.action_name, ''), ?) > 0 THEN 'action_name'
+                    WHEN instr(COALESCE(a.target_name, ''), ?) > 0 THEN 'action_target'
+                    ELSE 'action_fts'
+                  END AS match_source,
+                  -bm25(actions_fts, 7.0, 4.0, 2.0, 1.0, 1.0) AS source_rank,
+                  COALESCE(a.action_name, '') || ' ' || COALESCE(a.target_name, '') || ' ' || COALESCE(s.raw, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM actions_fts
+                JOIN actions a ON a.id = actions_fts.rowid
+                JOIN procedures p ON p.id = a.procedure_id
+                JOIN files f ON f.id = a.file_id
+                JOIN statements s ON s.id = a.statement_id
+                WHERE actions_fts MATCH ?
+                LIMIT ?
+                """,
+                (raw_query, raw_query, raw_query, raw_query, fts_query, limit),
+            ),
+            (
+                """
+                SELECT
+                  'statement' AS hit_type,
+                  98.0 AS base_score,
+                  'fts_statement' AS retrieval_source,
+                  s.id AS entity_id,
+                  s.procedure_id AS procedure_id,
+                  s.file_id AS file_id,
+                  s.id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  s.raw AS matched_text,
+                  s.kind AS match_source,
+                  -bm25(statements_fts, 6.0, 2.0, 2.0, 2.0, 1.5, 1.0) AS source_rank,
+                  COALESCE(s.raw, '') || ' ' || COALESCE(s.name, '') || ' ' || COALESCE(s.condition, '') || ' ' || COALESCE(s.target, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM statements_fts
+                JOIN statements s ON s.id = statements_fts.rowid
+                JOIN procedures p ON p.id = s.procedure_id
+                JOIN files f ON f.id = s.file_id
+                WHERE statements_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+            (
+                """
+                SELECT
+                  'edge' AS hit_type,
+                  86.0 AS base_score,
+                  'fts_edge' AS retrieval_source,
+                  e.id AS entity_id,
+                  e.procedure_id AS procedure_id,
+                  e.file_id AS file_id,
+                  e.statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  e.target_name AS matched_text,
+                  e.edge_type AS match_source,
+                  -bm25(edges_fts, 5.0, 1.0, 4.0, 1.0, 1.0, 1.0) AS source_rank,
+                  COALESCE(e.edge_type, '') || ' ' || COALESCE(e.source_name, '') || ' ' || COALESCE(e.target_name, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM edges_fts
+                JOIN edges e ON e.id = edges_fts.rowid
+                JOIN procedures p ON p.id = e.procedure_id
+                JOIN files f ON f.id = e.file_id
+                LEFT JOIN statements s ON s.id = e.statement_id
+                WHERE edges_fts MATCH ?
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ),
+        ]
+
+        hits: list[dict[str, object]] = []
+        for sql, params in queries:
+            try:
+                rows = conn.execute(sql, params).fetchall()
+            except sqlite3.OperationalError:
+                continue
+            hits.extend(_row_to_hit(row) for row in rows)
+        return hits
+
+    def _run_like_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        like = f"%{query}%"
+        queries = [
+            (
+                """
+                SELECT
+                  'block' AS hit_type,
+                  79.0 AS base_score,
+                  'like_block' AS retrieval_source,
+                  b.id AS entity_id,
+                  b.procedure_id AS procedure_id,
+                  b.file_id AS file_id,
+                  b.anchor_statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  b.line_start AS line_start,
+                  b.line_end AS line_end,
+                  COALESCE(NULLIF(b.summary_text, ''), b.block_type) AS matched_text,
+                  'block_summary' AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(b.summary_text, '') || ' ' || COALESCE(b.excerpt, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM blocks b
+                JOIN procedures p ON p.id = b.procedure_id
+                JOIN files f ON f.id = b.file_id
+                WHERE COALESCE(b.summary_text, '') LIKE ? OR COALESCE(b.excerpt, '') LIKE ? OR COALESCE(b.anchor_name, '') LIKE ?
+                LIMIT ?
+                """,
+                (like, like, like, limit),
+            ),
+            (
+                """
+                SELECT
+                  'chunk' AS hit_type,
+                  74.0 AS base_score,
+                  'like_chunk' AS retrieval_source,
+                  c.id AS entity_id,
+                  c.procedure_id AS procedure_id,
+                  c.file_id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  c.line_start AS line_start,
+                  c.line_end AS line_end,
+                  COALESCE(NULLIF(c.summary_text, ''), c.chunk_type) AS matched_text,
+                  'chunk_summary' AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(c.summary_text, '') || ' ' || COALESCE(c.content, '') || ' ' || COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') AS search_text
+                FROM chunks c
+                JOIN procedures p ON p.id = c.procedure_id
+                JOIN files f ON f.id = c.file_id
+                WHERE COALESCE(c.summary_text, '') LIKE ? OR COALESCE(c.content, '') LIKE ?
+                LIMIT ?
+                """,
+                (like, like, limit),
+            ),
+            (
+                """
+                SELECT
+                  'procedure' AS hit_type,
+                  78.0 AS base_score,
+                  'like_procedure' AS retrieval_source,
+                  p.id AS entity_id,
+                  p.id AS procedure_id,
+                  f.id AS file_id,
+                  NULL AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  NULL AS line_start,
+                  NULL AS line_end,
+                  CASE
+                    WHEN p.name LIKE ? THEN p.name
+                    WHEN COALESCE(p.chinese_name, '') LIKE ? THEN COALESCE(p.chinese_name, '')
+                    WHEN COALESCE(p.object_id, '') LIKE ? THEN COALESCE(p.object_id, '')
+                    ELSE f.path
+                  END AS matched_text,
+                  CASE
+                    WHEN p.name LIKE ? THEN 'procedure_name'
+                    WHEN COALESCE(p.chinese_name, '') LIKE ? THEN 'procedure_chinese_name'
+                    WHEN COALESCE(p.object_id, '') LIKE ? THEN 'procedure_object_id'
+                    ELSE 'file_path'
+                  END AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(p.name, '') || ' ' || COALESCE(p.chinese_name, '') || ' ' || COALESCE(p.object_id, '') || ' ' || COALESCE(f.path, '') AS search_text
+                FROM procedures p
+                JOIN files f ON f.id = p.file_id
+                WHERE p.name LIKE ? OR COALESCE(p.chinese_name, '') LIKE ? OR COALESCE(p.object_id, '') LIKE ? OR f.path LIKE ?
+                LIMIT ?
+                """,
+                (like, like, like, like, like, like, like, like, like, like, limit),
+            ),
+            (
+                """
+                SELECT
+                  'action' AS hit_type,
+                  72.0 AS base_score,
+                  'like_action' AS retrieval_source,
+                  a.id AS entity_id,
+                  a.procedure_id AS procedure_id,
+                  a.file_id AS file_id,
+                  a.statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  CASE
+                    WHEN COALESCE(a.action_name, '') LIKE ? THEN COALESCE(a.action_name, '')
+                    ELSE COALESCE(a.target_name, '')
+                  END AS matched_text,
+                  CASE
+                    WHEN COALESCE(a.action_name, '') LIKE ? THEN 'action_name'
+                    ELSE 'action_target'
+                  END AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(a.action_name, '') || ' ' || COALESCE(a.target_name, '') || ' ' || COALESCE(s.raw, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM actions a
+                JOIN procedures p ON p.id = a.procedure_id
+                JOIN files f ON f.id = a.file_id
+                JOIN statements s ON s.id = a.statement_id
+                WHERE COALESCE(a.action_name, '') LIKE ? OR COALESCE(a.target_name, '') LIKE ?
+                LIMIT ?
+                """,
+                (like, like, like, like, limit),
+            ),
+            (
+                """
+                SELECT
+                  'variable' AS hit_type,
+                  68.0 AS base_score,
+                  'like_variable' AS retrieval_source,
+                  v.id AS entity_id,
+                  v.procedure_id AS procedure_id,
+                  v.file_id AS file_id,
+                  v.statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  v.var_name AS matched_text,
+                  v.access_type AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(v.var_name, '') || ' ' || COALESCE(s.raw, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM variable_refs v
+                JOIN procedures p ON p.id = v.procedure_id
+                JOIN files f ON f.id = v.file_id
+                JOIN statements s ON s.id = v.statement_id
+                WHERE v.var_name LIKE ?
+                LIMIT ?
+                """,
+                (like, limit),
+            ),
+            (
+                """
+                SELECT
+                  'statement' AS hit_type,
+                  62.0 AS base_score,
+                  'like_statement' AS retrieval_source,
+                  s.id AS entity_id,
+                  s.procedure_id AS procedure_id,
+                  s.file_id AS file_id,
+                  s.id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  s.raw AS matched_text,
+                  s.kind AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(s.raw, '') || ' ' || COALESCE(s.name, '') || ' ' || COALESCE(s.condition, '') || ' ' || COALESCE(s.target, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM statements s
+                JOIN procedures p ON p.id = s.procedure_id
+                JOIN files f ON f.id = s.file_id
+                WHERE s.raw LIKE ?
+                LIMIT ?
+                """,
+                (like, limit),
+            ),
+            (
+                """
+                SELECT
+                  'edge' AS hit_type,
+                  58.0 AS base_score,
+                  'like_edge' AS retrieval_source,
+                  e.id AS entity_id,
+                  e.procedure_id AS procedure_id,
+                  e.file_id AS file_id,
+                  e.statement_id AS statement_id,
+                  f.path AS file_path,
+                  p.name AS procedure_name,
+                  p.chinese_name AS chinese_name,
+                  p.object_id AS object_id,
+                  s.line_start AS line_start,
+                  s.line_end AS line_end,
+                  e.target_name AS matched_text,
+                  e.edge_type AS match_source,
+                  0.0 AS source_rank,
+                  COALESCE(e.edge_type, '') || ' ' || COALESCE(e.target_name, '') || ' ' || COALESCE(p.name, '') AS search_text
+                FROM edges e
+                JOIN procedures p ON p.id = e.procedure_id
+                JOIN files f ON f.id = e.file_id
+                LEFT JOIN statements s ON s.id = e.statement_id
+                WHERE e.target_name LIKE ?
+                LIMIT ?
+                """,
+                (like, limit),
+            ),
+        ]
+
+        hits: list[dict[str, object]] = []
+        for sql, params in queries:
+            rows = conn.execute(sql, params).fetchall()
+            hits.extend(_row_to_hit(row) for row in rows)
+        return hits
+
     def _trace_candidate(self, candidate: dict[str, object]) -> dict[str, object]:
         return {
             "hit_type": str(candidate.get("hit_type") or ""),
@@ -236,6 +776,29 @@ class RetrievalService:
             "base_score": round(float(candidate.get("base_score") or 0.0), 3),
             "source_rank": round(float(candidate.get("source_rank") or 0.0), 3),
         }
+
+
+def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "hit_type": str(row["hit_type"]),
+        "entity_id": int(row["entity_id"]),
+        "procedure_id": int(row["procedure_id"]),
+        "file_id": int(row["file_id"]),
+        "statement_id": int(row["statement_id"]) if row["statement_id"] is not None else None,
+        "file_path": str(row["file_path"]),
+        "procedure_name": str(row["procedure_name"]),
+        "chinese_name": row["chinese_name"] if "chinese_name" in row.keys() and row["chinese_name"] else None,
+        "object_id": row["object_id"] if "object_id" in row.keys() and row["object_id"] else None,
+        "line_start": int(row["line_start"]) if row["line_start"] is not None else None,
+        "line_end": int(row["line_end"]) if row["line_end"] is not None else None,
+        "matched_text": str(row["matched_text"]),
+        "match_source": str(row["match_source"]),
+        "retrieval_source": str(row["retrieval_source"]),
+        "base_score": float(row["base_score"]),
+        "source_rank": float(row["source_rank"]),
+        "search_text": str(row["search_text"]),
+        "reasons": [],
+    }
 
 
 def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]:

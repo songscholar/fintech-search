@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
+from .observability import build_incremental_trace
 from .parser import is_supported_path
 
 
@@ -150,6 +151,15 @@ class IndexBuildService:
                 "changed": changed_paths,
                 "removed": removed_paths,
             }
+            payload["incremental_trace"] = build_incremental_trace(
+                index_type=index_type,
+                current_file_count=len(current_state),
+                stored_file_count=len(stored_state),
+                added_paths=added_paths,
+                changed_paths=changed_paths,
+                removed_paths=removed_paths,
+                vector_stats=vector_stats,
+            )
             return payload
         finally:
             conn.close()

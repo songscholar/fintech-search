@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .observability import build_evidence_debug_payload
 from .semantic_recovery import maybe_int
 
 
@@ -140,13 +141,15 @@ class EvidenceService:
             "llm_context": llm_context,
         }
         if debug:
-            payload["debug"] = {
-                "retrieval": retrieval_debug,
-                "evidence_pruning": {
-                    "events": pruned_events[:50],
-                    "total_pruned": len(pruned_events),
-                },
-            }
+            payload["debug"] = build_evidence_debug_payload(
+                query=query,
+                limit=limit,
+                context_window=context_window,
+                related_limit=related_limit,
+                retrieval_debug=retrieval_debug,
+                pruned_events=pruned_events,
+                evidence_blocks=evidence_blocks,
+            )
         return payload
 
 

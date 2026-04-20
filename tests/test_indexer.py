@@ -700,9 +700,13 @@ def test_query_index_debug_includes_retrieval_trace(tmp_path: Path) -> None:
     result = indexer.query_index(db_path, "AF_DEEP 被谁调用", limit=5, debug=True)
 
     debug = result["debug"]
+    assert debug["schema"] == "uses_indexer.debug.retrieval"
+    assert debug["version"] == "1.0"
     assert "query_analysis" in debug
     assert "retrieval_contributions" in debug
     assert "rerank_preview" in debug
+    assert debug["trace"]["stage"] == "retrieval"
+    assert debug["trace"]["rerank"]["candidate_count"] >= result["hit_count"]
     assert "call_chain" in debug["query_analysis"]["intents"]
 
 
@@ -712,8 +716,11 @@ def test_assemble_evidence_debug_includes_pruning_trace(tmp_path: Path) -> None:
     result = indexer.assemble_evidence(db_path, "证券代码获取的逻辑在哪里", limit=1, context_window=1, related_limit=2, debug=True)
 
     assert "debug" in result
+    assert result["debug"]["schema"] == "uses_indexer.debug.evidence"
     assert "retrieval" in result["debug"]
     assert "evidence_pruning" in result["debug"]
+    assert result["debug"]["trace"]["stage"] == "evidence"
+    assert result["debug"]["trace"]["selection"]["selected_count"] == result["evidence_count"]
 
 
 def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
@@ -740,5 +747,8 @@ def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
 
     assert updated["incremental"] is True
     assert str(new_source) in updated["incremental_changes"]["added"]
+    assert updated["incremental_trace"]["schema"] == "uses_indexer.debug.incremental_build"
+    assert updated["incremental_trace"]["trace"]["changes"]["added_count"] == 1
+    assert str(new_source) in updated["incremental_trace"]["trace"]["changes"]["reindexed"]
     summary = indexer.summarize_db(db_path)
     assert summary["files"] == 4
