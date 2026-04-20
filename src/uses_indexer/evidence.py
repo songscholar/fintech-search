@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .observability import build_evidence_debug_payload
-from .semantic_recovery import maybe_int
+from .semantic_recovery import format_call_edge_label, format_mc_topic_label, maybe_int
 
 
 if TYPE_CHECKING:
@@ -200,14 +200,14 @@ def build_llm_context(query: str, evidence_blocks: list[dict[str, object]]) -> s
         if related["outgoing_call_edges"]:
             lines.append(
                 "Related calls: "
-                + ", ".join(_format_call_edge_label(item) for item in related["outgoing_call_edges"])
+                + ", ".join(format_call_edge_label(item) for item in related["outgoing_call_edges"])
             )
         elif related["outgoing_calls"]:
             lines.append(f"Related calls: {', '.join(related['outgoing_calls'])}")
         if related["incoming_caller_edges"]:
             lines.append(
                 "Incoming callers: "
-                + ", ".join(_format_call_edge_label(item) for item in related["incoming_caller_edges"])
+                + ", ".join(format_call_edge_label(item) for item in related["incoming_caller_edges"])
             )
         elif related["incoming_callers"]:
             lines.append(f"Incoming callers: {', '.join(related['incoming_callers'])}")
@@ -222,7 +222,7 @@ def build_llm_context(query: str, evidence_blocks: list[dict[str, object]]) -> s
         if related["published_mc_topics"]:
             lines.append(
                 "Published MC topics: "
-                + ", ".join(_format_mc_topic_label(item) for item in related["published_mc_topics"])
+                + ", ".join(format_mc_topic_label(item) for item in related["published_mc_topics"])
             )
         if related["metadata_relations"]:
             metadata_desc = ", ".join(
@@ -253,23 +253,3 @@ def build_llm_context(query: str, evidence_blocks: list[dict[str, object]]) -> s
                 )
 
     return "\n".join(lines)
-
-
-def _format_call_edge_label(item: dict[str, object]) -> str:
-    procedure_name = str(item["procedure_name"])
-    call_label = str(item.get("call_label") or "")
-    call_rule = str(item.get("call_rule") or "")
-    if call_label and call_rule:
-        return f"{procedure_name}({call_label} {call_rule})"
-    if call_label:
-        return f"{procedure_name}({call_label})"
-    return procedure_name
-
-
-def _format_mc_topic_label(item: dict[str, object]) -> str:
-    topic_name = str(item["topic_name"])
-    message_label = str(item.get("message_label") or "消息中心主题发布")
-    publish_mode_label = str(item.get("publish_mode_label") or "")
-    if publish_mode_label:
-        return f"{topic_name}({message_label} {publish_mode_label})"
-    return f"{topic_name}({message_label})"

@@ -557,3 +557,53 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 评测体系已经从“检索是否命中”扩展到“证据是否足够支撑回答”
 - 后续如果 rerank 或 evidence 选择发生回归，现在会更容易被评测发现
+
+## [1.1.5] - 2026-04-20
+
+### Step 5: 统一语义规则定义与测试入口
+
+### 本步目标
+
+- 把调用语义和消息发布语义收拢成单一规则源
+- 避免 `indexer / context_fetch / evidence` 各自维护一套重复逻辑
+- 增加独立的语义规则测试入口，降低后续改规则的回归风险
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/semantic_recovery.py`
+   - 新增统一语义规则常量：
+     - `LOCAL_CALL_RULES`
+     - `RPC_CALL_RULES`
+     - `SEMANTIC_RULE_REGISTRY`
+   - 新增公共语义 helper：
+     - `classify_call_semantics`
+     - `coerce_call_semantics`
+     - `classify_mc_publish`
+     - `format_call_edge_label`
+     - `format_mc_topic_label`
+   - 将 MC publish 语义补齐为统一结构，包含：
+     - `communication_kind`
+     - `communication_label`
+
+2. 更新消费模块
+   - `src/uses_indexer/context_fetch.py` 改为直接复用统一 call semantics
+   - `src/uses_indexer/evidence.py` 改为直接复用统一 label formatter
+   - `src/uses_indexer/indexer.py` 改为直接复用统一规则源，并在 `summarize_db()` 中暴露：
+     - `semantic_rule_registry`
+
+3. 新增测试入口 `tests/test_semantic_rules.py`
+   - 直接校验规则注册表
+   - 直接校验 call semantics helper
+   - 直接校验 MC publish helper
+   - 校验 summary 中暴露的规则信息
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/semantic_recovery.py src/uses_indexer/context_fetch.py src/uses_indexer/evidence.py src/uses_indexer/indexer.py tests/test_semantic_rules.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_semantic_rules.py tests/test_indexer.py -k "call_semantics or mc_publish or related_context_exposes_call_semantics_labels or related_context_exposes_mc_published_topics"` 通过
+- 结果：`5 passed`
+
+### 结论
+
+- 语义规则现在已经有明确的“单一事实来源”
+- 后续如果要扩充调用类型、消息发布类型或规则标签，改动范围会明显更小

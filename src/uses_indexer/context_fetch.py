@@ -4,7 +4,7 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING
 
-from .semantic_recovery import format_excerpt, maybe_int
+from .semantic_recovery import coerce_call_semantics, format_excerpt, maybe_int
 
 
 if TYPE_CHECKING:
@@ -536,7 +536,7 @@ class ContextFetchService:
                     continue
                 seen_names.add(target_name)
                 detail = _json_loads(str(row["detail_json"]))
-                semantic = _coerce_call_semantics(detail, source_name=procedure_name, target_name=target_name)
+                semantic = coerce_call_semantics(detail, source_name=procedure_name, target_name=target_name)
                 items.append({"procedure_name": target_name, **semantic})
             return items
 
@@ -558,7 +558,7 @@ class ContextFetchService:
                 continue
             seen_names.add(source_name)
             detail = _json_loads(str(row["detail_json"]))
-            semantic = _coerce_call_semantics(detail, source_name=source_name, target_name=procedure_name)
+            semantic = coerce_call_semantics(detail, source_name=source_name, target_name=procedure_name)
             items.append({"procedure_name": source_name, **semantic})
         return items
 
@@ -673,53 +673,3 @@ def _json_loads(value: str) -> dict[str, object]:
         return dict(json.loads(value))
     except Exception:
         return {}
-
-
-def _call_prefix(name: str | None) -> str | None:
-    if not name:
-        return None
-    prefix, _, _ = name.partition("_")
-    return prefix or None
-
-
-def _classify_call_semantics(source_name: str, target_name: str) -> dict[str, object]:
-    source_prefix = _call_prefix(source_name)
-    target_prefix = _call_prefix(target_name)
-    call_rule = f"{source_prefix}->{target_prefix}" if source_prefix and target_prefix else None
-    if source_prefix and target_prefix and (source_prefix, target_prefix) in {("LS", "LF"), ("LS", "AF"), ("LF", "LF"), ("LF", "AF"), ("AF", "AF")}:
-        return {
-            "source_prefix": source_prefix,
-            "target_prefix": target_prefix,
-            "call_rule": call_rule,
-            "call_kind": "local_function_call",
-            "call_label": "本地函数调用",
-        }
-    if source_prefix and target_prefix and (source_prefix, target_prefix) in {("LS", "LS"), ("LF", "LS"), ("AF", "LS")}:
-        return {
-            "source_prefix": source_prefix,
-            "target_prefix": target_prefix,
-            "call_rule": call_rule,
-            "call_kind": "rpc_call",
-            "call_label": "系统间RPC调用",
-        }
-    return {
-        "source_prefix": source_prefix,
-        "target_prefix": target_prefix,
-        "call_rule": call_rule,
-        "call_kind": "unknown_call_kind",
-        "call_label": "未归类调用",
-    }
-
-
-def _coerce_call_semantics(detail: dict[str, object], *, source_name: str, target_name: str) -> dict[str, object]:
-    semantic = _classify_call_semantics(source_name, target_name)
-    semantic.update(
-        {
-            "source_prefix": detail.get("source_prefix") or semantic["source_prefix"],
-            "target_prefix": detail.get("target_prefix") or semantic["target_prefix"],
-            "call_rule": detail.get("call_rule") or semantic["call_rule"],
-            "call_kind": detail.get("call_kind") or semantic["call_kind"],
-            "call_label": detail.get("call_label") or semantic["call_label"],
-        }
-    )
-    return semantic

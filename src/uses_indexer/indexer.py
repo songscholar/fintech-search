@@ -25,11 +25,15 @@ from .parser import ASSIGN_RE, UftDslParser, is_supported_path
 from .retrieval import RetrievalService
 from .semantic_recovery import (
     build_semantic_chunks,
+    classify_call_semantics,
+    classify_mc_publish,
+    coerce_call_semantics,
     collect_block_entities,
     extract_sql_access_edges,
     format_excerpt,
     maybe_int,
     recover_blocks,
+    SEMANTIC_RULE_REGISTRY,
     summarize_block,
     update_string_hints,
 )
@@ -302,10 +306,6 @@ CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 READ_ACTIONS = {"获取记录", "获取字段", "遍历记录开始", "遍历记录池开始", "记录为空", "记录不为空"}
 WRITE_ACTIONS = {"插入记录", "修改记录", "清空记录池", "数据回库"}
 COMPONENT_ACTIONS = {"获取组件", "插入组件", "尾部插入组件", "遍历组件开始", "遍历组件结束", "组件大小"}
-MC_PUBLISH_ACTIONS = {
-    "同步消息发布": ("sync", "同步发布"),
-    "消息发布": ("async", "异步发布"),
-}
 TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
 QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 CHUNK_SIGNIFICANT_LIMIT = 6
@@ -358,17 +358,6 @@ WRITE_INTENT_KEYWORDS = ("更新", "修改", "删除", "清空", "写入", "upda
 READ_INTENT_KEYWORDS = ("查询", "读取", "获取", "select", "from", "join")
 VARIABLE_INTENT_KEYWORDS = ("变量", "赋值", "写入", "读取", "参数", "字段")
 CALL_CHAIN_INTENT_KEYWORDS = ("调用链", "被谁调用", "谁调用", "调用", "链路", "上游", "下游")
-LOCAL_CALL_RULES = {
-    ("LS", "AF"),
-    ("LS", "LF"),
-    ("LF", "LF"),
-    ("LF", "AF"),
-}
-RPC_CALL_RULES = {
-    ("LS", "LS"),
-    ("LF", "LS"),
-    ("AF", "LS"),
-}
 FAILURE_INTENT_KEYWORDS = ("失败", "报错", "异常", "exception", "when_others", "goto", "svr_end", "退出", "错误")
 PROCEDURE_INTENT_KEYWORDS = ("过程", "函数", "服务", "接口", "原子", "方法")
 SQL_WRITE_HINTS = (" update ", " delete ", " insert ", " merge ", "writes_table", "清空记录池", "修改记录", "插入记录")
@@ -483,6 +472,7 @@ class SQLiteIndexer:
         }
         summary.update(self._summarize_call_semantics(conn))
         summary.update(self._summarize_mc_publish_semantics(conn))
+        summary["semantic_rule_registry"] = SEMANTIC_RULE_REGISTRY
         conn.close()
         return summary
 
@@ -499,7 +489,7 @@ class SQLiteIndexer:
 
         for row in rows:
             detail = _json_loads(str(row["detail_json"]))
-            semantic = _coerce_call_semantics(
+            semantic = coerce_call_semantics(
                 detail,
                 source_name=str(row["source_name"]),
                 target_name=str(row["target_name"]),
@@ -560,10 +550,10 @@ class SQLiteIndexer:
         return _metadata_edges_for_statement(statement)
 
     def _classify_call_semantics(self, source_name: str, target_name: str) -> dict[str, object]:
-        return _classify_call_semantics(source_name, target_name)
+        return classify_call_semantics(source_name, target_name)
 
     def _classify_mc_publish(self, statement: CodeStatement) -> dict[str, object] | None:
-        return _classify_mc_publish(statement)
+        return classify_mc_publish(statement)
 
     def _build_fts_query(self, query: str) -> str | None:
         return _build_fts_query(query)
@@ -1727,7 +1717,7 @@ def _derive_target(statement: CodeStatement) -> tuple[str | None, str]:
     if statement.kind == "call" and statement.name:
         return statement.name, "procedure"
 
-    mc_publish_detail = _classify_mc_publish(statement)
+    mc_publish_detail = classify_mc_publish(statement)
     if mc_publish_detail is not None and mc_publish_detail.get("topic_name"):
         return str(mc_publish_detail["topic_name"]), "mc_topic"
 
@@ -2343,91 +2333,6 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
     }
 
 
-def _call_prefix(name: str | None) -> str | None:
-    if not name:
-        return None
-    stem = str(name).split("_", 1)[0].strip().upper()
-    return stem or None
-
-
-def _classify_call_semantics(source_name: str, target_name: str) -> dict[str, object]:
-    source_prefix = _call_prefix(source_name)
-    target_prefix = _call_prefix(target_name)
-    call_rule = f"{source_prefix}->{target_prefix}" if source_prefix and target_prefix else None
-
-    if source_prefix and target_prefix and (source_prefix, target_prefix) in LOCAL_CALL_RULES:
-        return {
-            "source_prefix": source_prefix,
-            "target_prefix": target_prefix,
-            "call_rule": call_rule,
-            "call_kind": "local_function_call",
-            "call_label": "本地函数调用",
-        }
-
-    if source_prefix and target_prefix and (source_prefix, target_prefix) in RPC_CALL_RULES:
-        return {
-            "source_prefix": source_prefix,
-            "target_prefix": target_prefix,
-            "call_rule": call_rule,
-            "call_kind": "rpc_call",
-            "call_label": "系统间RPC调用",
-        }
-
-    return {
-        "source_prefix": source_prefix,
-        "target_prefix": target_prefix,
-        "call_rule": call_rule,
-        "call_kind": "unknown_call_kind",
-        "call_label": "未归类调用",
-    }
-
-
-def _coerce_call_semantics(detail: dict[str, object], *, source_name: str, target_name: str) -> dict[str, object]:
-    semantic = _classify_call_semantics(source_name, target_name)
-    semantic.update(
-        {
-            "source_prefix": detail.get("source_prefix") or semantic["source_prefix"],
-            "target_prefix": detail.get("target_prefix") or semantic["target_prefix"],
-            "call_rule": detail.get("call_rule") or semantic["call_rule"],
-            "call_kind": detail.get("call_kind") or semantic["call_kind"],
-            "call_label": detail.get("call_label") or semantic["call_label"],
-        }
-    )
-    return semantic
-
-
-def _format_call_edge_label(item: dict[str, object]) -> str:
-    procedure_name = str(item["procedure_name"])
-    call_label = str(item.get("call_label") or "")
-    call_rule = str(item.get("call_rule") or "")
-    if call_label and call_rule:
-        return f"{procedure_name}({call_label} {call_rule})"
-    if call_label:
-        return f"{procedure_name}({call_label})"
-    return procedure_name
-
-
-def _classify_mc_publish(statement: CodeStatement) -> dict[str, object] | None:
-    if statement.kind != "action" or statement.name not in MC_PUBLISH_ACTIONS:
-        return None
-
-    topic_name = _extract_action_argument(statement, "topic_name")
-    if not topic_name:
-        return None
-
-    publish_mode, publish_mode_label = MC_PUBLISH_ACTIONS[str(statement.name)]
-    return {
-        "transport": "mc",
-        "topic_name": topic_name,
-        "message_kind": "mc_topic_publish",
-        "message_label": "消息中心主题发布",
-        "publish_mode": publish_mode,
-        "publish_mode_label": publish_mode_label,
-        "communication_kind": "cross_core_message_publish",
-        "communication_label": "跨核心消息发布",
-    }
-
-
 def _extract_action_argument(statement: CodeStatement, key: str) -> str | None:
     for group in statement.arguments:
         for item in group:
@@ -2444,16 +2349,6 @@ def _normalize_argument_value(value: str) -> str:
     if candidate.startswith("'") and candidate.endswith("'") and len(candidate) >= 2:
         return candidate[1:-1]
     return candidate
-
-
-def _format_mc_topic_label(item: dict[str, object]) -> str:
-    topic_name = str(item["topic_name"])
-    message_label = str(item.get("message_label") or "消息中心主题发布")
-    publish_mode_label = str(item.get("publish_mode_label") or "")
-    if publish_mode_label:
-        return f"{topic_name}({message_label} {publish_mode_label})"
-    return f"{topic_name}({message_label})"
-
 
 def _maybe_int(value: object) -> int | None:
     if value is None:

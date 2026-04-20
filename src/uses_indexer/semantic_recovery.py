@@ -38,6 +38,41 @@ MC_PUBLISH_ACTIONS = {
     "同步消息发布": ("sync", "同步发布"),
     "消息发布": ("async", "异步发布"),
 }
+LOCAL_CALL_RULES = {
+    ("LS", "LF"),
+    ("LS", "AF"),
+    ("LF", "LF"),
+    ("LF", "AF"),
+    ("AF", "AF"),
+}
+RPC_CALL_RULES = {
+    ("LS", "LS"),
+    ("LF", "LS"),
+    ("AF", "LS"),
+}
+SEMANTIC_RULE_REGISTRY = {
+    "call.local": {
+        "kind": "call_semantics",
+        "label": "本地函数调用",
+        "call_kind": "local_function_call",
+        "rule_pairs": sorted(f"{source}->{target}" for source, target in LOCAL_CALL_RULES),
+    },
+    "call.rpc": {
+        "kind": "call_semantics",
+        "label": "系统间RPC调用",
+        "call_kind": "rpc_call",
+        "rule_pairs": sorted(f"{source}->{target}" for source, target in RPC_CALL_RULES),
+    },
+    "message.mc_publish": {
+        "kind": "message_publish",
+        "label": "消息中心主题发布",
+        "actions": sorted(MC_PUBLISH_ACTIONS),
+        "publish_modes": {
+            action: mode
+            for action, (mode, _mode_label) in sorted(MC_PUBLISH_ACTIONS.items())
+        },
+    },
+}
 
 
 def recover_blocks(statements: list[CodeStatement]) -> list[dict[str, object]]:
@@ -814,7 +849,88 @@ def _classify_mc_publish(statement: CodeStatement) -> dict[str, object] | None:
         "message_label": "消息中心主题发布",
         "publish_mode": publish_mode,
         "publish_mode_label": publish_mode_label,
+        "communication_kind": "cross_core_message_publish",
+        "communication_label": "跨核心消息发布",
     }
+
+
+def call_prefix(name: str | None) -> str | None:
+    if not name:
+        return None
+    prefix, _, _ = str(name).partition("_")
+    return prefix or None
+
+
+def classify_call_semantics(source_name: str, target_name: str) -> dict[str, object]:
+    source_prefix = call_prefix(source_name)
+    target_prefix = call_prefix(target_name)
+    call_rule = f"{source_prefix}->{target_prefix}" if source_prefix and target_prefix else None
+    if source_prefix and target_prefix and (source_prefix, target_prefix) in LOCAL_CALL_RULES:
+        return {
+            "source_prefix": source_prefix,
+            "target_prefix": target_prefix,
+            "call_rule": call_rule,
+            "call_kind": "local_function_call",
+            "call_label": "本地函数调用",
+        }
+    if source_prefix and target_prefix and (source_prefix, target_prefix) in RPC_CALL_RULES:
+        return {
+            "source_prefix": source_prefix,
+            "target_prefix": target_prefix,
+            "call_rule": call_rule,
+            "call_kind": "rpc_call",
+            "call_label": "系统间RPC调用",
+        }
+    return {
+        "source_prefix": source_prefix,
+        "target_prefix": target_prefix,
+        "call_rule": call_rule,
+        "call_kind": "unknown_call_kind",
+        "call_label": "未归类调用",
+    }
+
+
+def coerce_call_semantics(
+    detail: dict[str, object],
+    *,
+    source_name: str,
+    target_name: str,
+) -> dict[str, object]:
+    semantic = classify_call_semantics(source_name, target_name)
+    semantic.update(
+        {
+            "source_prefix": detail.get("source_prefix") or semantic["source_prefix"],
+            "target_prefix": detail.get("target_prefix") or semantic["target_prefix"],
+            "call_rule": detail.get("call_rule") or semantic["call_rule"],
+            "call_kind": detail.get("call_kind") or semantic["call_kind"],
+            "call_label": detail.get("call_label") or semantic["call_label"],
+        }
+    )
+    return semantic
+
+
+def classify_mc_publish(statement: CodeStatement) -> dict[str, object] | None:
+    return _classify_mc_publish(statement)
+
+
+def format_call_edge_label(item: dict[str, object]) -> str:
+    procedure_name = str(item["procedure_name"])
+    call_label = str(item.get("call_label") or "")
+    call_rule = str(item.get("call_rule") or "")
+    if call_label and call_rule:
+        return f"{procedure_name}({call_label} {call_rule})"
+    if call_label:
+        return f"{procedure_name}({call_label})"
+    return procedure_name
+
+
+def format_mc_topic_label(item: dict[str, object]) -> str:
+    topic_name = str(item["topic_name"])
+    message_label = str(item.get("message_label") or "消息中心主题发布")
+    publish_mode_label = str(item.get("publish_mode_label") or "")
+    if publish_mode_label:
+        return f"{topic_name}({message_label} {publish_mode_label})"
+    return f"{topic_name}({message_label})"
 
 
 def _extract_action_argument(statement: CodeStatement, key: str) -> str | None:
