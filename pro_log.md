@@ -1327,3 +1327,39 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `IndexBuildService` 和 `IndexWriteService` 现在已经形成直接协作关系
 - `SQLiteIndexer` 的 write-side 中转职责再次收缩
 - `indexer.py` 文件长度从 `654` 行进一步下降到 `473` 行
+
+## [1.2.13] - 2026-04-21
+
+### Step 20: 抽离 db-summary 统计服务
+
+### 本步目标
+
+- 把 `summarize_db` 相关统计和语义汇总逻辑从 `indexer.py` 迁出
+- 让 `indexer.py` 进一步收敛到初始化和总入口职责
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/db_summary.py`
+   - 新建 `DbSummaryService`
+   - 收口：
+     - `summarize_db`
+     - 调用语义统计
+     - 消息发布语义统计
+     - summary 内部 metadata 读取
+
+2. 更新 `src/uses_indexer/indexer.py`
+   - 初始化 `DbSummaryService`
+   - `summarize_db()` 改为直接委托给服务
+   - 删除原先内联在 `indexer.py` 中的 summary / semantic aggregation 实现
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/db_summary.py src/uses_indexer/indexer.py src/uses_indexer/index_build.py src/uses_indexer/index_write.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py` 通过
+- 结果：`61 passed`
+
+### 结论
+
+- `db-summary` 现在有独立的服务归属，后续扩 summary 能力会更自然
+- `SQLiteIndexer` 继续向轻量门面收敛
+- `indexer.py` 文件长度从 `473` 行进一步下降到 `363` 行
