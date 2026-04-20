@@ -5,6 +5,7 @@ from pathlib import Path
 from .answer_strategy import AdaptiveAnswerStrategy
 from .llm import LlmConfigError, LlmRequestError, OpenAICompatibleLlm
 from .qa import CodebaseQA
+from .response_schema import apply_response_envelope
 from .strategy_config import AnswerExecutionPolicy
 
 
@@ -110,4 +111,4 @@ class CodebaseAnswerer:
                 "model": model_response["model"],
                 "base_url": model_response["base_url"],
             }
-        return result
+        return apply_response_envelope(result, kind="answer")

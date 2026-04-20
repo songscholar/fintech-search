@@ -844,3 +844,47 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 回答层和 QA 层现在已经具备更明确的策略对象边界
 - 后续如果要接环境变量、配置文件或不同问题类型的策略切换，代码会更容易扩展
+
+## [1.2.5] - 2026-04-20
+
+### Step 12: 统一 API / MCP 公共返回 schema
+
+### 本步目标
+
+- 让核心返回对象在 CLI / HTTP / MCP 三个入口之间保持稳定识别键
+- 避免消费端只能靠“猜字段”判断当前拿到的是 query / evidence / ask / answer / summary 哪种结果
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/response_schema.py`
+   - `apply_response_envelope`
+   - `RESPONSE_SCHEMA_VERSION`
+
+2. 更新核心返回
+   - `query_index()` 返回：
+     - `response_schema`
+     - `response_version`
+     - `response_kind=query`
+   - `assemble_evidence()` 返回：
+     - `response_kind=evidence`
+   - `qa.ask()` 返回：
+     - `response_kind=ask`
+   - `answer()` 返回：
+     - `response_kind=answer`
+   - `summarize_db()` 返回：
+     - `response_kind=db_summary`
+
+3. 更新测试
+   - API 测试覆盖 response kind
+   - MCP 测试覆盖 response kind
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/response_schema.py src/uses_indexer/retrieval.py src/uses_indexer/evidence.py src/uses_indexer/qa.py src/uses_indexer/answering.py src/uses_indexer/indexer.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_api.py tests/test_mcp.py tests/test_qa.py tests/test_answering.py` 通过
+- 结果：`13 passed`
+
+### 结论
+
+- 现在消费端至少可以通过稳定的 envelope 字段直接识别返回类型
+- 这为后续继续统一 API / MCP 的公共 schema 打下了基础

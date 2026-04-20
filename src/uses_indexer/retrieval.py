@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .embeddings import EmbeddingRequestError, dot_similarity
 from .observability import build_retrieval_debug_payload
+from .response_schema import apply_response_envelope
 from .rerank import (
     analyze_query,
     apply_call_chain_rerank,
@@ -65,7 +66,7 @@ class RetrievalService:
         }
         if debug:
             payload["debug"] = retrieval_debug
-        return payload
+        return apply_response_envelope(payload, kind="query")
 
     def retrieve_candidates(
         self,

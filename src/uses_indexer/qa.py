@@ -4,6 +4,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .indexer import SQLiteIndexer
+from .response_schema import apply_response_envelope
 from .strategy_config import QaPolicy
 
 
@@ -65,7 +66,7 @@ class CodebaseQA:
             "user_prompt": self._build_user_prompt(question, str(evidence_bundle["llm_context"])),
         }
 
-        return {
+        return apply_response_envelope({
             "db_path": str(db_path),
             "question": question,
             "qa_policy": {
@@ -78,7 +79,7 @@ class CodebaseQA:
             "llm_context": evidence_bundle["llm_context"],
             "prompt_package": prompt_package,
             "draft_answer": self._build_draft_answer(question, evidence_bundle["evidence"]),
-        }
+        }, kind="ask")
 
     def _build_user_prompt(self, question: str, llm_context: str) -> str:
         return "\n".join(

@@ -69,6 +69,7 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     status, summary = api.handle_request("GET", "/db-summary")
     assert status == 200
     assert summary["files"] == 2
+    assert summary["response_kind"] == "db_summary"
 
     status, query = api.handle_request(
         "POST",
@@ -77,6 +78,7 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     )
     assert status == 200
     assert query["hit_count"] >= 1
+    assert query["response_kind"] == "query"
 
     status, ask = api.handle_request(
         "POST",
@@ -85,6 +87,7 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     )
     assert status == 200
     assert ask["draft_answer"]["status"] == "ok"
+    assert ask["response_kind"] == "ask"
 
     status, answer = api.handle_request(
         "POST",
@@ -93,6 +96,7 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     )
     assert status == 200
     assert answer["final_answer"]["source"] in {"draft", "draft_fallback", "llm"}
+    assert answer["response_kind"] == "answer"
 
 
 def test_http_server_serves_json(tmp_path: Path) -> None:

@@ -107,6 +107,7 @@ def test_tool_call_returns_grounded_answer(tmp_path: Path) -> None:
     structured = result["structuredContent"]
     assert structured["final_answer"]["source"] in {"draft", "draft_fallback", "llm"}
     assert structured["evidence_count"] >= 1
+    assert structured["response_kind"] == "answer"
 
 
 def test_stdio_serve_writes_jsonrpc_lines(tmp_path: Path) -> None:
@@ -147,3 +148,4 @@ def test_stdio_serve_writes_jsonrpc_lines(tmp_path: Path) -> None:
     assert len(lines) == 2
     assert lines[0]["result"]["serverInfo"]["version"] == "0.2.0"
     assert lines[1]["result"]["structuredContent"]["hit_count"] >= 1
+    assert lines[1]["result"]["structuredContent"]["response_kind"] == "query"

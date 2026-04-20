@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .observability import build_evidence_debug_payload
+from .response_schema import apply_response_envelope
 from .semantic_recovery import format_call_edge_label, format_mc_topic_label, maybe_int
 
 
@@ -153,7 +154,7 @@ class EvidenceService:
                 evidence_blocks=evidence_blocks,
                 elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
             )
-        return payload
+        return apply_response_envelope(payload, kind="evidence")
 
 
 def build_llm_context(query: str, evidence_blocks: list[dict[str, object]]) -> str:

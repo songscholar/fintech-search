@@ -23,6 +23,7 @@ from .index_write import IndexWriteService
 from .models import CodeStatement, ParsedUnit
 from .parser import ASSIGN_RE, UftDslParser, is_supported_path
 from .retrieval import RetrievalService
+from .response_schema import apply_response_envelope
 from .semantic_recovery import (
     classify_call_semantics,
     classify_mc_publish,
@@ -417,7 +418,7 @@ class SQLiteIndexer:
         summary.update(self._summarize_mc_publish_semantics(conn))
         summary["semantic_rule_registry"] = SEMANTIC_RULE_REGISTRY
         conn.close()
-        return summary
+        return apply_response_envelope(summary, kind="db_summary")
 
     def _summarize_call_semantics(self, conn: sqlite3.Connection) -> dict[str, object]:
         rows = conn.execute(
