@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from .constants import COMPONENT_ACTIONS, EXIT_LABEL_NAMES, READ_ACTIONS, WRITE_ACTIONS
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
 from .index_utils import embedder_batch_size, json_dumps, maybe_int, paths_match
+from .metadata_store import read_metadata, write_metadata_map
 from .metadata_semantics import derive_target, metadata_edges_for_statement
 from .models import CodeStatement, ParsedUnit
 from .semantic_recovery import (
@@ -337,7 +338,7 @@ class IndexWriteService:
         }
 
     def validate_resume_source(self, conn: sqlite3.Connection, root: Path) -> None:
-        source_root = self._metadata(conn, "source_root")
+        source_root = read_metadata(conn, "source_root")
         if source_root is None:
             raise EmbeddingConfigError("Cannot resume vectors because source_root metadata is missing")
         if not paths_match(source_root, root):
@@ -345,9 +346,9 @@ class IndexWriteService:
 
     def validate_vector_space_for_population(self, conn: sqlite3.Connection) -> None:
         current_info = self.owner.embedder.info
-        db_provider = self._metadata(conn, "embedding_provider")
-        db_model = self._metadata(conn, "embedding_model")
-        db_dimension = maybe_int(self._metadata(conn, "embedding_dimension"))
+        db_provider = read_metadata(conn, "embedding_provider")
+        db_model = read_metadata(conn, "embedding_model")
+        db_dimension = maybe_int(read_metadata(conn, "embedding_dimension"))
 
         if db_provider and current_info.provider != db_provider:
             raise EmbeddingConfigError(
@@ -365,10 +366,15 @@ class IndexWriteService:
     def store_embedding_metadata(self, conn: sqlite3.Connection, info: EmbeddingInfo) -> None:
         dimension = info.dimension
         if dimension == 0:
-            dimension = maybe_int(self._metadata(conn, "embedding_dimension")) or 0
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", info.provider))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", info.model))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(dimension)))
+            dimension = maybe_int(read_metadata(conn, "embedding_dimension")) or 0
+        write_metadata_map(
+            conn,
+            {
+                "embedding_provider": info.provider,
+                "embedding_model": info.model,
+                "embedding_dimension": str(dimension),
+            },
+        )
 
     def missing_chunk_vector_count(self, conn: sqlite3.Connection) -> int:
         return int(
@@ -865,9 +871,3 @@ class IndexWriteService:
             """,
             (edge_id, edge_type, source_name, target_name, target_kind, procedure_name, file_path),
         )
-
-    def _metadata(self, conn: sqlite3.Connection, key: str) -> str | None:
-        row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
-        if row is None:
-            return None
-        return str(row[0])

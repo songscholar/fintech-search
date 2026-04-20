@@ -1363,3 +1363,59 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `db-summary` 现在有独立的服务归属，后续扩 summary 能力会更自然
 - `SQLiteIndexer` 继续向轻量门面收敛
 - `indexer.py` 文件长度从 `473` 行进一步下降到 `363` 行
+
+## [1.2.14] - 2026-04-21
+
+### Step 21: 一次性收口 schema 与 metadata 基础设施
+
+### 本步目标
+
+- 不再只拆一个点，而是把 `indexer.py` 中剩余的基础设施再整体收一轮
+- 把 schema 定义和 metadata 读写都从 `SQLiteIndexer` 里剥离
+- 让 retrieval / write / build / summary 统一复用同一套 metadata helper
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/schema.py`
+   - 抽离完整 `SCHEMA_SQL`
+
+2. 新增 `src/uses_indexer/metadata_store.py`
+   - 收口：
+     - `read_metadata`
+     - `write_metadata`
+     - `write_metadata_map`
+
+3. 更新 `src/uses_indexer/indexer.py`
+   - `SCHEMA_SQL` 改为从 `schema.py` 导入
+   - 删除 `_metadata`
+   - 现在基本只保留：
+     - 服务初始化
+     - 顶层入口方法
+     - 少量常量暴露
+
+4. 更新 `src/uses_indexer/retrieval.py`
+   - embedding / vector metadata 读取改为复用 `read_metadata`
+
+5. 更新 `src/uses_indexer/index_write.py`
+   - metadata 读取改为复用 `read_metadata`
+   - embedding metadata 持久化改为复用 `write_metadata_map`
+   - 删除本地 `_metadata`
+
+6. 更新 `src/uses_indexer/index_build.py`
+   - index metadata 写入改为复用 `write_metadata_map`
+   - 增量 index_type 校验改为复用 `read_metadata`
+
+7. 更新 `src/uses_indexer/db_summary.py`
+   - embedding metadata 读取改为复用 `read_metadata`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/schema.py src/uses_indexer/metadata_store.py src/uses_indexer/indexer.py src/uses_indexer/index_build.py src/uses_indexer/index_write.py src/uses_indexer/retrieval.py src/uses_indexer/db_summary.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py` 通过
+- 结果：`61 passed`
+
+### 结论
+
+- schema 与 metadata 访问现在都有了独立基础模块
+- retrieval / build / write / summary 对 metadata 的访问方式已经统一
+- `indexer.py` 文件长度从 `363` 行进一步下降到 `92` 行

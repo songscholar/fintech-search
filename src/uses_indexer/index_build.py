@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
+from .metadata_store import read_metadata, write_metadata_map
 from .observability import build_incremental_trace
 from .parser import is_supported_path
 from .semantic_recovery import build_semantic_chunks, recover_blocks
@@ -104,7 +105,7 @@ class IndexBuildService:
         conn.executescript(INDEX_STATE_SCHEMA_SQL)
         try:
             write_service.validate_resume_source(conn, root)
-            existing_index_type = write_service._metadata(conn, "index_type")
+            existing_index_type = read_metadata(conn, "index_type")
             if existing_index_type and existing_index_type != index_type:
                 raise EmbeddingConfigError(
                     f"Cannot run incremental build with index_type={index_type}; existing db was built as {existing_index_type}"
@@ -304,12 +305,17 @@ class IndexBuildService:
         index_type: str,
         embedder_info: EmbeddingInfo,
     ) -> None:
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(file_count)))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "8"))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
-        conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("index_type", index_type))
+        write_metadata_map(
+            conn,
+            {
+                "source_root": str(root),
+                "file_count": str(file_count),
+                "schema_version": "8",
+                "fts_enabled": "true",
+                "vector_enabled": "true",
+                "index_type": index_type,
+            },
+        )
         self.owner._index_write_service.store_embedding_metadata(conn, embedder_info)
 
     def _upsert_indexed_file_state(self, conn: sqlite3.Connection, files: list[Path], *, index_type: str) -> None:

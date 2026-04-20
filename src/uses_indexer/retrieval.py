@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from .constants import VECTOR_SIMILARITY_THRESHOLD
 from .embeddings import EmbeddingRequestError, dot_similarity
 from .index_utils import build_fts_query, merge_candidate
+from .metadata_store import read_metadata
 from .observability import build_retrieval_debug_payload
 from .response_schema import apply_response_envelope
 from .rerank import (
@@ -225,10 +226,10 @@ class RetrievalService:
         }
 
     def _vector_status(self, conn: sqlite3.Connection) -> dict[str, object]:
-        db_provider = self.owner._metadata(conn, "embedding_provider")
-        db_model = self.owner._metadata(conn, "embedding_model")
-        db_dimension_raw = self.owner._metadata(conn, "embedding_dimension")
-        vector_enabled = (self.owner._metadata(conn, "vector_enabled") or "").lower() == "true"
+        db_provider = read_metadata(conn, "embedding_provider")
+        db_model = read_metadata(conn, "embedding_model")
+        db_dimension_raw = read_metadata(conn, "embedding_dimension")
+        vector_enabled = (read_metadata(conn, "vector_enabled") or "").lower() == "true"
         vector_count = int(conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0])
 
         current_info = self.owner.embedder.info

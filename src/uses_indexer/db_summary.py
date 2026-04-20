@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .index_utils import json_loads_object
+from .metadata_store import read_metadata
 from .response_schema import apply_response_envelope
 from .semantic_recovery import SEMANTIC_RULE_REGISTRY, coerce_call_semantics
 
@@ -53,9 +54,9 @@ class DbSummaryService:
                 "blocks_fts": scalar("SELECT COUNT(*) FROM blocks_fts"),
             },
             "embedding": {
-                "provider": self._metadata(conn, "embedding_provider"),
-                "model": self._metadata(conn, "embedding_model"),
-                "dimension": self._metadata(conn, "embedding_dimension"),
+                "provider": read_metadata(conn, "embedding_provider"),
+                "model": read_metadata(conn, "embedding_model"),
+                "dimension": read_metadata(conn, "embedding_dimension"),
             },
             "unit_kind_counts": grouped("SELECT unit_kind, COUNT(*) FROM files GROUP BY unit_kind ORDER BY COUNT(*) DESC"),
             "file_prefix_counts": grouped("SELECT prefix, COUNT(*) FROM files GROUP BY prefix ORDER BY COUNT(*) DESC"),
@@ -124,9 +125,3 @@ class DbSummaryService:
             "mc_publish_mode_counts": dict(mode_counts),
             "mc_topic_counts": dict(topic_counts),
         }
-
-    def _metadata(self, conn: sqlite3.Connection, key: str) -> str | None:
-        row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
-        if row is None:
-            return None
-        return str(row[0])
