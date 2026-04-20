@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib import error, request
 
+from .config import bootstrap_env
+
 
 class LlmConfigError(Exception):
     pass
@@ -35,6 +37,7 @@ class OpenAICompatibleLlm:
 
     @classmethod
     def from_env(cls) -> "OpenAICompatibleLlm":
+        bootstrap_env()
         provider = os.getenv("USES_INDEXER_LLM_PROVIDER", "openai-compatible").strip() or "openai-compatible"
         api_key = os.getenv("USES_INDEXER_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
         model = os.getenv("USES_INDEXER_LLM_MODEL")

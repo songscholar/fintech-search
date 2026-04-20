@@ -240,6 +240,12 @@ flowchart LR
 
 默认情况下，索引器会使用本地零依赖的 `LocalHashedEmbedder`。
 
+如果你想直接用项目根目录下的 `.env` 配置，也可以复制：
+
+```bash
+cp .env.example .env
+```
+
 如果你希望用真实语义 embedding，可以设置：
 
 - `USES_INDEXER_EMBEDDING_API_KEY`
@@ -622,6 +628,8 @@ python3 -m uses_indexer install-codex-integration --force
 ## 外部模型配置
 
 `answer-codebase` 和 `POST /answer` 支持一个 OpenAI-compatible 的聊天接口，使用这些环境变量：
+
+也可以先从仓库里的 `.env.example` 复制一份到 `.env` 再填写。
 
 - `USES_INDEXER_LLM_API_KEY`
 - `USES_INDEXER_LLM_MODEL`

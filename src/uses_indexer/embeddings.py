@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Protocol
 from urllib import error, request
 
+from .config import bootstrap_env
+
 
 TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 
@@ -184,6 +186,7 @@ class OpenAICompatibleEmbedder:
 
     @classmethod
     def from_env(cls) -> "OpenAICompatibleEmbedder | None":
+        bootstrap_env()
         api_key = (
             os.getenv("USES_INDEXER_EMBEDDING_API_KEY")
             or os.getenv("OPENAI_EMBEDDING_KEY")

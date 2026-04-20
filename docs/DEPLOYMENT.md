@@ -167,6 +167,13 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 如果你希望 `answer-codebase` 或 `POST /answer` 不只是返回本地 `draft_answer`，而是调用外部模型生成最终回答，还需要配置聊天模型环境变量。
 
+如果你更习惯使用项目内 `.env`，可以先执行：
+
+```bash
+cp /Users/songzuoqiang/Documents/agent/condex/codes/.env.example \
+  /Users/songzuoqiang/Documents/agent/condex/codes/.env
+```
+
 ```bash
 export USES_INDEXER_LLM_API_KEY="..."
 export USES_INDEXER_LLM_MODEL="gpt-4.1-mini"

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
+from .config import bootstrap_env
 from .evaluation import RetrievalEvaluator, compare_eval_reports
 from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
@@ -17,6 +18,7 @@ from .qa import CodebaseQA
 from .table_indexer import TableIndexer
 
 def main() -> int:
+    bootstrap_env()
     parser = argparse.ArgumentParser(description="Parse USES UFT DSL files.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

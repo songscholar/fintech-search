@@ -6,12 +6,10 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from .answering import CodebaseAnswerer
+from .constants import JSON_RPC_VERSION, MCP_PROTOCOL_VERSION
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
 from .table_indexer import TableIndexer
-
-JSON_RPC_VERSION = "2.0"
-MCP_PROTOCOL_VERSION = "2025-11-25"
 
 
 class McpProtocolError(Exception):

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from uses_indexer.answering import CodebaseAnswerer
+from uses_indexer.embeddings import LocalHashedEmbedder
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.mcp_server import CodebaseMcpServer
 from uses_indexer.qa import CodebaseQA
@@ -49,7 +50,7 @@ def _build_server(tmp_path: Path) -> tuple[CodebaseMcpServer, Path]:
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
 
     db_path = tmp_path / "index.db"
-    indexer = SQLiteIndexer()
+    indexer = SQLiteIndexer(embedder=LocalHashedEmbedder())
     indexer.build_index(source_dir, db_path)
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa=qa, llm=StubLlm())

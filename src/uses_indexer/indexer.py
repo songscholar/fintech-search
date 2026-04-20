@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from heapq import nlargest
 from pathlib import Path
 
+from .constants import COMPONENT_ACTIONS, READ_ACTIONS, WRITE_ACTIONS
 from .embeddings import (
     Embedder,
     EmbeddingConfigError,
@@ -297,9 +298,6 @@ CREATE INDEX IF NOT EXISTS idx_block_edges_block ON block_edges(block_id);
 CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 """
 
-READ_ACTIONS = {"获取记录", "获取字段", "遍历记录开始", "遍历记录池开始", "记录为空", "记录不为空"}
-WRITE_ACTIONS = {"插入记录", "修改记录", "清空记录池", "数据回库"}
-COMPONENT_ACTIONS = {"获取组件", "插入组件", "尾部插入组件", "遍历组件开始", "遍历组件结束", "组件大小"}
 TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
 QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 VECTOR_SIMILARITY_THRESHOLD = 0.05

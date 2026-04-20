@@ -8,6 +8,7 @@ from heapq import nlargest
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .constants import VECTOR_SIMILARITY_THRESHOLD
 from .embeddings import EmbeddingRequestError, dot_similarity
 from .observability import build_retrieval_debug_payload
 from .response_schema import apply_response_envelope
@@ -18,9 +19,6 @@ from .rerank import (
     vector_hint_tokens,
 )
 from .semantic_recovery import maybe_int
-
-
-VECTOR_SIMILARITY_THRESHOLD = 0.05
 
 if TYPE_CHECKING:
     from .indexer import SQLiteIndexer

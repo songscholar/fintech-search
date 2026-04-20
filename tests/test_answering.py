@@ -4,6 +4,7 @@ from pathlib import Path
 
 from uses_indexer.answer_strategy import AdaptiveAnswerStrategy
 from uses_indexer.answering import CodebaseAnswerer
+from uses_indexer.embeddings import LocalHashedEmbedder
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
 from uses_indexer.strategy_config import (
@@ -63,7 +64,7 @@ def _build_answerer(tmp_path: Path, *, llm: StubLlm | None = None) -> tuple[Code
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
 
     db_path = tmp_path / "index.db"
-    indexer = SQLiteIndexer()
+    indexer = SQLiteIndexer(embedder=LocalHashedEmbedder())
     indexer.build_index(source_dir, db_path)
     qa = CodebaseQA(indexer)
     return CodebaseAnswerer(qa=qa, llm=llm), db_path
@@ -113,7 +114,7 @@ def test_answer_strategy_uses_custom_profile_config(tmp_path: Path) -> None:
     (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
     db_path = tmp_path / "index.db"
-    indexer = SQLiteIndexer()
+    indexer = SQLiteIndexer(embedder=LocalHashedEmbedder())
     indexer.build_index(source_dir, db_path)
     qa = CodebaseQA(indexer, policy=QaPolicy(evidence_limit=2, context_window=1, related_limit=1))
     answerer = CodebaseAnswerer(qa=qa, llm=StubLlm("调用链答案"), strategy=strategy)
@@ -130,7 +131,7 @@ def test_answer_execution_policy_controls_fallback(tmp_path: Path) -> None:
     (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
     db_path = tmp_path / "index.db"
-    indexer = SQLiteIndexer()
+    indexer = SQLiteIndexer(embedder=LocalHashedEmbedder())
     indexer.build_index(source_dir, db_path)
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(

@@ -718,6 +718,56 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 增量建库现在已经能回答“本次改动大概要重建多少内容”
 - 这为后面继续往 procedure / chunk / block 级局部重建推进打下了更直接的基础
 
+## [1.1.9] - 2026-04-20
+
+### Step 9: 补 `.env` 配置入口与集中常量模块
+
+### 本步目标
+
+- 让运行时配置支持项目根目录 `.env`
+- 把部分散落的运行时常量收口到统一模块
+- 避免环境变量逻辑继续散落在 `llm.py / embeddings.py / cli.py / mcp_server.py / retrieval.py / indexer.py`
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/config.py`
+   - 支持自动发现并加载项目根目录 `.env`
+   - 支持 `USES_INDEXER_ENV_FILE` 指定自定义 env 文件
+
+2. 新增 `src/uses_indexer/constants.py`
+   - 集中管理：
+     - `READ_ACTIONS`
+     - `WRITE_ACTIONS`
+     - `COMPONENT_ACTIONS`
+     - `VECTOR_SIMILARITY_THRESHOLD`
+     - `JSON_RPC_VERSION`
+     - `MCP_PROTOCOL_VERSION`
+
+3. 更新运行时模块
+   - `llm.py` 与 `embeddings.py` 现在会先 bootstrap `.env`
+   - `cli.py` 启动时也会先 bootstrap `.env`
+   - `retrieval.py`、`mcp_server.py`、`indexer.py` 改为复用集中常量
+
+4. 新增 `.env.example`
+   - 提供 LLM 与 embedding 的项目内配置模板
+
+5. 更新测试与文档
+   - 新增 `tests/test_config.py`
+   - 补 `.env` 自动加载测试
+   - 补集中常量测试
+   - 更新 `README.md` 与 `docs/DEPLOYMENT.md`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/config.py src/uses_indexer/constants.py src/uses_indexer/llm.py src/uses_indexer/embeddings.py src/uses_indexer/cli.py src/uses_indexer/retrieval.py src/uses_indexer/mcp_server.py src/uses_indexer/indexer.py tests/test_config.py tests/test_answering.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_config.py tests/test_embeddings.py tests/test_answering.py tests/test_mcp.py` 通过
+- 结果：`19 passed`
+
+### 结论
+
+- 项目现在已经可以直接用仓库内 `.env` 驱动运行时配置
+- 关键运行时常量也开始有统一落点，后续继续收口会更顺手
+
 ## [1.2.1] - 2026-04-20
 
 ### Step 8: 增强检索质量评测与趋势统计
