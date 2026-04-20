@@ -607,3 +607,37 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 语义规则现在已经有明确的“单一事实来源”
 - 后续如果要扩充调用类型、消息发布类型或规则标签，改动范围会明显更小
+
+## [1.1.6] - 2026-04-20
+
+### Step 6: 清理历史遗留 helper 与死代码
+
+### 本步目标
+
+- 删除 `indexer.py` 中已经被新模块替代、但仍然残留的旧 helper
+- 降低“同一能力有两套实现”的维护风险
+- 继续把 `indexer.py` 收缩成更明确的门面角色
+
+### 本步改动
+
+1. 清理 `src/uses_indexer/indexer.py`
+   - 删除旧的 block recovery helper
+   - 删除旧的 SQL access / string hint helper
+   - 删除旧的 semantic chunk helper
+   - 删除旧的 query intent / rerank helper
+   - 删除旧的 excerpt / argument / truncate helper
+
+2. 清理冗余 import 和常量
+   - 移除已经迁移到 `semantic_recovery.py`、`rerank.py` 等模块后的重复定义
+   - 保留仍被 `IndexWriteService` 等活跃路径使用的最小必要常量
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/indexer.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py` 通过
+- 结果：`49 passed`
+
+### 结论
+
+- `indexer.py` 本轮净删除 `1057` 行遗留实现
+- 文件体量现在降到约 `1340` 行，已经明显更接近“编排门面”而不是“全能大文件”
