@@ -11,6 +11,7 @@
 默认用例文件：
 
 - `eval/uses_codes_cases.json`
+- `eval/uses_codes_effect_cases.json`
 
 格式示例：
 
@@ -72,8 +73,12 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
 - `summary.pass_at_k`：至少有一个期望项在 top-k 命中时，该 case 计为通过。
 - `summary.expectation_recall_at_k`：每个 case 的期望项召回比例，再对所有 case 求平均。
 - `summary.mean_first_relevant_rank`：首个相关命中的平均排名。
+- `summary.by_query_type`：按 query type 聚合的质量统计。
+- `summary.avg_relation_hit_count`：平均每个 case 有多少命中来自 relation retrieval。
+- `summary.avg_feature_rerank_hit_count`：平均每个 case 有多少命中携带 feature-based rerank 信号。
 - `cases[].expectations`：每个期望项是否命中，以及命中的 hit。
 - `cases[].top_hits`：每个问题的前若干检索结果，方便人工审查。
+- `cases[].query_type`：问题类型分类结果。
 
 ## 对比报告
 

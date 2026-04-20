@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 import time
 from collections import Counter
@@ -445,6 +446,17 @@ class IndexBuildService:
         action_count = sum(1 for statement in unit.statements if statement.kind == "action")
         estimated_chunks = build_semantic_chunks(unit.name, unit.statements)
         estimated_blocks = recover_blocks(unit.statements)
+        chunk_role_counts = Counter(str(chunk.get("chunk_role") or "general") for chunk in estimated_chunks)
+        block_type_counts = Counter(str(block.get("block_type") or "unknown") for block in estimated_blocks)
+        feature_flags = {
+            "has_calls": any(statement.kind == "call" for statement in unit.statements),
+            "has_table_reads": any("获取记录" == statement.name for statement in unit.statements if statement.kind == "action"),
+            "has_table_writes": any("通用SQL执行" == statement.name for statement in unit.statements if statement.kind == "action"),
+            "has_variable_writes": any(bool(statement.writes) for statement in unit.statements),
+            "has_failure_chunks": "failure_flow" in chunk_role_counts,
+            "has_call_chain_chunks": "call_chain" in chunk_role_counts,
+            "has_table_access_chunks": "table_access" in chunk_role_counts,
+        }
         return {
             "file_path": str(path),
             "procedure_name": unit.name,
@@ -454,6 +466,9 @@ class IndexBuildService:
             "block_count": len(estimated_blocks),
             "edge_count": 0,
             "vector_target_count": len(estimated_chunks),
+            "chunk_role_counts": dict(chunk_role_counts),
+            "block_type_counts": dict(block_type_counts),
+            "feature_flags": feature_flags,
         }
 
     def _describe_indexed_unit(self, conn: sqlite3.Connection, path: str) -> dict[str, object]:
@@ -520,9 +535,54 @@ class IndexBuildService:
             "edge_count": int(row[4]) if row and row[4] is not None else 0,
             "vector_target_count": int(row[2]) if row and row[2] is not None else 0,
         }
+        chunk_role_counts = {
+            str(role): int(count)
+            for role, count in conn.execute(
+                """
+                SELECT c.chunk_role, COUNT(*)
+                FROM files f
+                JOIN procedures p ON p.file_id = f.id
+                JOIN chunks c ON c.procedure_id = p.id
+                WHERE f.path = ?
+                GROUP BY c.chunk_role
+                ORDER BY c.chunk_role
+                """,
+                (path,),
+            ).fetchall()
+        }
+        block_type_counts = {
+            str(block_type): int(count)
+            for block_type, count in conn.execute(
+                """
+                SELECT b.block_type, COUNT(*)
+                FROM files f
+                JOIN procedures p ON p.file_id = f.id
+                JOIN blocks b ON b.procedure_id = p.id
+                WHERE f.path = ?
+                GROUP BY b.block_type
+                ORDER BY b.block_type
+                """,
+                (path,),
+            ).fetchall()
+        }
+        feature_flags_row = conn.execute(
+            """
+            SELECT pf.feature_flags_json
+            FROM files f
+            JOIN procedures p ON p.file_id = f.id
+            JOIN procedure_features pf ON pf.procedure_id = p.id
+            WHERE f.path = ?
+            LIMIT 1
+            """,
+            (path,),
+        ).fetchone()
+        feature_flags = json.loads(str(feature_flags_row[0])) if feature_flags_row and feature_flags_row[0] else {}
         return {
             **unit,
             **counts,
+            "chunk_role_counts": chunk_role_counts,
+            "block_type_counts": block_type_counts,
+            "feature_flags": feature_flags,
         }
 
     def _scope_to_rebuild_targets(self, scope: dict[str, object]) -> dict[str, int]:
@@ -536,6 +596,48 @@ class IndexBuildService:
                 or scope.get("chunk_count")
                 or 0
             ),
+        }
+
+    def _scope_delta(
+        self,
+        before: dict[str, object] | None,
+        after: dict[str, object] | None,
+    ) -> dict[str, object]:
+        before_scope = before or {}
+        after_scope = after or {}
+
+        def delta_int(key: str) -> int:
+            return int(after_scope.get(key) or 0) - int(before_scope.get(key) or 0)
+
+        def delta_mapping(key: str) -> dict[str, int]:
+            before_map = dict(before_scope.get(key) or {})
+            after_map = dict(after_scope.get(key) or {})
+            result: dict[str, int] = {}
+            for name in sorted(set(before_map) | set(after_map)):
+                result[name] = int(after_map.get(name) or 0) - int(before_map.get(name) or 0)
+            return result
+
+        def changed_flags() -> dict[str, dict[str, object]]:
+            before_flags = dict(before_scope.get("feature_flags") or {})
+            after_flags = dict(after_scope.get("feature_flags") or {})
+            result: dict[str, dict[str, object]] = {}
+            for name in sorted(set(before_flags) | set(after_flags)):
+                before_value = before_flags.get(name)
+                after_value = after_flags.get(name)
+                if before_value != after_value:
+                    result[name] = {"before": before_value, "after": after_value}
+            return result
+
+        return {
+            "statement_count": delta_int("statement_count"),
+            "action_count": delta_int("action_count"),
+            "chunk_count": delta_int("chunk_count"),
+            "block_count": delta_int("block_count"),
+            "edge_count": delta_int("edge_count"),
+            "vector_target_count": delta_int("vector_target_count"),
+            "chunk_role_counts": delta_mapping("chunk_role_counts"),
+            "block_type_counts": delta_mapping("block_type_counts"),
+            "feature_flags": changed_flags(),
         }
 
     def _build_rebuild_scope_report(
@@ -573,6 +675,7 @@ class IndexBuildService:
                     "rebuild_targets": self._scope_to_rebuild_targets(after or before),
                     "before": before,
                     "after": after,
+                    "delta": self._scope_delta(before, after),
                 }
             )
 
@@ -586,6 +689,7 @@ class IndexBuildService:
                     "rebuild_targets": self._scope_to_rebuild_targets(before),
                     "before": before,
                     "after": None,
+                    "delta": self._scope_delta(before, None),
                 }
             )
 
@@ -616,6 +720,10 @@ class IndexBuildService:
                 int(((item.get("after") or item.get("before") or {}).get("block_count") or 0))
                 for item in items
             ),
+            "delta_statement_count": sum(int((item.get("delta") or {}).get("statement_count") or 0) for item in items),
+            "delta_chunk_count": sum(int((item.get("delta") or {}).get("chunk_count") or 0) for item in items),
+            "delta_block_count": sum(int((item.get("delta") or {}).get("block_count") or 0) for item in items),
+            "delta_vector_target_count": sum(int((item.get("delta") or {}).get("vector_target_count") or 0) for item in items),
         }
         return {
             "summary": summary,

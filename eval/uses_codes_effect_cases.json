@@ -1,0 +1,51 @@
+{
+  "cases": [
+    {
+      "id": "failure-handler-location",
+      "question": "查询失败在哪里处理",
+      "tags": ["failure", "diagnosis"],
+      "expected": {
+        "procedures": ["AF_SAMPLE"],
+        "texts": ["处理失败", "业务报错返回"]
+      }
+    },
+    {
+      "id": "variable-write-flow",
+      "question": "@deep_flag 在哪里赋值",
+      "tags": ["variable", "flow"],
+      "expected": {
+        "procedures": ["AF_DEEP"],
+        "texts": ["@deep_flag", "deep_flag = 1"]
+      }
+    },
+    {
+      "id": "table-write-path",
+      "question": "uses_deep_table 在哪里更新",
+      "tags": ["table_write", "sql"],
+      "expected": {
+        "procedures": ["AF_DEEP"],
+        "tables": ["uses_deep_table"],
+        "texts": ["update uses_deep_table"]
+      }
+    },
+    {
+      "id": "caller-lookup",
+      "question": "AF_DEEP 被谁调用",
+      "tags": ["call_chain", "entry"],
+      "expected": {
+        "procedures": ["AF_SAMPLE"],
+        "texts": ["AF_DEEP"]
+      }
+    },
+    {
+      "id": "dynamic-sql-table",
+      "question": "uses_dynamic_table 在哪里删除",
+      "tags": ["table_write", "dynamic_sql"],
+      "expected": {
+        "procedures": ["AF_DEEP"],
+        "tables": ["uses_dynamic_table"],
+        "texts": ["delete from"]
+      }
+    }
+  ]
+}

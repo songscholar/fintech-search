@@ -836,3 +836,32 @@ def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
     assert updated["incremental_trace"]["trace"]["summary"]["rebuild_target_chunk_count"] >= 1
     summary = indexer.summarize_db(db_path)
     assert summary["files"] == 4
+
+    new_source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LF_测试_增量" objectId="4">
+  <code><![CDATA[
+  [AF_SAMPLE][][]
+  [处理失败]
+  {
+    [业务报错返回][ERR_TEST][增量失败]
+  }
+  ]]></code>
+</business:Function>
+""",
+        encoding="utf-8",
+    )
+
+    changed = indexer.build_index(source_dir, db_path, incremental=True, index_type="code")
+
+    changed_item = next(item for item in changed["incremental_scope"]["items"] if item["file_path"] == str(new_source))
+    assert changed_item["change_type"] == "changed"
+    assert changed_item["before"]["procedure_name"] == "LF_NEW"
+    assert changed_item["after"]["procedure_name"] == "LF_NEW"
+    assert changed_item["after"]["chunk_role_counts"]
+    assert changed_item["after"]["block_type_counts"]
+    assert "feature_flags" in changed_item["after"]
+    assert "delta" in changed_item
+    assert changed_item["delta"]["statement_count"] >= 1
+    assert changed["incremental_scope"]["summary"]["delta_statement_count"] >= 1
+    assert "delta_chunk_count" in changed["incremental_scope"]["summary"]

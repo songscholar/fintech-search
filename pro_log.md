@@ -1649,3 +1649,60 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 回答链路现在会先识别问题类型，再决定提示策略和证据压缩方式
 - draft answer 已经从“简单拼接命中”升级成“按问题类型组织的 grounded 摘要”
 - 回答结果现在能更清楚地区分 LLM grounded、draft grounded 和 retrieval-only 三层能力
+
+## [1.2.18] - 2026-04-21
+
+### Step 25: 细化增量建库诊断与真实效果评测样例
+
+### 本步目标
+
+- 让增量建库报告不仅告诉我们“重建了多少”，还告诉我们“语义上变了什么”
+- 给评测层补一组更贴近真实业务问法的样例，方便后续持续回归
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - `incremental_scope.before/after` 现在会携带：
+     - `chunk_role_counts`
+     - `block_type_counts`
+     - `feature_flags`
+   - 新增 `_scope_delta()`
+   - changed/removed 项现在都会产出 `delta`
+   - `incremental_scope.summary` 新增：
+     - `delta_statement_count`
+     - `delta_chunk_count`
+     - `delta_block_count`
+     - `delta_vector_target_count`
+
+2. 更新 `tests/test_indexer.py`
+   - 扩展增量建库测试
+   - 覆盖：
+     - 第一次新增文件
+     - 第二次修改同一文件
+     - 校验 `before/after/delta`
+     - 校验 `chunk_role_counts / block_type_counts / feature_flags`
+
+3. 新增 `eval/uses_codes_effect_cases.json`
+   - 补充更贴近真实问题类型的效果评测样例：
+     - failure handler
+     - variable write flow
+     - table write path
+     - caller lookup
+     - dynamic SQL table
+
+4. 更新 `docs/EVALUATION.md`
+   - 补充新的样例文件入口
+   - 补充 `by_query_type / avg_relation_hit_count / avg_feature_rerank_hit_count / cases[].query_type`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py::test_build_index_supports_incremental_updates` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py` 通过
+- 结果：`6 passed`
+
+### 结论
+
+- 增量建库现在已经不仅能看文件变化，还能看语义结构变化
+- 后续调 chunk/block/feature 规则时，可以直接借助 delta 做更细的线上诊断
+- 评测样例开始更贴近真实业务问法，而不只是最早那批基础覆盖
