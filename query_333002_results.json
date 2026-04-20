@@ -1,0 +1,1294 @@
+{
+  "db_path": "examples/business_code_index.db",
+  "query": "333002",
+  "fts_query": "333002*",
+  "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank",
+  "vector_status": {
+    "enabled": true,
+    "reason": "enabled",
+    "index_provider": "local-hash",
+    "index_model": "local-hash-256",
+    "index_dimension": 256,
+    "query_provider": "local-hash",
+    "query_model": "local-hash-256",
+    "query_dimension": 256
+  },
+  "candidate_count": 101,
+  "hit_count": 50,
+  "hits": [
+    {
+      "rank": 1,
+      "score": 198.0,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SECUPUB_SECUTRADE_CHECK2",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_SECUTRADE_CHECK2.uftatomfunction",
+      "line_start": 185,
+      "line_end": 192,
+      "matched_text": "AF_SECUPUB_SECUTRADE_CHECK2 | control_block | actions: 业务报错返回 | targets: ERR_SECU_REITS_EXPAND_NOTALLOW | conditions: (@function_id == 333002 || @function_id == 250003 || @function_id == 323022)&& \n      (hs_strcmp(trim(@entrust_prop), \"VTE\") == 0 || hs_strcmp(trim(@entrust_prop), \"H\") == 0) &&\n      ((hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHA) == 0 || hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHB) == 0)) && \n      hs_strstr(\",799996,799997,799998,799999,799981,799982,799983,799984,799993,799988,799991,939988,\", trim(@stock_code)) < 0 | vars: @exchange_type, @entrust_prop, @stock_type, @function_id, @stock_code | notes: 20250926 zhaolz mod 增加排除特殊代码799988-网络密码服务 799991-身份认证相关证券代码  939988-B股网络投票密码服务 修改单：T202509256755",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2",
+        "call_chain_1_outgoing=AF_SESBIDPUB_EXCH_STKCODE_CHECK"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 2,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 216,
+      "line_end": 230,
+      "matched_text": "AF_CBPPUB_EXCH_STKCODE_CHECK | control_block | conditions: (@function_id == 333002) && (hs_strcmp(@exchange_type, \"2\") == 0) && (hs_strcmp(@sub_stock_type,\"Z1\") == 0), (hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_TZA) == 0 || \n       hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_TZB) == 0 || \n       hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_BJS) == 0) && (hs_strstr(\",Q,R,S,U,\", @entrust_prop) > 0) &&\n      ((hs_strcmp(@stock_type, \"z\") != 0) || (@stbtrans_type != 'B')) | vars: @function_id, @exchange_type, @sub_stock_type, @entrust_prop, @stock_type, @stbtrans_type | notes: [LF_系统公用_报价回购代码信息获取3][][]; [结果集转换][@result_packer][@result_unpacker]",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 3,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 544,
+      "line_end": 545,
+      "matched_text": "AF_CBPPUB_EXCH_STKCODE_CHECK | control_block | conditions: @function_id == 333002 && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHA) == 0 && hs_strstr(\",7,8,\", @entrust_prop) > 0 && \n      !(hs_strstr(\",9,a,u,U,X,Y,\", @stock_type) > 0 || hs_strstr(\",01,02,\", @sub_stock_type) > 0) | vars: @function_id, @exchange_type, @entrust_prop, @stock_type, @sub_stock_type",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 4,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 1294,
+      "line_end": 1302,
+      "matched_text": "AF_CBPPUB_EXCH_STKCODE_CHECK | control_block | actions: 业务报错返回 | targets: ERR_USER_STKTATUS_ENTRUST_FORBID | conditions: @function_id == 333002 && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SZA) == 0 && hs_strcmp(@stock_type,CNST_STOCKTYPE_FUNDSUB) == 0\n      && hs_strcmp(@entrust_prop,CNST_ENTRUSTPROP_APPLY) == 0 && @stage_kind == '0' && hs_isnull_s(@relative_code) != 0 && (subcmp(@stock_code, 1, 3, \"159\") == 0 || subcmp(@stock_code, 1, 3, \"158\") == 0) | vars: @exchange_type, @entrust_prop_t, @stbtrans_type, @stock_code, @stkcode_status, @function_id | notes: 20230828 tanxr  mod 涉及深圳代码段159判断的地方兼容158判断 修改单：T202308255419; 20190911 zhaihf mod 当1351配置开启时，才校验ETF阶段日期 修改单：M201909110134",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 5,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 180,
+      "line_end": 189,
+      "matched_text": "AF_SESBIDPUB_EXCH_STKCODE_CHECK | control_block | actions: 业务报错返回 | targets: ERR_SECU_PROMISEYYYS_NOTALLOW | conditions: (@function_id == 333002 || @function_id == 250003 || 333999 == @function_id) && ((hs_strcmp(@exchange_type, \"2\") == 0 && hs_strcmp(@sub_stock_type , \"Z1\") == 0) || (subcmp(@stock_code, 1, 3, \"205\") == 0)) | vars: @stock_code, @stkcode_status, @entrust_prop, @str_config_3273, @exchange_type, @stock_type | notes: 20181008 nigang mod 取系统配置内移,减少获取次数,提升普通股票买卖性能. 修改单: M201810080905; 20110225 chenfei 控制无限制限价类型代码是否允许市价委托　修改单20110525017",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 6,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 191,
+      "line_end": 208,
+      "matched_text": "AF_SESBIDPUB_EXCH_STKCODE_CHECK | control_block | actions: 业务报错返回 | targets: ERR_USER_ENTRUSTPROP_STOCKTYPE_NOTMATCH | conditions: (@function_id == 333002 || 333999 == @function_id) && (hs_strcmp(@exchange_type, \"2\") == 0) && (hs_strcmp(@sub_stock_type,\"Z1\") == 0) | vars: @exchange_type, @stock_code, @sub_stock_type, @function_id | notes: 20201030 yud mod 深圳的代码是定义的，无法通过1320号段控制，增加证券子类控制 修改单：M202010161356; 20181017 yejin mod 普通委托接口不允许做深圳报价回购 修改单:M201809281068",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 7,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 401,
+      "line_end": 402,
+      "matched_text": "AF_SESBIDPUB_EXCH_STKCODE_CHECK | control_block | conditions: (@function_id == 333002 || 333999 == @function_id) && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHA) == 0 && hs_strstr(\",7,8,\", @entrust_prop) > 0 &&\n      !(hs_strstr(\",9,a,u,U,X,Y,\", @stock_type) > 0 || hs_strstr(\",01,02,\", @sub_stock_type) > 0) | vars: @function_id, @exchange_type, @entrust_prop, @stock_type, @sub_stock_type",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 8,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 1268,
+      "line_end": 1277,
+      "matched_text": "AF_SESBIDPUB_EXCH_STKCODE_CHECK | control_block | actions: 业务报错返回 | targets: ERR_USER_STKTATUS_ENTRUST_FORBID | conditions: (@function_id == 333002 || 333999 == @function_id) && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SZA) == 0 && hs_strcmp(@stock_type,CNST_STOCKTYPE_FUNDSUB) == 0\n      && hs_strcmp(@entrust_prop,CNST_ENTRUSTPROP_APPLY) == 0 && @stage_kind == '0' && hs_isnull_s(@relative_code) != 0 && (subcmp(@stock_code, 1, 3, \"159\") == 0 || subcmp(@stock_code, 1, 3, \"158\") == 0) | vars: @exchange_type, @entrust_prop_t, @stbtrans_type, @stock_code, @stkcode_status, @function_id | notes: 20230828 tanxr  mod 涉及深圳代码段159判断的地方兼容158判断 修改单：T202308255419; 20190911 zhaihf mod 当1351配置开启时，才校验ETF阶段日期 修改单：M201909110134",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 9,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESPUB_STKRESTRICT_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sespub/AF_SESPUB_STKRESTRICT_CHECK.uftatomfunction",
+      "line_start": 178,
+      "line_end": 181,
+      "matched_text": "AF_SESPUB_STKRESTRICT_CHECK | control_block | conditions: (333002 == @function_id) || (250003 == @function_id) || (333999 == @function_id) | vars: @function_id, @stock_type_check, @stock_type_t, @table_name",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 10,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESPUB_STKRESTRICT_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sespub/AF_SESPUB_STKRESTRICT_CHECK.uftatomfunction",
+      "line_start": 362,
+      "line_end": 365,
+      "matched_text": "AF_SESPUB_STKRESTRICT_CHECK | control_block | conditions: (333002 == @function_id) || (250003 == @function_id) || (333999 == @function_id) | vars: @function_id, @stock_type_check, @stock_type_t, @table_name",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 11,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESPUB_TRADE_PROP_RESET_bid",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_TRADE_PROP_RESET_bid.uftatomfunction",
+      "line_start": 69,
+      "line_end": 84,
+      "matched_text": "AF_SESPUB_TRADE_PROP_RESET_bid | control_block | conditions: (hs_strcmp(@stock_type,CNST_STOCKTYPE_NORMALAPPLY) == 0 && (hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_TZA) != 0 && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_TZB) != 0 && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_BJS) != 0)) || (hs_strcmp(@stock_type,CNST_STOCKTYPE_ADDAPPLY) == 0)\n            || (hs_strcmp(@stock_type,CNST_STOCKTYPE_DEBTAPPLY) == 0) || (hs_strcmp(@stock_type,CNST_STOCKTYPE_FUNDAPPLY) == 0)\n            || (hs_strcmp(@stock_type,CNST_STOCKTYPE_ETFSUB) == 0) || (hs_strcmp(@stock_type,CNST_STOCKTYPE_FUNDSUB) == 0), hs_strcmp(@stock_type, CNST_STOCKTYPE_FUNDSUB) == 0\n                && ( hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BUYSALE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ADV_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LMTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_SELF_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_REALBUSI_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ALLBUSICAN) == 0 )\n                && (333002 == @function_id || 333999 == @function_id) | vars: @stock_type, @exchange_type, @entrust_prop, @function_id | notes: 20230418 zhangpf mod 3416开关仅限制333002功能，对于其他功能号stock_type=K，直接将stock_type重置为3 修改单：T202304105466; 20210310 laogh mod 对于场内基金认购代码（stock_type为'K'），当输入的委托属性为'0'时，当3416配置不为'0'时才将委托属性置成'3'；当3416配置为'0'时不重置委托属性，直接进行报错提示. 修改单：M202102032282",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 12,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESPUB_TRADE_PROP_RESET_bid",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_TRADE_PROP_RESET_bid.uftatomfunction",
+      "line_start": 131,
+      "line_end": 139,
+      "matched_text": "AF_SESPUB_TRADE_PROP_RESET_bid | control_block | conditions: hs_strcmp(@stock_type, CNST_STOCKTYPE_ETFSUB) == 0\n                && (hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BUYSALE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ADV_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LMTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_SELF_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_REALBUSI_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ALLBUSICAN) == 0 )\n                && (@function_id == 333002 || 333999 == @function_id) | vars: @stock_type, @entrust_prop, @function_id",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 13,
+      "score": 196.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "META_upub_codes_constant_constant",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/constant.constant",
+      "line_start": 5191,
+      "line_end": 5191,
+      "matched_text": "META_upub_codes_constant_constant | metadata_block | metadata: CNST_FUNCID_OUT_SECU_NORMAL_ENTRUST | targets: 333002",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 14,
+      "score": 195.0,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESARGPUB_TRADEARGCHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_TRADEARGCHECK.uftatomfunction",
+      "line_start": 204,
+      "line_end": 208,
+      "matched_text": "AF_SESARGPUB_TRADEARGCHECK | control_block | actions: 业务报错返回 | targets: ERR_USER_FUNC_FORBID_REG_UNGEG | conditions: (333002 == @function_id || 333999 == @function_id) && (hs_strcmp(@comp_secuexchinfo.exchange_type,CNST_EXCHANGETYPE_SHA) == 0 || hs_strcmp(@comp_secuexchinfo.exchange_type, CNST_EXCHANGETYPE_SZA) == 0 ||\n  hs_strcmp(@comp_secuexchinfo.exchange_type,CNST_EXCHANGETYPE_SHB) == 0 || hs_strcmp((@comp_secuexchinfo.exchange_type), CNST_EXCHANGETYPE_SZB) == 0) | vars: @function_id, @comp_secuexchinfo.exchange_type | notes: 20230628 fengtao mod 支持校验系统配置3662，当委托的证券代码在系统配置里存在时，报错拦截 修改单：T202306086064",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 15,
+      "score": 191.0,
+      "hit_type": "action",
+      "retrieval_source": "fts_action",
+      "match_source": "action_target",
+      "procedure_name": "META_upub_codes_constant_constant",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/constant.constant",
+      "line_start": 5191,
+      "line_end": 5191,
+      "matched_text": "333002",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_action",
+        "like_action"
+      ]
+    },
+    {
+      "rank": 16,
+      "score": 186.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_CBPPUB_ENTRUSTPROP_RESET",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_ENTRUSTPROP_RESET.uftatomfunction",
+      "line_start": 3,
+      "line_end": 14,
+      "matched_text": "AF_CBPPUB_ENTRUSTPROP_RESET | assignment_block | vars: @str_config_3674_tmp, @str_config_3674, @str_config_3385_tmp, @str_config_3385, @stkcode_ctrlstr_tmp, @stkcode_ctrlstr | notes: 说明：截止20230616，涉及调用当前重置函数的逻辑功能如下，请注意程序调整对其他功能的影响; 296001,577334,333624,333025,333017,333022,296010,296011,577344,577343,333020,577333,333147,333007,",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3",
+        "call_chain_1_incoming=AF_CBPPUB_EXCH_STKCODE_CHECK"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 17,
+      "score": 186.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SECUPUB_ENTRUSTPROP_RESET",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_ENTRUSTPROP_RESET.uftatomfunction",
+      "line_start": 3,
+      "line_end": 14,
+      "matched_text": "AF_SECUPUB_ENTRUSTPROP_RESET | assignment_block | vars: @str_config_3674_tmp, @str_config_3674, @str_config_3385_tmp, @str_config_3385, @stkcode_ctrlstr_tmp, @stkcode_ctrlstr | notes: 说明：截止20230616，涉及调用当前重置函数的逻辑功能如下，请注意程序调整对其他功能的影响; 296001,577334,333624,333025,333017,333022,296010,296011,577344,577343,333020,577333,333147,333007,",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3",
+        "call_chain_1_incoming=AF_SESBIDPUB_EXCH_STKCODE_CHECK"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 18,
+      "score": 183.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SESARGPUB_TRADEARGCHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_TRADEARGCHECK.uftatomfunction",
+      "line_start": 2,
+      "line_end": 15,
+      "matched_text": "AF_SESARGPUB_TRADEARGCHECK | call_flow | actions: 获取组件, AF_系统公用_报价回购代码信息获取, 如果结果集不为空, 函数报错返回 | targets: comp_secuexchinfo, AF_系统公用_报价回购代码信息获取, ERR_USER_ENTRUSTPROP_STOCKTYPE_NOTMATCH | vars: @comp_secuexchinfo.exchange_type, @usps_stkcode.stock_code, @sub_stock_type | notes: 20201030 yud mod 深圳的代码是定义的，无法通过1320号段控制，增加证券子类控制 修改单：M202010161356; 20181017 yejin mod 普通委托接口不允许做深圳报价回购 修改单:M201809281068",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 19,
+      "score": 183.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "META_upub_codes_sysconfig_sysconfig",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/sysconfig.sysconfig",
+      "line_start": 388,
+      "line_end": 388,
+      "matched_text": "META_upub_codes_sysconfig_sysconfig | metadata_block | metadata: 3416 | targets: 3416",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 20,
+      "score": 183.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "META_upub_codes_sysconfig_sysconfig",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/sysconfig.sysconfig",
+      "line_start": 408,
+      "line_end": 408,
+      "matched_text": "META_upub_codes_sysconfig_sysconfig | metadata_block | metadata: 3443 | targets: 3443",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 21,
+      "score": 183.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "META_upub_codes_sysconfig_sysconfig",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/sysconfig.sysconfig",
+      "line_start": 451,
+      "line_end": 451,
+      "matched_text": "META_upub_codes_sysconfig_sysconfig | metadata_block | metadata: 3508 | targets: 3508",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 22,
+      "score": 183.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "META_upub_codes_sysconfig_sysconfig",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/sysconfig.sysconfig",
+      "line_start": 490,
+      "line_end": 490,
+      "matched_text": "META_upub_codes_sysconfig_sysconfig | metadata_block | metadata: 3574 | targets: 3574",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 23,
+      "score": 183.5,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "META_upub_codes_sysconfig_sysconfig",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/sysconfig.sysconfig",
+      "line_start": 548,
+      "line_end": 548,
+      "matched_text": "META_upub_codes_sysconfig_sysconfig | metadata_block | metadata: 3662 | targets: 3662",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=3"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "vector_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 24,
+      "score": 182.0,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 205,
+      "line_end": 215,
+      "matched_text": "AF_CBPPUB_EXCH_STKCODE_CHECK | call_flow | actions: 业务报错返回, AF_系统参数公用_系统配置信息获取 | targets: ERR_SECU_PROMISEYYYS_NOTALLOW, AF_系统参数公用_系统配置信息获取 | vars: @stock_code, @stkcode_status, @entrust_prop, @str_config_3273, @config_no, @char_config_3162 | notes: 20181008 nigang mod 取系统配置内移,减少获取次数,提升普通股票买卖性能. 修改单: M201810080905; 20110225 chenfei 控制无限制限价类型代码是否允许市价委托　修改单20110525017",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 25,
+      "score": 182.0,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "AF_SYSARGPUB_ELIGINFO_TRANSMIT",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sysargpub/AF_SYSARGPUB_ELIGINFO_TRANSMIT.uftatomfunction",
+      "line_start": 12,
+      "line_end": 28,
+      "matched_text": "AF_SYSARGPUB_ELIGINFO_TRANSMIT | action_block | actions: 获取记录, 记录不为空, 获取调用功能号 | targets: upbs_elig_product, @function_id | vars: @stock_code, @exchange_type, @rowcount, @invest_type_t, @upbs_elig_product.invest_type, @invest_term_t | notes: 20230904 tongya39503 mod elig_match_rule等于3时，只有产品表eligproduct有记录，才做适当性转发  修改单：T202308013285; 20190605 suyao mod 兼容多金和开基作适当性转发 修改单：M201906041553",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 26,
+      "score": 181.904,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "LF_SESBID_STKCODE_VALID_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/ses/sesbid/LF_SESBID_STKCODE_VALID_CHECK.uftfunction",
+      "line_start": 330,
+      "line_end": 343,
+      "matched_text": "LF_SESBID_STKCODE_VALID_CHECK | control_block | actions: 业务报错返回 | targets: ERR_USER_STOCKCODE_BONDTRADE_NOTALLOW | conditions: (CNST_FUNCID_OUT_SECU_NORMAL_ENTRUST == @function_id || 333999 == @function_id) && \n      (hs_strcmp(@comp_secuexchinfo.exchange_type, CNST_EXCHANGETYPE_SHA) == 0 || hs_strcmp(@comp_secuexchinfo.exchange_type, CNST_EXCHANGETYPE_SZA) == 0 ||\n       hs_strcmp(@comp_secuexchinfo.exchange_type, CNST_EXCHANGETYPE_SHB) == 0 || hs_strcmp((@comp_secuexchinfo.exchange_type), CNST_EXCHANGETYPE_SZB) == 0) | vars: @comp_secuexchinfo.entrust_prop, @usps_stkcode.stock_code, @comp_secuexchinfo.exchange_type, @usps_stkcode.secu_stock_type, @usps_stkcode.stock_type, @function_id | notes: TODO：这里建议后续在优化，可以直接判断是否仅为/，若仅为/，其他的字符串substr操作可全部跳过.; 20230628 fengtao mod 支持校验系统配置3662，当委托的证券代码在系统配置里存在时，报错拦截 修改单：T202306086064",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 27,
+      "score": 181.235,
+      "hit_type": "chunk",
+      "retrieval_source": "fts_chunk",
+      "match_source": "chunk_summary",
+      "procedure_name": "LF_SESBIDEXT_NORMALENTRUST",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/ses/sesbidext/LF_SESBIDEXT_NORMALENTRUST.uftfunction",
+      "line_start": 2,
+      "line_end": 32,
+      "matched_text": "LF_SESBIDEXT_NORMALENTRUST | call_flow | actions: LF_证券竞价交易_基础信息获取, LF_证券竞价交易_交易参数检查, LF_证券竞价交易_委托检查, LF_证券竞价交易_委托确认 | targets: LF_证券竞价交易_基础信息获取, LF_证券竞价交易_交易参数检查, LF_证券竞价交易_委托检查, LF_证券竞价交易_委托确认 | vars: @comp_secuexchinfo, @uses_sys_config, @usps_exch_arg, @char_config_4222, @uses_fund_account, @uses_stock_holder | notes: 组件信息初始化,获取系统配置横表; 参数检查,所有的非账户级检查,在此LF中实现",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_chunk",
+        "like_chunk"
+      ]
+    },
+    {
+      "rank": 28,
+      "score": 181.0,
+      "hit_type": "procedure",
+      "retrieval_source": "fts_procedure",
+      "match_source": "procedure_fts",
+      "procedure_name": "LS_SESEXT_NORMALORDER_ENTER",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/ses/sesext/LS_SESEXT_NORMALORDER_ENTER.uftservice",
+      "line_start": null,
+      "line_end": null,
+      "matched_text": "LS_证券周边_普通委托",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_context=333002",
+        "exact_match_in_context"
+      ],
+      "matched_via": [
+        "fts_procedure"
+      ]
+    },
+    {
+      "rank": 29,
+      "score": 180.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_CBPPUB_ENTRUSTPROP_RESET",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_ENTRUSTPROP_RESET.uftatomfunction",
+      "line_start": 9,
+      "line_end": 9,
+      "matched_text": "  //333019,333016,333002,333003,296000,333004,333026,333152,333023,333008,333021,333015,333024,296400,",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2",
+        "call_chain_1_incoming=AF_CBPPUB_EXCH_STKCODE_CHECK"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 30,
+      "score": 180.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_SECUPUB_ENTRUSTPROP_RESET",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_ENTRUSTPROP_RESET.uftatomfunction",
+      "line_start": 9,
+      "line_end": 9,
+      "matched_text": "  //333019,333016,333002,333003,296000,333004,333026,333152,333023,333008,333021,333015,333024,296400,",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2",
+        "call_chain_1_incoming=AF_SESBIDPUB_EXCH_STKCODE_CHECK"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 31,
+      "score": 180.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SECUPUB_SECUTRADE_CHECK2",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SECUPUB_SECUTRADE_CHECK2.uftatomfunction",
+      "line_start": 189,
+      "line_end": 192,
+      "matched_text": "  if ((@function_id == 333002 || @function_id == 250003 || @function_id == 323022)&& \n      (hs_strcmp(trim(@entrust_prop), \"VTE\") == 0 || hs_strcmp(trim(@entrust_prop), \"H\") == 0) &&\n      ((hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHA) == 0 || hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHB) == 0)) && \n      hs_strstr(\",799996,799997,799998,799999,799981,799982,799983,799984,799993,799988,799991,939988,\", trim(@stock_code)) < 0)",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2",
+        "call_chain_1_outgoing=AF_SESBIDPUB_EXCH_STKCODE_CHECK"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 32,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 215,
+      "line_end": 215,
+      "matched_text": "  //if ((@function_id == 333002) && (hs_strcmp(@exchange_type, \"2\") == 0) && (subcmp(@stock_code, 1, 4, \"1320\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 33,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 216,
+      "line_end": 216,
+      "matched_text": "  if ((@function_id == 333002) && (hs_strcmp(@exchange_type, \"2\") == 0) && (hs_strcmp(@sub_stock_type,\"Z1\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 34,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 544,
+      "line_end": 545,
+      "matched_text": "  if (@function_id == 333002 && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHA) == 0 && hs_strstr(\",7,8,\", @entrust_prop) > 0 && \n      !(hs_strstr(\",9,a,u,U,X,Y,\", @stock_type) > 0 || hs_strstr(\",01,02,\", @sub_stock_type) > 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 35,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_CBPPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/ucbp_codes/uftatom/pub/cbppub/AF_CBPPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 1301,
+      "line_end": 1302,
+      "matched_text": "  if (@function_id == 333002 && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SZA) == 0 && hs_strcmp(@stock_type,CNST_STOCKTYPE_FUNDSUB) == 0\n      && hs_strcmp(@entrust_prop,CNST_ENTRUSTPROP_APPLY) == 0 && @stage_kind == '0' && hs_isnull_s(@relative_code) != 0 && (subcmp(@stock_code, 1, 3, \"159\") == 0 || subcmp(@stock_code, 1, 3, \"158\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 36,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_SESARGPUB_TRADEARGCHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_TRADEARGCHECK.uftatomfunction",
+      "line_start": 5,
+      "line_end": 5,
+      "matched_text": "  //if ((@function_id == 333002) && (hs_strcmp(@comp_secuexchinfo.exchange_type, \"2\") == 0) && (subcmp(@usps_stkcode.stock_code, 1, 4, \"1320\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 37,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_SESARGPUB_TRADEARGCHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_TRADEARGCHECK.uftatomfunction",
+      "line_start": 6,
+      "line_end": 6,
+      "matched_text": "// if ((@function_id == 333002) && (hs_strcmp(@comp_secuexchinfo.exchange_type, \"2\") == 0) && (hs_strcmp(@usps_stkcode.sub_stock_type,\"Z1\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 38,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESARGPUB_TRADEARGCHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesargpub/AF_SESARGPUB_TRADEARGCHECK.uftatomfunction",
+      "line_start": 207,
+      "line_end": 208,
+      "matched_text": "  if ((333002 == @function_id || 333999 == @function_id) && (hs_strcmp(@comp_secuexchinfo.exchange_type,CNST_EXCHANGETYPE_SHA) == 0 || hs_strcmp(@comp_secuexchinfo.exchange_type, CNST_EXCHANGETYPE_SZA) == 0 ||\n  hs_strcmp(@comp_secuexchinfo.exchange_type,CNST_EXCHANGETYPE_SHB) == 0 || hs_strcmp((@comp_secuexchinfo.exchange_type), CNST_EXCHANGETYPE_SZB) == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 39,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 189,
+      "line_end": 189,
+      "matched_text": "  if ((@function_id == 333002 || @function_id == 250003 || 333999 == @function_id) && ((hs_strcmp(@exchange_type, \"2\") == 0 && hs_strcmp(@sub_stock_type , \"Z1\") == 0) || (subcmp(@stock_code, 1, 3, \"205\") == 0)))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 40,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 196,
+      "line_end": 196,
+      "matched_text": "  //if ((@function_id == 333002) && (hs_strcmp(@exchange_type, \"2\") == 0) && (subcmp(@stock_code, 1, 4, \"1320\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 41,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 198,
+      "line_end": 198,
+      "matched_text": "  if ((@function_id == 333002 || 333999 == @function_id) && (hs_strcmp(@exchange_type, \"2\") == 0) && (hs_strcmp(@sub_stock_type,\"Z1\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 42,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 401,
+      "line_end": 402,
+      "matched_text": "  if ((@function_id == 333002 || 333999 == @function_id) && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SHA) == 0 && hs_strstr(\",7,8,\", @entrust_prop) > 0 &&\n      !(hs_strstr(\",9,a,u,U,X,Y,\", @stock_type) > 0 || hs_strstr(\",01,02,\", @sub_stock_type) > 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 43,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESBIDPUB_EXCH_STKCODE_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESBIDPUB_EXCH_STKCODE_CHECK.uftatomfunction",
+      "line_start": 1276,
+      "line_end": 1277,
+      "matched_text": "  if ((@function_id == 333002 || 333999 == @function_id) && hs_strcmp(@exchange_type, CNST_EXCHANGETYPE_SZA) == 0 && hs_strcmp(@stock_type,CNST_STOCKTYPE_FUNDSUB) == 0\n      && hs_strcmp(@entrust_prop,CNST_ENTRUSTPROP_APPLY) == 0 && @stage_kind == '0' && hs_isnull_s(@relative_code) != 0 && (subcmp(@stock_code, 1, 3, \"159\") == 0 || subcmp(@stock_code, 1, 3, \"158\") == 0))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 44,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESPUB_STKRESTRICT_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sespub/AF_SESPUB_STKRESTRICT_CHECK.uftatomfunction",
+      "line_start": 178,
+      "line_end": 178,
+      "matched_text": "    if ((333002 == @function_id) || (250003 == @function_id) || (333999 == @function_id))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 45,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESPUB_STKRESTRICT_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sespub/AF_SESPUB_STKRESTRICT_CHECK.uftatomfunction",
+      "line_start": 362,
+      "line_end": 362,
+      "matched_text": "      if ((333002 == @function_id) || (250003 == @function_id) || (333999 == @function_id))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 46,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESPUB_TRADE_PROP_RESET_bid",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_TRADE_PROP_RESET_bid.uftatomfunction",
+      "line_start": 76,
+      "line_end": 84,
+      "matched_text": "                if (hs_strcmp(@stock_type, CNST_STOCKTYPE_FUNDSUB) == 0\n                && ( hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BUYSALE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ADV_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LMTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_SELF_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_REALBUSI_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ALLBUSICAN) == 0 )\n                && (333002 == @function_id || 333999 == @function_id))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 47,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "control",
+      "procedure_name": "AF_SESPUB_TRADE_PROP_RESET_bid",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftatom/pub/sesbidpub/AF_SESPUB_TRADE_PROP_RESET_bid.uftatomfunction",
+      "line_start": 131,
+      "line_end": 139,
+      "matched_text": "                else if (hs_strcmp(@stock_type, CNST_STOCKTYPE_ETFSUB) == 0\n                && (hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BUYSALE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ADV_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LMTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_SELF_BESTPRICE) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_REALBUSI_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_BESTFIVE_LEFTCAN) == 0\n                || hs_strcmp(@entrust_prop, CNST_ENTRUSTPROP_ALLBUSICAN) == 0 )\n                && (@function_id == 333002 || 333999 == @function_id))",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 48,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "AF_SYSARGPUB_ELIGINFO_TRANSMIT",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftatom/sysargpub/AF_SYSARGPUB_ELIGINFO_TRANSMIT.uftatomfunction",
+      "line_start": 27,
+      "line_end": 27,
+      "matched_text": "  //20241101 yusz mod 333002参数由输出获取 修改单：T202410317483",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 49,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "LF_SESBIDEXT_NORMALENTRUST",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/ses/sesbidext/LF_SESBIDEXT_NORMALENTRUST.uftfunction",
+      "line_start": 19,
+      "line_end": 19,
+      "matched_text": "  //20241202 panxg 333002竞价买卖, 夜市委托, 实际的交易日和周边应答返回的交易日保持一致 修改单: T202412013001",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    },
+    {
+      "rank": 50,
+      "score": 177.0,
+      "hit_type": "statement",
+      "retrieval_source": "fts_statement",
+      "match_source": "comment",
+      "procedure_name": "LF_SESBID_STKCODE_VALID_CHECK",
+      "chinese_name": null,
+      "object_id": null,
+      "file_path": "/Users/songzuoqiang/Documents/agent/code/uses_codes/uftbusiness/ses/sesbid/LF_SESBID_STKCODE_VALID_CHECK.uftfunction",
+      "line_start": 339,
+      "line_end": 339,
+      "matched_text": "  //3662-333002禁止下单的证券代码串：默认为“/”，“/”前为上海市场代码串，“/”后为深圳市场代码串，支持配置多个代码串，以英文逗号分隔",
+      "reasons": [
+        "fts_hit",
+        "token_overlap=1/1",
+        "focus_match_in_hit=333002",
+        "exact_match_in_hit",
+        "multi_source_match=2"
+      ],
+      "matched_via": [
+        "fts_statement",
+        "like_statement"
+      ]
+    }
+  ]
+}

@@ -24,13 +24,13 @@ def main() -> int:
 
     default_db = args.db or os.environ.get("USES_INDEXER_DEFAULT_DB")
     if not default_db:
-        for candidate_name in ("agent_code_index.db", "uses_codes_index.db"):
+        for candidate_name in ("business_code_index.db", "uses_codes_index.db"):
             candidate = repo_root / "examples" / candidate_name
             if candidate.exists():
                 default_db = str(candidate)
                 break
     if not default_db:
-        default_db = str(repo_root / "examples" / "agent_code_index.db")
+        default_db = str(repo_root / "examples" / "business_code_index.db")
     server = CodebaseMcpServer(default_db_path=default_db)
     server.serve()
     return 0

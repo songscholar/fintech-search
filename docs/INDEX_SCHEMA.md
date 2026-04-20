@@ -4,7 +4,7 @@
 
 这个文档描述当前 SQLite 索引库里每张表的职责，方便后续继续扩展。
 
-数据库样例文件当前推荐生成到 `examples/agent_code_index.db`；默认库发现会优先选择它，如果不存在，再回退到 `examples/uses_codes_index.db`。这两个文件体积都较大，当前都不纳入版本控制。
+数据库样例文件当前推荐生成到 `examples/business_code_index.db`；默认库发现会优先选择它，如果不存在，再回退到 `examples/uses_codes_index.db`。这两个文件体积都较大，当前都不纳入版本控制。
 
 ## 元数据
 

@@ -47,6 +47,7 @@ def build_single_index(index_name: str, db_path: Path, build_func):
     except Exception as e:
         stop_event.set()
         monitor_thread.join(timeout=2)
+        print(f"  构建失败: {e}")
         raise
     
     t1 = time.time()
@@ -56,10 +57,11 @@ def build_single_index(index_name: str, db_path: Path, build_func):
 
 def main():
     print("=" * 80)
-    print("继续构建剩余的三个索引...")
+    print("构建剩余的两个索引...")
     print("=" * 80)
     print()
     print("[1/4] 代码专用索引 (business_code_index.db) 已存在，跳过...")
+    print("[2/4] 元数据专用索引 (business_metadata_index.db) 已存在，跳过...")
     print()
 
     code_root = Path("/Users/songzuoqiang/Documents/agent/code")
@@ -71,19 +73,6 @@ def main():
     indexer = SQLiteIndexer(parser)
     table_indexer = TableIndexer()
 
-    # 2. 元数据专用索引
-    print("[2/4] 构建元数据专用索引 (metadata)...")
-    metadata_db_path = examples_dir / "business_metadata_index.db"
-    
-    def build_metadata_index():
-        return indexer.build_index(str(code_root), str(metadata_db_path), index_type="metadata")
-    
-    result = build_single_index("2/4", metadata_db_path, build_metadata_index)
-    print(f"  文件数: {result.get('file_count', 'N/A')}")
-    print(f"  过程数: {result.get('procedure_count', 'N/A')}")
-    print(f"  元数据条目数: {result.get('metadata_entries', 'N/A')}")
-    print()
-
     # 3. 全量索引
     print("[3/4] 构建全量索引 (all)...")
     full_db_path = examples_dir / "business_full_index.db"
@@ -91,9 +80,13 @@ def main():
     def build_full_index():
         return indexer.build_index(str(code_root), str(full_db_path), index_type="all")
     
-    result = build_single_index("3/4", full_db_path, build_full_index)
-    print(f"  文件数: {result['file_count']}")
-    print(f"  过程数: {result['procedure_count']}")
+    try:
+        result = build_single_index("3/4", full_db_path, build_full_index)
+        print(f"  文件数: {result.get('file_count', 'N/A')}")
+        print(f"  过程数: {result.get('procedure_count', 'N/A')}")
+        print(f"  元数据条目数: {result.get('metadata_entries', 'N/A')}")
+    except Exception as e:
+        print(f"  构建全量索引失败: {e}")
     print()
 
     # 4. 表结构索引
@@ -110,19 +103,22 @@ def main():
             mdbobject_path=str(mdbobject_path),
         )
     
-    result = build_single_index("4/4", table_db_path, build_table_index)
-    print(f"  表数量: {result['table_count']}")
-    print(f"  字段数量: {result['field_count']}")
-    print(f"  索引数量: {result['index_count']}")
+    try:
+        result = build_single_index("4/4", table_db_path, build_table_index)
+        print(f"  表数量: {result.get('table_count', 'N/A')}")
+        print(f"  字段数量: {result.get('field_count', 'N/A')}")
+        print(f"  索引数量: {result.get('index_count', 'N/A')}")
+    except Exception as e:
+        print(f"  构建表结构索引失败: {e}")
     print()
 
     print("=" * 80)
-    print("所有索引构建完成!")
+    print("索引构建完成!")
     print("=" * 80)
     print()
     print("索引文件位置:")
     print(f"  - 代码索引: {examples_dir / 'business_code_index.db'}")
-    print(f"  - 元数据索引: {metadata_db_path}")
+    print(f"  - 元数据索引: {examples_dir / 'business_metadata_index.db'}")
     print(f"  - 全量索引: {full_db_path}")
     print(f"  - 表结构索引: {table_db_path}")
     print()

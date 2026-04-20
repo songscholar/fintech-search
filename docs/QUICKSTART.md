@@ -204,7 +204,7 @@ python3 -m uses_indexer db-summary \
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db ./examples/agent_code_index.db \
+  --db ./examples/business_code_index.db \
   --query "证券代码获取" \
   --limit 10
 ```
@@ -215,7 +215,7 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db ./examples/agent_code_index.db \
+  --db ./examples/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 6 \
   --context-window 2 \
@@ -228,7 +228,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db ./examples/agent_code_index.db \
+  --db ./examples/business_code_index.db \
   --question "证券代码获取的逻辑在哪里"
 ```
 
@@ -254,7 +254,7 @@ export USES_INDEXER_EMBEDDING_MODEL="text-embedding-3-small"
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/agent_code_index_openai.db
+  --db ./examples/business_code_index_openai.db
 ```
 
 ### 4.3 断点续传
@@ -264,7 +264,7 @@ python3 -m uses_indexer build-index \
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/agent_code_index_openai.db \
+  --db ./examples/business_code_index_openai.db \
   --resume-vectors
 ```
 
@@ -284,7 +284,7 @@ export USES_INDEXER_LLM_BASE_URL="https://oapi.aivue.cn/v1"
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db ./examples/agent_code_index.db \
+  --db ./examples/business_code_index.db \
   --question "证券代码获取的逻辑在哪里"
 ```
 
@@ -301,7 +301,7 @@ python3 -m uses_indexer answer-codebase \
 
 ```bash
 python3 -m uses_indexer serve-api \
-  --db ./examples/agent_code_index.db \
+  --db ./examples/business_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -338,7 +338,7 @@ curl -X POST http://127.0.0.1:8000/answer \
 
 ```bash
 python3 -m uses_indexer serve-mcp \
-  --db ./examples/agent_code_index.db
+  --db ./examples/business_code_index.db
 ```
 
 ### 7.2 可用工具
@@ -411,7 +411,7 @@ python3 -m uses_indexer compare-eval \
 ```bash
 # 检查向量状态
 python3 -m uses_indexer query-index \
-  --db ./examples/agent_code_index.db \
+  --db ./examples/business_code_index.db \
   --query "测试" | jq '.vector_status'
 ```
 
