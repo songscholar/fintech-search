@@ -1115,3 +1115,67 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 共享 query / semantic / trace 常量进一步收敛到了单一入口
 - `indexer.py` 内的历史重复定义又减少了一批
 - 后续继续调 query token、exit label 或 trace schema 时，维护成本会更低
+
+## [1.2.9] - 2026-04-21
+
+### Step 16: 抽离 indexer 通用 helper 到独立工具模块
+
+### 本步目标
+
+- 继续压缩 `indexer.py`，把纯工具型 helper 从核心门面中迁出
+- 消除 `indexer.py` 与 `retrieval.py` / `context_fetch.py` 之间的重复实现
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/index_utils.py`
+   - 收口通用 helper：
+     - `maybe_int`
+     - `embedder_batch_size`
+     - `paths_match`
+     - `json_dumps`
+     - `json_loads_object`
+     - `dedupe_strings`
+     - `build_fts_query`
+     - `tokenize_query`
+     - `merge_candidate`
+
+2. 更新 `src/uses_indexer/retrieval.py`
+   - 改为直接复用 `build_fts_query`
+   - 改为直接复用 `merge_candidate`
+   - 不再通过 `SQLiteIndexer` 门面绕转这两个 helper
+
+3. 更新 `src/uses_indexer/context_fetch.py`
+   - 改为复用 `json_loads_object`
+   - 删除本地重复 `_json_loads`
+
+4. 更新 `src/uses_indexer/indexer.py`
+   - 门面层改为复用 `index_utils.py` 中的：
+     - `json_dumps`
+     - `json_loads_object`
+     - `maybe_int`
+     - `paths_match`
+     - `embedder_batch_size`
+   - 删除已迁出的旧 helper：
+     - `_row_to_hit`
+     - `_merge_candidate`
+     - `_build_fts_query`
+     - `_tokenize_query`
+     - `_public_hit`
+     - `_maybe_int`
+     - `_embedder_batch_size`
+     - `_paths_match`
+     - `_json`
+     - `_json_loads`
+     - `_dedupe_strings`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_utils.py src/uses_indexer/retrieval.py src/uses_indexer/context_fetch.py src/uses_indexer/indexer.py src/uses_indexer/index_write.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py` 通过
+- 结果：`61 passed`
+
+### 结论
+
+- `indexer.py` 进一步从“实现堆叠文件”向“编排门面”收敛
+- `retrieval.py` 和 `context_fetch.py` 开始直接依赖共享工具层，重复实现继续减少
+- `indexer.py` 文件长度从 `1328` 行下降到 `1171` 行

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 import sqlite3
@@ -9,11 +8,8 @@ from heapq import nlargest
 from pathlib import Path
 
 from .constants import (
-    CHINESE_QUERY_SPLIT_RE,
     COMPONENT_ACTIONS,
     EXIT_LABEL_NAMES,
-    GENERIC_QUERY_TERMS,
-    QUERY_TOKEN_RE,
     READ_ACTIONS,
     TABLE_WITH_INDEX_RE,
     WRITE_ACTIONS,
@@ -29,6 +25,13 @@ from .embeddings import (
 from .context_fetch import ContextFetchService
 from .evidence import EvidenceService
 from .index_build import IndexBuildService
+from .index_utils import (
+    embedder_batch_size,
+    json_dumps,
+    json_loads_object,
+    maybe_int,
+    paths_match,
+)
 from .index_write import IndexWriteService
 from .models import CodeStatement, ParsedUnit
 from .parser import ASSIGN_RE, UftDslParser, is_supported_path
@@ -419,7 +422,7 @@ class SQLiteIndexer:
         call_rule_counts: Counter[str] = Counter()
 
         for row in rows:
-            detail = _json_loads(str(row["detail_json"]))
+            detail = json_loads_object(str(row["detail_json"]))
             semantic = coerce_call_semantics(
                 detail,
                 source_name=str(row["source_name"]),
@@ -446,7 +449,7 @@ class SQLiteIndexer:
         topic_counts: Counter[str] = Counter()
 
         for row in rows:
-            detail = _json_loads(str(row["detail_json"]))
+            detail = json_loads_object(str(row["detail_json"]))
             publish_mode = str(detail.get("publish_mode") or "unknown")
             mode_counts[publish_mode] += 1
             topic_counts[str(row["target_name"])] += 1
@@ -463,16 +466,16 @@ class SQLiteIndexer:
         return str(row[0])
 
     def _json(self, value: object) -> str:
-        return _json(value)
+        return json_dumps(value)
 
     def _maybe_int(self, value: object) -> int | None:
-        return _maybe_int(value)
+        return maybe_int(value)
 
     def _paths_match(self, left: str | Path, right: str | Path) -> bool:
-        return _paths_match(left, right)
+        return paths_match(left, right)
 
     def _embedder_batch_size(self, embedder: Embedder) -> int:
-        return _embedder_batch_size(embedder)
+        return embedder_batch_size(embedder)
 
     def _derive_target(self, statement: CodeStatement) -> tuple[str | None, str]:
         return _derive_target(statement)
@@ -485,12 +488,6 @@ class SQLiteIndexer:
 
     def _classify_mc_publish(self, statement: CodeStatement) -> dict[str, object] | None:
         return classify_mc_publish(statement)
-
-    def _build_fts_query(self, query: str) -> str | None:
-        return _build_fts_query(query)
-
-    def _merge_candidate(self, store: dict[tuple[object, ...], dict[str, object]], candidate: dict[str, object]) -> None:
-        _merge_candidate(store, candidate)
 
     def query_index(self, db_path: str | Path, query: str, limit: int = 20, *, debug: bool = False) -> dict[str, object]:
         return self._retrieval_service.query_index(db_path, query, limit=limit, debug=debug)
@@ -1172,157 +1169,3 @@ def _metadata_edges_for_statement(statement: CodeStatement) -> list[dict[str, ob
 
     return edges
 
-
-def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
-    result = {
-        "hit_type": str(row["hit_type"]),
-        "entity_id": _maybe_int(row["entity_id"]),
-        "procedure_id": int(row["procedure_id"]),
-        "file_id": int(row["file_id"]),
-        "statement_id": _maybe_int(row["statement_id"]),
-        "file_path": str(row["file_path"]),
-        "procedure_name": str(row["procedure_name"]),
-        "line_start": _maybe_int(row["line_start"]),
-        "line_end": _maybe_int(row["line_end"]),
-        "matched_text": str(row["matched_text"]),
-        "match_source": str(row["match_source"]),
-        "retrieval_source": str(row["retrieval_source"]),
-        "base_score": float(row["base_score"]),
-        "source_rank": float(row["source_rank"]),
-        "search_text": str(row["search_text"]),
-        "reasons": [],
-    }
-    if "chinese_name" in row.keys():
-        result["chinese_name"] = row["chinese_name"] if row["chinese_name"] else None
-    if "object_id" in row.keys():
-        result["object_id"] = row["object_id"] if row["object_id"] else None
-    return result
-
-
-def _merge_candidate(
-    store: dict[tuple[object, ...], dict[str, object]],
-    candidate: dict[str, object],
-) -> None:
-    key = (
-        candidate["hit_type"],
-        candidate["entity_id"],
-        candidate["statement_id"],
-        candidate["procedure_id"],
-        candidate["matched_text"],
-    )
-    existing = store.get(key)
-    if existing is None:
-        candidate["matched_via"] = [candidate["retrieval_source"]]
-        store[key] = candidate
-        return
-
-    matched_via = list(existing.get("matched_via", []))
-    retrieval_source = str(candidate["retrieval_source"])
-    if retrieval_source not in matched_via:
-        matched_via.append(retrieval_source)
-    existing["matched_via"] = matched_via
-
-    if float(candidate["base_score"]) > float(existing["base_score"]):
-        for field in ("matched_text", "match_source", "retrieval_source", "base_score", "source_rank"):
-            existing[field] = candidate[field]
-
-    search_text = str(existing.get("search_text") or "")
-    incoming = str(candidate.get("search_text") or "")
-    if incoming and incoming not in search_text:
-        existing["search_text"] = f"{search_text}\n{incoming}".strip()
-
-
-def _build_fts_query(query: str) -> str | None:
-    tokens = _tokenize_query(query)
-    if not tokens:
-        return None
-    return " OR ".join(f"{token}*" if len(token) > 1 else token for token in tokens)
-
-
-def _tokenize_query(query: str) -> list[str]:
-    tokens: list[str] = []
-    seen: set[str] = set()
-
-    for raw_token in QUERY_TOKEN_RE.findall(query):
-        lowered = raw_token.lower()
-        if re.fullmatch(r"[\u4e00-\u9fff]+", raw_token):
-            fragments = [
-                fragment.strip()
-                for fragment in CHINESE_QUERY_SPLIT_RE.split(raw_token)
-                if len(fragment.strip()) >= 2
-            ]
-            if not fragments:
-                fragments = [raw_token]
-            for fragment in fragments:
-                if fragment in GENERIC_QUERY_TERMS:
-                    continue
-                if fragment not in seen:
-                    seen.add(fragment)
-                    tokens.append(fragment)
-            continue
-
-        if lowered not in seen:
-            seen.add(lowered)
-            tokens.append(lowered)
-
-    return tokens
-
-
-def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]:
-    return {
-        "rank": rank,
-        "score": round(float(candidate["score"]), 3),
-        "hit_type": candidate["hit_type"],
-        "retrieval_source": candidate["retrieval_source"],
-        "match_source": candidate["match_source"],
-        "procedure_name": candidate["procedure_name"],
-        "chinese_name": candidate.get("chinese_name"),
-        "object_id": candidate.get("object_id"),
-        "file_path": candidate["file_path"],
-        "line_start": candidate["line_start"],
-        "line_end": candidate["line_end"],
-        "matched_text": candidate["matched_text"],
-        "reasons": list(candidate["reasons"]),
-        "matched_via": list(candidate.get("matched_via", [])),
-    }
-
-
-def _maybe_int(value: object) -> int | None:
-    if value is None:
-        return None
-    return int(value)
-
-
-def _embedder_batch_size(embedder: Embedder) -> int:
-    config = getattr(embedder, "config", None)
-    raw_batch_size = getattr(config, "batch_size", 512)
-    try:
-        batch_size = int(raw_batch_size)
-    except (TypeError, ValueError):
-        return 512
-    return max(batch_size, 1)
-
-
-def _paths_match(left: str | Path, right: str | Path) -> bool:
-    try:
-        return Path(left).expanduser().resolve() == Path(right).expanduser().resolve()
-    except OSError:
-        return str(left) == str(right)
-
-
-def _json(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def _json_loads(value: str) -> dict[str, object]:
-    try:
-        loaded = json.loads(value)
-    except json.JSONDecodeError:
-        return {}
-    if isinstance(loaded, dict):
-        return loaded
-    return {}
-
-
-def _dedupe_strings(values: list[str]) -> list[str]:
-    return list(dict.fromkeys(value for value in values if value))

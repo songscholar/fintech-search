@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .constants import VECTOR_SIMILARITY_THRESHOLD
 from .embeddings import EmbeddingRequestError, dot_similarity
+from .index_utils import build_fts_query, merge_candidate
 from .observability import build_retrieval_debug_payload
 from .response_schema import apply_response_envelope
 from .rerank import (
@@ -76,7 +77,7 @@ class RetrievalService:
         debug: bool = False,
     ) -> tuple[list[dict[str, object]], str | None, dict[str, object], dict[str, object] | None]:
         started_at = time.perf_counter()
-        fts_query = self.owner._build_fts_query(query)
+        fts_query = build_fts_query(query)
         query_analysis = analyze_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
         vector_status = self._vector_status(conn)
@@ -88,7 +89,7 @@ class RetrievalService:
             source_trace["fts"] = [self._trace_candidate(item) for item in fts_candidates[:20]]
             source_counts["fts"] = len(fts_candidates)
             for candidate in fts_candidates:
-                self.owner._merge_candidate(candidates, candidate)
+                merge_candidate(candidates, candidate)
 
         vector_candidates, vector_status = self._run_vector_queries(
             conn,
@@ -100,13 +101,13 @@ class RetrievalService:
         source_trace["vector"] = [self._trace_candidate(item) for item in vector_candidates[:20]]
         source_counts["vector"] = len(vector_candidates)
         for candidate in vector_candidates:
-            self.owner._merge_candidate(candidates, candidate)
+            merge_candidate(candidates, candidate)
 
         like_candidates = self._run_like_queries(conn, query=query, limit=candidate_limit)
         source_trace["like"] = [self._trace_candidate(item) for item in like_candidates[:20]]
         source_counts["like"] = len(like_candidates)
         for candidate in like_candidates:
-            self.owner._merge_candidate(candidates, candidate)
+            merge_candidate(candidates, candidate)
 
         merged = list(candidates.values())
         for candidate in merged:

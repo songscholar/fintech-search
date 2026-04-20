@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 from typing import TYPE_CHECKING
 
+from .index_utils import json_loads_object
 from .semantic_recovery import coerce_call_semantics, format_excerpt, maybe_int
 
 
@@ -495,7 +495,7 @@ class ContextFetchService:
             if topic_name in seen_names:
                 continue
             seen_names.add(topic_name)
-            detail = _json_loads(str(row["detail_json"]))
+            detail = json_loads_object(str(row["detail_json"]))
             topics.append(
                 {
                     "topic_name": topic_name,
@@ -535,7 +535,7 @@ class ContextFetchService:
                 if target_name in seen_names:
                     continue
                 seen_names.add(target_name)
-                detail = _json_loads(str(row["detail_json"]))
+                detail = json_loads_object(str(row["detail_json"]))
                 semantic = coerce_call_semantics(detail, source_name=procedure_name, target_name=target_name)
                 items.append({"procedure_name": target_name, **semantic})
             return items
@@ -557,7 +557,7 @@ class ContextFetchService:
             if source_name in seen_names:
                 continue
             seen_names.add(source_name)
-            detail = _json_loads(str(row["detail_json"]))
+            detail = json_loads_object(str(row["detail_json"]))
             semantic = coerce_call_semantics(detail, source_name=source_name, target_name=procedure_name)
             items.append({"procedure_name": source_name, **semantic})
         return items
@@ -666,10 +666,3 @@ def _statement_row(row: sqlite3.Row) -> dict[str, object]:
         "line_end": int(row["line_end"]),
         "raw": str(row["raw"]),
     }
-
-
-def _json_loads(value: str) -> dict[str, object]:
-    try:
-        return dict(json.loads(value))
-    except Exception:
-        return {}
