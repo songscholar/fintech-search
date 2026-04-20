@@ -4,6 +4,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .indexer import SQLiteIndexer
+from .strategy_config import QaPolicy
 
 
 SYSTEM_PROMPT = """你是一个面向 USES/UFT DSL 代码库的问答助手。
@@ -34,24 +35,28 @@ ANSWER_FORMAT = """请按下面结构回答：
 
 
 class CodebaseQA:
-    def __init__(self, indexer: SQLiteIndexer | None = None) -> None:
+    def __init__(self, indexer: SQLiteIndexer | None = None, policy: QaPolicy | None = None) -> None:
         self.indexer = indexer or SQLiteIndexer()
+        self.policy = policy or QaPolicy()
 
     def ask(
         self,
         db_path: str | Path,
         question: str,
         *,
-        evidence_limit: int = 6,
-        context_window: int = 2,
-        related_limit: int = 3,
+        evidence_limit: int | None = None,
+        context_window: int | None = None,
+        related_limit: int | None = None,
     ) -> dict[str, object]:
+        effective_evidence_limit = evidence_limit or self.policy.evidence_limit
+        effective_context_window = context_window if context_window is not None else self.policy.context_window
+        effective_related_limit = related_limit if related_limit is not None else self.policy.related_limit
         evidence_bundle = self.indexer.assemble_evidence(
             db_path,
             question,
-            limit=evidence_limit,
-            context_window=context_window,
-            related_limit=related_limit,
+            limit=effective_evidence_limit,
+            context_window=effective_context_window,
+            related_limit=effective_related_limit,
         )
 
         prompt_package = {
@@ -63,6 +68,11 @@ class CodebaseQA:
         return {
             "db_path": str(db_path),
             "question": question,
+            "qa_policy": {
+                "evidence_limit": effective_evidence_limit,
+                "context_window": effective_context_window,
+                "related_limit": effective_related_limit,
+            },
             "evidence_count": evidence_bundle["evidence_count"],
             "evidence": evidence_bundle["evidence"],
             "llm_context": evidence_bundle["llm_context"],

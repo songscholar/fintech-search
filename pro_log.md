@@ -805,3 +805,42 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 增量建库现在已经不只告诉你“哪些文件变了”，还会告诉你“这次到底重建了哪些过程和多少索引对象”
 - 这一步让后续继续做更细粒度局部重建时，具备了更清晰的作用域基线
+
+## [1.2.4] - 2026-04-20
+
+### Step 11: 完善索引与回答策略配置层
+
+### 本步目标
+
+- 把 QA 和回答层的默认策略从隐式参数提升成显式配置对象
+- 为后续接入 `.env` 与统一常量配置做准备
+- 保持默认行为不变，但让覆盖策略更清晰
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/strategy_config.py`
+   - `QaPolicy`
+   - `AnswerExecutionPolicy`
+   - `PromptProfileConfig`
+   - `AnswerStrategyConfig`
+
+2. 更新回答策略层
+   - `src/uses_indexer/answer_strategy.py` 改为使用 `AnswerStrategyConfig`
+   - `src/uses_indexer/qa.py` 支持注入 `QaPolicy`
+   - `src/uses_indexer/answering.py` 支持注入 `AnswerExecutionPolicy`
+
+3. 更新测试
+   - 覆盖 QA policy 默认值注入
+   - 覆盖自定义 prompt profile
+   - 覆盖 fallback policy
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/strategy_config.py src/uses_indexer/answer_strategy.py src/uses_indexer/qa.py src/uses_indexer/answering.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_qa.py tests/test_answering.py` 通过
+- 结果：`8 passed`
+
+### 结论
+
+- 回答层和 QA 层现在已经具备更明确的策略对象边界
+- 后续如果要接环境变量、配置文件或不同问题类型的策略切换，代码会更容易扩展

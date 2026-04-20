@@ -4,6 +4,7 @@ from pathlib import Path
 
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
+from uses_indexer.strategy_config import QaPolicy
 
 
 SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -62,3 +63,19 @@ def test_ask_returns_insufficient_evidence_when_no_hits(tmp_path: Path) -> None:
 
     assert result["draft_answer"]["status"] == "insufficient_evidence"
     assert result["evidence_count"] == 0
+
+
+def test_qa_policy_supplies_default_limits(tmp_path: Path) -> None:
+    _, db_path = _prepare_qa(tmp_path)
+    source_dir = tmp_path / "src"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    qa = CodebaseQA(indexer, policy=QaPolicy(evidence_limit=2, context_window=1, related_limit=1))
+
+    result = qa.ask(db_path, "证券代码获取的逻辑在哪里")
+
+    assert result["qa_policy"] == {
+        "evidence_limit": 2,
+        "context_window": 1,
+        "related_limit": 1,
+    }

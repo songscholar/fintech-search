@@ -5,6 +5,7 @@ from pathlib import Path
 from .answer_strategy import AdaptiveAnswerStrategy
 from .llm import LlmConfigError, LlmRequestError, OpenAICompatibleLlm
 from .qa import CodebaseQA
+from .strategy_config import AnswerExecutionPolicy
 
 
 class CodebaseAnswerer:
@@ -13,21 +14,28 @@ class CodebaseAnswerer:
         qa: CodebaseQA | None = None,
         llm: OpenAICompatibleLlm | None = None,
         strategy: AdaptiveAnswerStrategy | None = None,
+        policy: AnswerExecutionPolicy | None = None,
     ) -> None:
         self.qa = qa or CodebaseQA()
         self.llm = llm or OpenAICompatibleLlm.from_env()
         self.strategy = strategy or AdaptiveAnswerStrategy()
+        self.policy = policy or AnswerExecutionPolicy()
 
     def answer(
         self,
         db_path: str | Path,
         question: str,
         *,
-        evidence_limit: int = 6,
-        context_window: int = 2,
-        related_limit: int = 3,
-        allow_draft_fallback: bool = True,
+        evidence_limit: int | None = None,
+        context_window: int | None = None,
+        related_limit: int | None = None,
+        allow_draft_fallback: bool | None = None,
     ) -> dict[str, object]:
+        effective_allow_draft_fallback = (
+            self.policy.allow_draft_fallback
+            if allow_draft_fallback is None
+            else allow_draft_fallback
+        )
         qa_bundle = self.qa.ask(
             db_path,
             question,
@@ -47,7 +55,7 @@ class CodebaseAnswerer:
                     user_prompt=str(prompt_package["user_prompt"]),
                 )
             except (LlmConfigError, LlmRequestError) as exc:
-                if not allow_draft_fallback:
+                if not effective_allow_draft_fallback:
                     raise
                 return self._build_result(
                     qa_bundle,
@@ -65,7 +73,7 @@ class CodebaseAnswerer:
                 error=None,
             )
 
-        if not allow_draft_fallback:
+        if not effective_allow_draft_fallback:
             raise LlmConfigError(
                 "LLM is not configured and allow_draft_fallback is false."
             )

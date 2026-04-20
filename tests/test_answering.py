@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from uses_indexer.answer_strategy import AdaptiveAnswerStrategy
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
+from uses_indexer.strategy_config import (
+    AnswerExecutionPolicy,
+    AnswerStrategyConfig,
+    PromptProfileConfig,
+    QaPolicy,
+)
 
 
 SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -89,3 +96,52 @@ def test_answer_strategy_adds_profile_metadata(tmp_path: Path) -> None:
 
     assert result["prompt_package"]["strategy_profile"] == "call_chain"
     assert "策略要求" in result["prompt_package"]["system_prompt"]
+
+
+def test_answer_strategy_uses_custom_profile_config(tmp_path: Path) -> None:
+    strategy = AdaptiveAnswerStrategy(
+        AnswerStrategyConfig(
+            profiles={
+                "call_chain": PromptProfileConfig("自定义调用链说明", 2, 500),
+                "table_sql": PromptProfileConfig("自定义表说明", 2, 500),
+                "default": PromptProfileConfig("默认说明", 2, 500),
+            }
+        )
+    )
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
+    (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
+    db_path = tmp_path / "index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    qa = CodebaseQA(indexer, policy=QaPolicy(evidence_limit=2, context_window=1, related_limit=1))
+    answerer = CodebaseAnswerer(qa=qa, llm=StubLlm("调用链答案"), strategy=strategy)
+
+    result = answerer.answer(db_path, "AF_SAMPLE 被谁调用")
+
+    assert result["prompt_package"]["strategy_profile"] == "call_chain"
+    assert "自定义调用链说明" in result["prompt_package"]["system_prompt"]
+
+
+def test_answer_execution_policy_controls_fallback(tmp_path: Path) -> None:
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
+    (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
+    db_path = tmp_path / "index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    qa = CodebaseQA(indexer)
+    answerer = CodebaseAnswerer(
+        qa=qa,
+        llm=StubLlm(None),
+        policy=AnswerExecutionPolicy(allow_draft_fallback=False),
+    )
+
+    try:
+        answerer.answer(db_path, "证券代码获取的逻辑在哪里")
+    except Exception as exc:  # pragma: no cover - explicit behavior assertion
+        assert "allow_draft_fallback is false" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Expected fallback-disabled answer call to raise")

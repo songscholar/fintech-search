@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .strategy_config import AnswerStrategyConfig
 
 @dataclass(frozen=True, slots=True)
 class PromptProfile:
@@ -12,28 +13,16 @@ class PromptProfile:
 
 
 class AdaptiveAnswerStrategy:
+    def __init__(self, config: AnswerStrategyConfig | None = None) -> None:
+        self.config = config or AnswerStrategyConfig()
+
     def select_profile(self, question: str) -> PromptProfile:
         lowered = question.lower()
         if any(token in lowered for token in ("调用链", "谁调用", "被谁调用", "上游", "下游")):
-            return PromptProfile(
-                name="call_chain",
-                guidance="重点解释调用入口、调用方向、主候选链路和可能的上游/下游过程。",
-                max_evidence_blocks=5,
-                max_context_chars=10000,
-            )
+            return self._named_profile("call_chain")
         if any(token in lowered for token in ("sql", "表", "数据库", "查询", "读取", "update", "insert", "delete", "merge")):
-            return PromptProfile(
-                name="table_sql",
-                guidance="重点解释表访问、读写方向、SQL 语义和关联过程。",
-                max_evidence_blocks=6,
-                max_context_chars=12000,
-            )
-        return PromptProfile(
-            name="default",
-            guidance="先给结论，再给证据和不确定点，避免展开与问题无关的背景。",
-            max_evidence_blocks=6,
-            max_context_chars=12000,
-        )
+            return self._named_profile("table_sql")
+        return self._named_profile("default")
 
     def build_prompt_package(self, qa_bundle: dict[str, object]) -> dict[str, object]:
         question = str(qa_bundle["question"])
@@ -85,3 +74,12 @@ class AdaptiveAnswerStrategy:
         if len(compressed) > profile.max_context_chars:
             return compressed[: profile.max_context_chars - 3].rstrip() + "..."
         return compressed
+
+    def _named_profile(self, name: str) -> PromptProfile:
+        config = self.config.profile(name)
+        return PromptProfile(
+            name=name,
+            guidance=config.guidance,
+            max_evidence_blocks=config.max_evidence_blocks,
+            max_context_chars=config.max_context_chars,
+        )
