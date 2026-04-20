@@ -707,10 +707,12 @@ def test_query_index_debug_includes_retrieval_trace(tmp_path: Path) -> None:
     assert debug["metadata"]["version"] == debug["version"]
     assert debug["metadata"]["trace_id"]
     assert debug["metadata"]["generated_at"]
+    assert debug["trace"]["elapsed_ms"] >= 0.0
     assert "query_analysis" in debug
     assert "retrieval_contributions" in debug
     assert "rerank_preview" in debug
     assert debug["trace"]["stage"] == "retrieval"
+    assert debug["trace"]["summary"]["reranked_candidate_count"] >= result["hit_count"]
     assert debug["trace"]["rerank"]["candidate_count"] >= result["hit_count"]
     assert "call_chain" in debug["query_analysis"]["intents"]
 
@@ -723,9 +725,12 @@ def test_assemble_evidence_debug_includes_pruning_trace(tmp_path: Path) -> None:
     assert "debug" in result
     assert result["debug"]["schema"] == "uses_indexer.debug.evidence"
     assert result["debug"]["metadata"]["producer"] == "uses_indexer"
+    assert result["debug"]["metadata"]["parent_trace_id"] == result["debug"]["retrieval"]["metadata"]["trace_id"]
     assert "retrieval" in result["debug"]
     assert "evidence_pruning" in result["debug"]
     assert result["debug"]["trace"]["stage"] == "evidence"
+    assert result["debug"]["trace"]["elapsed_ms"] >= 0.0
+    assert result["debug"]["trace"]["summary"]["selected_count"] == result["evidence_count"]
     assert result["debug"]["trace"]["selection"]["selected_count"] == result["evidence_count"]
 
 
@@ -756,6 +761,8 @@ def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
     assert updated["incremental_trace"]["schema"] == "uses_indexer.debug.incremental_build"
     assert updated["incremental_trace"]["metadata"]["producer"] == "uses_indexer"
     assert updated["incremental_trace"]["trace"]["changes"]["added_count"] == 1
+    assert updated["incremental_trace"]["trace"]["elapsed_ms"] >= 0.0
+    assert updated["incremental_trace"]["trace"]["summary"]["reindexed_count"] == 1
     assert str(new_source) in updated["incremental_trace"]["trace"]["changes"]["reindexed"]
     assert updated["incremental_impact"]["affected_unit_count"] == 1
     assert updated["incremental_impact"]["affected_units"][0]["procedure_name"] == "LF_NEW"

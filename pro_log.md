@@ -713,3 +713,42 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 评测现在已经不仅能回答“有没有命中”，还可以回答“最前面的命中质量如何”
 - 后续 rerank 或 evidence 选择发生轻微退化时，会更容易被看板指标发现
+
+## [1.2.2] - 2026-04-20
+
+### Step 9: 升级 observability 为更稳定的诊断能力
+
+### 本步目标
+
+- 让 trace 不只是“结构化输出”，而是开始具备链路诊断能力
+- 增加阶段耗时、父子 trace 关联和阶段摘要
+- 帮助排障时更快看出“这一段到底做了什么”
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/observability.py`
+   - `metadata` 支持：
+     - `parent_trace_id`
+   - retrieval / evidence / incremental trace 新增：
+     - `trace.elapsed_ms`
+     - `trace.summary`
+
+2. 更新调用方
+   - `src/uses_indexer/retrieval.py` 记录 retrieval 阶段耗时
+   - `src/uses_indexer/evidence.py` 记录 evidence 阶段耗时，并把 evidence trace 关联到 retrieval trace
+   - `src/uses_indexer/index_build.py` 记录 incremental build 阶段耗时
+
+3. 更新测试
+   - 校验 retrieval / evidence / incremental trace 的新字段
+   - 校验 `parent_trace_id`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/observability.py src/uses_indexer/retrieval.py src/uses_indexer/evidence.py src/uses_indexer/index_build.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py -k "query_index_debug_includes_retrieval_trace or assemble_evidence_debug_includes_pruning_trace or build_index_supports_incremental_updates"` 通过
+- 结果：`3 passed`
+
+### 结论
+
+- trace 现在已经开始形成一条可串联的诊断链
+- 排障时不仅能看“结果是什么”，还能看“这一阶段花了多久、处理了多少对象”

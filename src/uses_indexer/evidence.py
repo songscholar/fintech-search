@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,7 @@ class EvidenceService:
         *,
         debug: bool = False,
     ) -> dict[str, object]:
+        started_at = time.perf_counter()
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         candidates, fts_query, vector_status, retrieval_debug = self.owner._retrieval_service.retrieve_candidates(
@@ -149,6 +151,7 @@ class EvidenceService:
                 retrieval_debug=retrieval_debug,
                 pruned_events=pruned_events,
                 evidence_blocks=evidence_blocks,
+                elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
             )
         return payload
 

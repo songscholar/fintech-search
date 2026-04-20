@@ -8,14 +8,21 @@ TRACE_SCHEMA_VERSION = "1.0"
 TRACE_PRODUCER = "uses_indexer"
 
 
-def _trace_metadata(*, schema: str) -> dict[str, object]:
-    return {
+def _trace_metadata(
+    *,
+    schema: str,
+    parent_trace_id: str | None = None,
+) -> dict[str, object]:
+    metadata = {
         "trace_id": str(uuid4()),
         "producer": TRACE_PRODUCER,
         "schema": schema,
         "version": TRACE_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if parent_trace_id:
+        metadata["parent_trace_id"] = parent_trace_id
+    return metadata
 
 
 def build_retrieval_debug_payload(
@@ -27,6 +34,7 @@ def build_retrieval_debug_payload(
     source_trace: dict[str, list[dict[str, object]]],
     source_counts: dict[str, int],
     reranked: list[dict[str, object]],
+    elapsed_ms: float | None = None,
 ) -> dict[str, object]:
     rerank_preview = [
         {
@@ -53,19 +61,26 @@ def build_retrieval_debug_payload(
         }
         for source, items in source_trace.items()
     ]
+    metadata = _trace_metadata(schema="uses_indexer.debug.retrieval")
     return {
         "schema": "uses_indexer.debug.retrieval",
         "version": TRACE_SCHEMA_VERSION,
-        "metadata": _trace_metadata(schema="uses_indexer.debug.retrieval"),
+        "metadata": metadata,
         "query_analysis": query_analysis,
         "retrieval_contributions": retrieval_contributions,
         "rerank_preview": rerank_preview,
         "trace": {
             "stage": "retrieval",
+            "elapsed_ms": round(float(elapsed_ms or 0.0), 3),
             "query": query,
             "fts_query": fts_query,
             "candidate_limit": int(candidate_limit),
             "query_analysis": query_analysis,
+            "summary": {
+                "source_count": len(source_trace),
+                "merged_candidate_count": sum(int(source_counts.get(source, 0)) for source in source_trace),
+                "reranked_candidate_count": len(reranked),
+            },
             "sources": trace_sources,
             "rerank": {
                 "candidate_count": len(reranked),
@@ -84,6 +99,7 @@ def build_evidence_debug_payload(
     retrieval_debug: dict[str, object] | None,
     pruned_events: list[dict[str, object]],
     evidence_blocks: list[dict[str, object]],
+    elapsed_ms: float | None = None,
 ) -> dict[str, object]:
     selected_evidence = [
         {
@@ -100,19 +116,34 @@ def build_evidence_debug_payload(
         "events": pruned_events[:50],
         "total_pruned": len(pruned_events),
     }
+    retrieval_trace_id = None
+    if isinstance(retrieval_debug, dict):
+        metadata = retrieval_debug.get("metadata", {})
+        if isinstance(metadata, dict):
+            retrieval_trace_id = str(metadata.get("trace_id") or "") or None
+    metadata = _trace_metadata(
+        schema="uses_indexer.debug.evidence",
+        parent_trace_id=retrieval_trace_id,
+    )
     return {
         "schema": "uses_indexer.debug.evidence",
         "version": TRACE_SCHEMA_VERSION,
-        "metadata": _trace_metadata(schema="uses_indexer.debug.evidence"),
+        "metadata": metadata,
         "retrieval": retrieval_debug,
         "evidence_pruning": evidence_pruning,
         "trace": {
             "stage": "evidence",
+            "elapsed_ms": round(float(elapsed_ms or 0.0), 3),
             "query": query,
             "selection_limit": int(limit),
             "context_window": int(context_window),
             "related_limit": int(related_limit),
             "retrieval_trace": (retrieval_debug or {}).get("trace"),
+            "summary": {
+                "selected_count": len(selected_evidence),
+                "pruned_count": len(pruned_events),
+                "retrieval_trace_id": retrieval_trace_id,
+            },
             "selection": {
                 "selected_count": len(selected_evidence),
                 "selected_evidence": selected_evidence,
@@ -133,6 +164,7 @@ def build_incremental_trace(
     removed_paths: list[str],
     affected_units: list[dict[str, object]],
     vector_stats: dict[str, object],
+    elapsed_ms: float | None = None,
 ) -> dict[str, object]:
     reindexed_paths = sorted([*added_paths, *changed_paths])
     return {
@@ -141,6 +173,7 @@ def build_incremental_trace(
         "metadata": _trace_metadata(schema="uses_indexer.debug.incremental_build"),
         "trace": {
             "stage": "incremental_build",
+            "elapsed_ms": round(float(elapsed_ms or 0.0), 3),
             "index_type": index_type,
             "file_scan": {
                 "current_file_count": int(current_file_count),
@@ -160,5 +193,9 @@ def build_incremental_trace(
                 "affected_units": affected_units,
             },
             "vector_stats": vector_stats,
+            "summary": {
+                "reindexed_count": len(reindexed_paths),
+                "affected_unit_count": len(affected_units),
+            },
         },
     }

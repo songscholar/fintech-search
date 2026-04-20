@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import time
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -39,6 +40,7 @@ class IndexBuildService:
         incremental: bool = False,
         index_type: str = "all",
     ) -> dict[str, object]:
+        started_at = time.perf_counter()
         root = Path(source_root)
         db_file = Path(db_path)
         db_file.parent.mkdir(parents=True, exist_ok=True)
@@ -88,6 +90,7 @@ class IndexBuildService:
         *,
         index_type: str = "all",
     ) -> dict[str, object]:
+        started_at = time.perf_counter()
         root = Path(source_root)
         db_file = Path(db_path)
         if not db_file.exists():
@@ -166,6 +169,7 @@ class IndexBuildService:
                 removed_paths=removed_paths,
                 affected_units=affected_units,
                 vector_stats=vector_stats,
+                elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
             )
             payload["incremental_impact"] = {
                 "affected_unit_count": len(affected_units),

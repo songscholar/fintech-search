@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import time
 from heapq import nlargest
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -75,6 +76,7 @@ class RetrievalService:
         candidate_limit: int,
         debug: bool = False,
     ) -> tuple[list[dict[str, object]], str | None, dict[str, object], dict[str, object] | None]:
+        started_at = time.perf_counter()
         fts_query = self.owner._build_fts_query(query)
         query_analysis = analyze_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
@@ -142,6 +144,7 @@ class RetrievalService:
                 source_trace=source_trace,
                 source_counts=source_counts,
                 reranked=reranked,
+                elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
             )
 
         return reranked, fts_query, vector_status, retrieval_debug
