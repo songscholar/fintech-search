@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from uuid import uuid4
+
 
 TRACE_SCHEMA_VERSION = "1.0"
+TRACE_PRODUCER = "uses_indexer"
+
+
+def _trace_metadata(*, schema: str) -> dict[str, object]:
+    return {
+        "trace_id": str(uuid4()),
+        "producer": TRACE_PRODUCER,
+        "schema": schema,
+        "version": TRACE_SCHEMA_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def build_retrieval_debug_payload(
@@ -42,6 +56,7 @@ def build_retrieval_debug_payload(
     return {
         "schema": "uses_indexer.debug.retrieval",
         "version": TRACE_SCHEMA_VERSION,
+        "metadata": _trace_metadata(schema="uses_indexer.debug.retrieval"),
         "query_analysis": query_analysis,
         "retrieval_contributions": retrieval_contributions,
         "rerank_preview": rerank_preview,
@@ -88,6 +103,7 @@ def build_evidence_debug_payload(
     return {
         "schema": "uses_indexer.debug.evidence",
         "version": TRACE_SCHEMA_VERSION,
+        "metadata": _trace_metadata(schema="uses_indexer.debug.evidence"),
         "retrieval": retrieval_debug,
         "evidence_pruning": evidence_pruning,
         "trace": {
@@ -121,6 +137,7 @@ def build_incremental_trace(
     return {
         "schema": "uses_indexer.debug.incremental_build",
         "version": TRACE_SCHEMA_VERSION,
+        "metadata": _trace_metadata(schema="uses_indexer.debug.incremental_build"),
         "trace": {
             "stage": "incremental_build",
             "index_type": index_type,

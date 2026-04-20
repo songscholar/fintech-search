@@ -702,6 +702,11 @@ def test_query_index_debug_includes_retrieval_trace(tmp_path: Path) -> None:
     debug = result["debug"]
     assert debug["schema"] == "uses_indexer.debug.retrieval"
     assert debug["version"] == "1.0"
+    assert debug["metadata"]["producer"] == "uses_indexer"
+    assert debug["metadata"]["schema"] == debug["schema"]
+    assert debug["metadata"]["version"] == debug["version"]
+    assert debug["metadata"]["trace_id"]
+    assert debug["metadata"]["generated_at"]
     assert "query_analysis" in debug
     assert "retrieval_contributions" in debug
     assert "rerank_preview" in debug
@@ -717,6 +722,7 @@ def test_assemble_evidence_debug_includes_pruning_trace(tmp_path: Path) -> None:
 
     assert "debug" in result
     assert result["debug"]["schema"] == "uses_indexer.debug.evidence"
+    assert result["debug"]["metadata"]["producer"] == "uses_indexer"
     assert "retrieval" in result["debug"]
     assert "evidence_pruning" in result["debug"]
     assert result["debug"]["trace"]["stage"] == "evidence"
@@ -748,6 +754,7 @@ def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
     assert updated["incremental"] is True
     assert str(new_source) in updated["incremental_changes"]["added"]
     assert updated["incremental_trace"]["schema"] == "uses_indexer.debug.incremental_build"
+    assert updated["incremental_trace"]["metadata"]["producer"] == "uses_indexer"
     assert updated["incremental_trace"]["trace"]["changes"]["added_count"] == 1
     assert str(new_source) in updated["incremental_trace"]["trace"]["changes"]["reindexed"]
     summary = indexer.summarize_db(db_path)

@@ -422,3 +422,48 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 这是一次纯结构性重构，没有主动修改检索策略
 - 测试结果表明行为稳定，没有引入回归
+
+## [1.1.2] - 2026-04-20
+
+### Step 2: 统一 observability 出口并补 trace schema 文档
+
+### 本步目标
+
+- 给 retrieval / evidence / incremental build trace 增加统一 envelope
+- 明确 CLI / API / MCP 的 debug 输出共用同一套结构
+- 补一份正式的 trace schema 文档，方便后续排障和对接
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/observability.py`
+   - 所有 trace 增加统一 `metadata` 字段
+   - `metadata` 包含：
+     - `trace_id`
+     - `producer`
+     - `schema`
+     - `version`
+     - `generated_at`
+   - retrieval / evidence / incremental build 统一使用 versioned trace envelope
+
+2. 新增文档 `docs/TRACE_SCHEMA.md`
+   - 明确说明三类 trace：
+     - `uses_indexer.debug.retrieval`
+     - `uses_indexer.debug.evidence`
+     - `uses_indexer.debug.incremental_build`
+   - 说明 CLI / API / MCP 的复用关系
+   - 说明消费端应以 `schema + version` 作为兼容性判断依据
+
+3. 更新测试
+   - 补充 metadata 相关断言
+   - 确认 retrieval / evidence / incremental build trace 均带统一 envelope
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/observability.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- 结果：`36 passed`
+
+### 结论
+
+- debug 输出已经不只是“能看”，而是开始具备稳定消费的基础
+- 后续不论是命令行排障、HTTP 接口接入，还是 MCP 诊断，都可以围绕统一 trace schema 展开
