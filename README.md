@@ -20,6 +20,8 @@
 - [docs/NEWCOMER_GUIDE.md](docs/NEWCOMER_GUIDE.md)：第一次接触仓库时先看这里
 - [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)：继续开发时优先看这里
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)：结果不对、建库异常时优先看这里
+- [docs/RETRIEVAL_TUNING.md](docs/RETRIEVAL_TUNING.md)：调检索和重排时优先看这里
+- [docs/SEMANTIC_RULES_EXTENSION.md](docs/SEMANTIC_RULES_EXTENSION.md)：扩 DSL 语义规则时优先看这里
 - [docs/INDEX_BOUNDARIES.md](docs/INDEX_BOUNDARIES.md)：看代码索引 / 元数据索引 / 全量索引 / 表结构索引的边界
 - [docs/CALL_SEMANTICS.md](docs/CALL_SEMANTICS.md)：看 `LS/LF/AF` 之间的本地调用与 RPC 调用语义规则
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：看怎么本地部署、怎么接 HTTP/MCP/Codex

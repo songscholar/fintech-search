@@ -888,3 +888,31 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在消费端至少可以通过稳定的 envelope 字段直接识别返回类型
 - 这为后续继续统一 API / MCP 的公共 schema 打下了基础
+
+## [1.2.6] - 2026-04-20
+
+### Step 13: 补充检索调优与 DSL 语义扩展文档
+
+### 本步目标
+
+- 给后续继续演进检索质量和语义规则的人提供更直接的入口文档
+- 把前面新增的评测、trace、语义规则统一起来
+
+### 本步改动
+
+1. 新增文档
+   - `docs/RETRIEVAL_TUNING.md`
+   - `docs/SEMANTIC_RULES_EXTENSION.md`
+
+2. 更新 `README.md`
+   - 增加上述两份文档导航入口
+
+### 验证
+
+- 校验 README 与新文档入口链接
+- 确认新文档已纳入仓库
+
+### 结论
+
+- 现在“调检索”和“扩语义规则”都已经有单独文档入口
+- 后续继续迭代时，开发说明会比原来更聚焦
