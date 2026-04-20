@@ -1009,3 +1009,58 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在“调检索”和“扩语义规则”都已经有单独文档入口
 - 后续继续迭代时，开发说明会比原来更聚焦
+
+## [1.2.7] - 2026-04-20
+
+### Step 14: 继续集中 query / rerank / schema 常量
+
+### 本步目标
+
+- 进一步减少“同一类常量散落在多个模块”的情况
+- 让 query intent、rerank 词表、response schema 和评测默认值都从统一常量层读取
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/constants.py`
+   - 新增 `RESPONSE_SCHEMA_VERSION`
+   - 新增 `DEFAULT_TOP_K`
+   - 新增 query / rerank 相关词表与正则：
+     - `TABLE_TOKEN_PREFIXES`
+     - `TABLE_INTENT_KEYWORDS`
+     - `WRITE_INTENT_KEYWORDS`
+     - `READ_INTENT_KEYWORDS`
+     - `VARIABLE_INTENT_KEYWORDS`
+     - `CALL_CHAIN_INTENT_KEYWORDS`
+     - `FAILURE_INTENT_KEYWORDS`
+     - `PROCEDURE_INTENT_KEYWORDS`
+     - `SQL_WRITE_HINTS`
+     - `SQL_READ_HINTS`
+     - `FAILURE_MATCH_HINTS`
+     - `GENERIC_QUERY_TERMS`
+     - `FOCUS_EXCLUDED_QUERY_TERMS`
+     - `QUERY_TOKEN_RE`
+     - `QUERY_PROCEDURE_RE`
+     - `QUERY_VARIABLE_RE`
+     - `CHINESE_QUERY_SPLIT_RE`
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 删除本地重复常量定义
+   - 改为统一从 `constants.py` 导入
+
+3. 更新 `src/uses_indexer/response_schema.py`
+   - `RESPONSE_SCHEMA_VERSION` 改为从 `constants.py` 导入
+
+4. 更新 `src/uses_indexer/evaluation.py`
+   - `DEFAULT_TOP_K` 改为从 `constants.py` 导入
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/constants.py src/uses_indexer/rerank.py src/uses_indexer/response_schema.py src/uses_indexer/evaluation.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py tests/test_indexer.py tests/test_semantic_rules.py` 通过
+- 结果：`37 passed`
+
+### 结论
+
+- query intent 和 rerank 关键词不再散落在 `rerank.py` 内部
+- response schema 版本与评测默认 top-k 也归到了统一常量入口
+- 后续如果继续做配置化或调优，会更容易定位和复用

@@ -3,10 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .constants import DEFAULT_TOP_K
 from .indexer import SQLiteIndexer
-
-
-DEFAULT_TOP_K = (1, 3, 5, 10)
 
 
 class RetrievalEvaluator:

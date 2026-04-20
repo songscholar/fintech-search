@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-
-RESPONSE_SCHEMA_VERSION = "1.0"
+from .constants import RESPONSE_SCHEMA_VERSION
 
 
 def apply_response_envelope(payload: dict[str, object], *, kind: str) -> dict[str, object]:
