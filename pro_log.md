@@ -1064,3 +1064,54 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - query intent 和 rerank 关键词不再散落在 `rerank.py` 内部
 - response schema 版本与评测默认 top-k 也归到了统一常量入口
 - 后续如果继续做配置化或调优，会更容易定位和复用
+
+## [1.2.8] - 2026-04-20
+
+### Step 15: 继续收口共享 regex / trace / semantic 常量
+
+### 本步目标
+
+- 把仍然散落在 `indexer.py`、`semantic_recovery.py`、`observability.py`、`embeddings.py` 里的共享常量继续集中
+- 进一步降低 query 规则、trace schema 和语义恢复边界发生漂移的风险
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/constants.py`
+   - 新增 `TRACE_SCHEMA_VERSION`
+   - 新增 `TRACE_PRODUCER`
+   - 新增 `EXIT_LABEL_NAMES`
+   - 新增 `TABLE_WITH_INDEX_RE`
+
+2. 更新 `src/uses_indexer/indexer.py`
+   - 删除本地重复定义的：
+     - `TABLE_WITH_INDEX_RE`
+     - `QUERY_TOKEN_RE`
+     - `CHINESE_QUERY_SPLIT_RE`
+     - `GENERIC_QUERY_TERMS`
+     - `EXIT_LABEL_NAMES`
+   - 改为统一从 `constants.py` 导入
+
+3. 更新 `src/uses_indexer/semantic_recovery.py`
+   - `EXIT_LABEL_NAMES`
+   - `TABLE_WITH_INDEX_RE`
+   - 改为统一从 `constants.py` 导入
+
+4. 更新 `src/uses_indexer/observability.py`
+   - `TRACE_SCHEMA_VERSION`
+   - `TRACE_PRODUCER`
+   - 改为统一从 `constants.py` 导入
+
+5. 更新 `src/uses_indexer/embeddings.py`
+   - 复用 `QUERY_TOKEN_RE` 作为 token 正则来源
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/constants.py src/uses_indexer/indexer.py src/uses_indexer/semantic_recovery.py src/uses_indexer/observability.py src/uses_indexer/embeddings.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py tests/test_mcp.py` 通过
+- 结果：`48 passed`
+
+### 结论
+
+- 共享 query / semantic / trace 常量进一步收敛到了单一入口
+- `indexer.py` 内的历史重复定义又减少了一批
+- 后续继续调 query token、exit label 或 trace schema 时，维护成本会更低

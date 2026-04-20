@@ -3,9 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-
-TRACE_SCHEMA_VERSION = "1.0"
-TRACE_PRODUCER = "uses_indexer"
+from .constants import TRACE_PRODUCER, TRACE_SCHEMA_VERSION
 
 
 def _trace_metadata(

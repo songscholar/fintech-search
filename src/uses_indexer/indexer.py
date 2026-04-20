@@ -8,7 +8,16 @@ from collections import Counter, defaultdict
 from heapq import nlargest
 from pathlib import Path
 
-from .constants import COMPONENT_ACTIONS, READ_ACTIONS, WRITE_ACTIONS
+from .constants import (
+    CHINESE_QUERY_SPLIT_RE,
+    COMPONENT_ACTIONS,
+    EXIT_LABEL_NAMES,
+    GENERIC_QUERY_TERMS,
+    QUERY_TOKEN_RE,
+    READ_ACTIONS,
+    TABLE_WITH_INDEX_RE,
+    WRITE_ACTIONS,
+)
 from .embeddings import (
     Embedder,
     EmbeddingConfigError,
@@ -297,26 +306,6 @@ CREATE INDEX IF NOT EXISTS idx_blocks_type ON blocks(block_type);
 CREATE INDEX IF NOT EXISTS idx_block_edges_block ON block_edges(block_id);
 CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 """
-
-TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
-QUERY_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
-VECTOR_SIMILARITY_THRESHOLD = 0.05
-CHINESE_QUERY_SPLIT_RE = re.compile(r"(?:被谁调用|谁调用|在哪里|在哪儿|哪里|哪些|哪个|谁|什么|如何|怎么|是否|能否|可以|请问|一下|调用|流程|的|了|在|是|和|与|及|或|并|把|将|从|到|为|对|按|里)")
-GENERIC_QUERY_TERMS = {
-    "逻辑",
-    "代码",
-    "流程",
-    "实现",
-    "位置",
-    "地方",
-    "相关",
-    "问题",
-    "功能",
-    "模块",
-    "方法",
-}
-EXIT_LABEL_NAMES = {"svr_end"}
-
 
 class SQLiteIndexer:
     SCHEMA_SQL = SCHEMA_SQL

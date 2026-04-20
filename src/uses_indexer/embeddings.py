@@ -13,9 +13,7 @@ from typing import Protocol
 from urllib import error, request
 
 from .config import bootstrap_env
-
-
-TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
+from .constants import QUERY_TOKEN_RE as TOKEN_RE
 
 
 class EmbeddingConfigError(Exception):

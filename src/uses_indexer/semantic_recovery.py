@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from .constants import EXIT_LABEL_NAMES, TABLE_WITH_INDEX_RE
 from .models import CodeStatement
 from .parser import ASSIGN_RE
 
@@ -22,8 +23,6 @@ BRACE_ATTACHED_BLOCK_ACTIONS = {
     "EXCEPTION": "exception_handler",
     "WHEN_OTHERS": "when_others_handler",
 }
-EXIT_LABEL_NAMES = {"svr_end"}
-TABLE_WITH_INDEX_RE = re.compile(r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<index>[^)]+)\)$")
 SQL_FROM_JOIN_RE = re.compile(r"\b(?:from|join)\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
 SQL_UPDATE_RE = re.compile(r"\bupdate\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
 SQL_INSERT_RE = re.compile(r"\binsert\s+into\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGNORECASE)
