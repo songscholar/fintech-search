@@ -1419,3 +1419,67 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - schema 与 metadata 访问现在都有了独立基础模块
 - retrieval / build / write / summary 对 metadata 的访问方式已经统一
 - `indexer.py` 文件长度从 `363` 行进一步下降到 `92` 行
+
+## [1.2.15] - 2026-04-21
+
+### Step 22: 升级索引构建语义层
+
+### 本步目标
+
+- 把 chunk 从“仅存文本片段”升级成“带角色、特征、结构化向量文本”的语义索引单元
+- 为 procedure 预计算关系和能力特征，减少后续检索阶段的临时拼装成本
+- 让向量召回基于更结构化的输入，而不是只吃原始摘要和内容
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/schema.py`
+   - 为 `chunks` 新增：
+     - `chunk_role`
+     - `chunk_features_json`
+     - `embedding_text`
+   - 新增 `procedure_features`
+   - 新增 `procedure_features_fts`
+   - 扩展 `chunks_fts`，把 `chunk_role` 纳入 FTS
+
+2. 更新 `src/uses_indexer/semantic_recovery.py`
+   - `build_semantic_chunks()` 现在会为每个 chunk 生成：
+     - `chunk_role`
+     - `chunk_features`
+     - `embedding_text`
+   - 新增 chunk 角色推导：
+     - `definition`
+     - `failure_flow`
+     - `call_chain`
+     - `table_access`
+     - `variable_flow`
+     - `control_flow`
+     - `logic`
+   - 新增 retrieval feature 计算和结构化 embedding 文本生成
+
+3. 更新 `src/uses_indexer/index_write.py`
+   - `insert_chunks()` 持久化新字段
+   - `populate_missing_chunk_vectors()` 优先使用结构化 `embedding_text`
+   - `insert_statements()` 完成后自动 `upsert_procedure_features()`
+   - 新增 procedure 预计算内容：
+     - 调用出边 / 入边
+     - 表读写
+     - topic 发布
+     - metadata 引用
+     - 变量读写
+     - feature flags
+     - summary text
+
+4. 更新 `tests/test_indexer.py`
+   - 新增对 `chunk_role / chunk_features_json / embedding_text / procedure_features` 的回归测试
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/schema.py src/uses_indexer/semantic_recovery.py src/uses_indexer/index_write.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py -k "build_index_creates_sqlite_tables_and_fts or build_index_populates_chunk_features_and_procedure_features or build_index_populates_vectors_in_global_batches or build_index_resume_vectors_skips_existing_vectors"` 通过
+- 结果：`4 passed`
+
+### 结论
+
+- 索引构建阶段现在已经开始直接产出可供 retrieval/rerank 使用的语义特征
+- 向量输入从“原始文本”升级成了“结构化语义摘要”
+- procedure 级关系预计算已经具备，可直接支撑下一步 relation retrieval 和 feature rerank

@@ -501,6 +501,17 @@ def _make_chunk(
     )
 
     chunk_type = _infer_chunk_type(non_comment_entries)
+    chunk_role = _infer_chunk_role(non_comment_entries, chunk_type=chunk_type)
+    chunk_features = _chunk_features(
+        non_comment_entries,
+        chunk_type=chunk_type,
+        chunk_role=chunk_role,
+        action_names=action_names,
+        target_names=target_names,
+        variable_names=variable_names,
+        metadata_names=metadata_names,
+        conditions=conditions,
+    )
     summary_parts = [procedure_name, chunk_type]
     if action_names:
         summary_parts.append(f"actions: {', '.join(action_names[:4])}")
@@ -516,8 +527,22 @@ def _make_chunk(
         summary_parts.append(f"notes: {'; '.join(comment_fragments[:2])}")
 
     content = "\n".join(statement.raw.rstrip("\n") for _, statement in entries if statement.raw.strip())
+    embedding_text = _build_chunk_embedding_text(
+        procedure_name=procedure_name,
+        chunk_type=chunk_type,
+        chunk_role=chunk_role,
+        summary_text=" | ".join(summary_parts),
+        action_names=action_names,
+        target_names=target_names,
+        variable_names=variable_names,
+        metadata_names=metadata_names,
+        conditions=conditions,
+        comment_fragments=comment_fragments,
+        content=content,
+    )
     return {
         "chunk_type": chunk_type,
+        "chunk_role": chunk_role,
         "line_start": line_start,
         "line_end": line_end,
         "statement_start_seq": statement_start_seq,
@@ -527,6 +552,8 @@ def _make_chunk(
         "action_names": action_names,
         "target_names": target_names,
         "variable_names": variable_names,
+        "chunk_features": chunk_features,
+        "embedding_text": embedding_text,
         "content": content,
         "summary_text": " | ".join(summary_parts),
     }
@@ -549,6 +576,107 @@ def _infer_chunk_type(entries: list[tuple[int, CodeStatement]]) -> str:
     if "raw" in kinds:
         return "raw_block"
     return "statement_block"
+
+
+def _infer_chunk_role(entries: list[tuple[int, CodeStatement]], *, chunk_type: str) -> str:
+    if chunk_type == "metadata_block":
+        return "definition"
+
+    action_names = {str(statement.name or "") for _, statement in entries}
+    if any(name in {"处理失败", "EXCEPTION", "WHEN_OTHERS"} for name in action_names):
+        return "failure_flow"
+    if any(statement.kind == "call" for _, statement in entries):
+        return "call_chain"
+    if any(name in {"通用SQL执行", "查询SQL语句开始"} for name in action_names):
+        return "table_access"
+    if any(statement.kind == "assignment" and statement.writes for _, statement in entries):
+        return "variable_flow"
+    if any(statement.kind == "control" for _, statement in entries):
+        return "control_flow"
+    return "logic"
+
+
+def _chunk_features(
+    entries: list[tuple[int, CodeStatement]],
+    *,
+    chunk_type: str,
+    chunk_role: str,
+    action_names: list[str],
+    target_names: list[str],
+    variable_names: list[str],
+    metadata_names: list[str],
+    conditions: list[str],
+) -> dict[str, object]:
+    non_comment_entries = [statement for _, statement in entries if statement.kind != "comment"]
+    action_count = sum(1 for statement in non_comment_entries if statement.kind == "action")
+    call_count = sum(1 for statement in non_comment_entries if statement.kind == "call")
+    assignment_count = sum(1 for statement in non_comment_entries if statement.kind == "assignment")
+    control_count = sum(1 for statement in non_comment_entries if statement.kind in {"control", "goto", "label"})
+    metadata_count = sum(1 for statement in non_comment_entries if statement.kind == "metadata_item")
+    sql_action_count = sum(1 for statement in non_comment_entries if statement.name in {"通用SQL执行", "查询SQL语句开始"})
+    failure_marker_count = sum(
+        1
+        for statement in non_comment_entries
+        if statement.name in {"处理失败", "EXCEPTION", "WHEN_OTHERS"} or statement.kind == "goto"
+    )
+
+    return {
+        "chunk_type": chunk_type,
+        "chunk_role": chunk_role,
+        "statement_count": len(non_comment_entries),
+        "action_count": action_count,
+        "call_count": call_count,
+        "assignment_count": assignment_count,
+        "control_count": control_count,
+        "metadata_count": metadata_count,
+        "sql_action_count": sql_action_count,
+        "failure_marker_count": failure_marker_count,
+        "has_calls": call_count > 0,
+        "has_sql": sql_action_count > 0,
+        "has_failure_markers": failure_marker_count > 0,
+        "has_metadata": metadata_count > 0,
+        "action_density": round(action_count / max(len(non_comment_entries), 1), 6),
+        "focus_entity_count": len(target_names) + len(variable_names) + len(metadata_names),
+        "condition_count": len(conditions),
+        "focus_entities": dedupe_strings([*target_names, *variable_names, *metadata_names])[:12],
+    }
+
+
+def _build_chunk_embedding_text(
+    *,
+    procedure_name: str,
+    chunk_type: str,
+    chunk_role: str,
+    summary_text: str,
+    action_names: list[str],
+    target_names: list[str],
+    variable_names: list[str],
+    metadata_names: list[str],
+    conditions: list[str],
+    comment_fragments: list[str],
+    content: str,
+) -> str:
+    lines = [
+        f"procedure: {procedure_name}",
+        f"chunk_type: {chunk_type}",
+        f"chunk_role: {chunk_role}",
+        f"summary: {summary_text}",
+    ]
+    if action_names:
+        lines.append(f"actions: {', '.join(action_names[:8])}")
+    if target_names:
+        lines.append(f"targets: {', '.join(target_names[:8])}")
+    if variable_names:
+        lines.append(f"variables: {', '.join(variable_names[:10])}")
+    if metadata_names:
+        lines.append(f"metadata: {', '.join(metadata_names[:8])}")
+    if conditions:
+        lines.append(f"conditions: {'; '.join(conditions[:4])}")
+    if comment_fragments:
+        lines.append(f"notes: {'; '.join(comment_fragments[:3])}")
+    lines.append("code:")
+    lines.append(content)
+    return "\n".join(lines)
 
 
 def _statement_targets(statement: CodeStatement) -> list[str]:

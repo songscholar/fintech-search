@@ -290,6 +290,48 @@ def test_build_index_creates_sqlite_tables_and_fts(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: Path) -> None:
+    _, db_path = _build_sample_index(tmp_path)
+
+    conn = sqlite3.connect(db_path)
+    chunk_rows = conn.execute(
+        """
+        SELECT chunk_role, chunk_features_json, embedding_text
+        FROM chunks
+        ORDER BY id
+        """
+    ).fetchall()
+    procedure_row = conn.execute(
+        """
+        SELECT summary_text, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json
+        FROM procedure_features
+        WHERE procedure_name = 'AF_DEEP'
+        """
+    ).fetchone()
+    conn.close()
+
+    assert chunk_rows
+    assert any(str(row[0]) == "table_access" for row in chunk_rows)
+    assert any(str(row[0]) == "failure_flow" for row in chunk_rows)
+    for chunk_role, chunk_features_json, embedding_text in chunk_rows:
+        chunk_features = json.loads(str(chunk_features_json))
+        assert "action_density" in chunk_features
+        assert "focus_entities" in chunk_features
+        assert str(embedding_text).strip()
+        assert f"chunk_role: {chunk_role}" in str(embedding_text)
+
+    assert procedure_row is not None
+    summary_text, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json = procedure_row
+    feature_flags = json.loads(str(feature_flags_json))
+    assert "uses_deep_table" in json.loads(str(read_tables_json))
+    assert "uses_deep_table" in json.loads(str(write_tables_json))
+    assert "@deep_flag" in json.loads(str(variable_writes_json))
+    assert feature_flags["has_table_reads"] is True
+    assert feature_flags["has_table_writes"] is True
+    assert feature_flags["has_variable_writes"] is True
+    assert "calls" in str(summary_text) or "tables" in str(summary_text)
+
+
 def test_build_index_populates_vectors_in_global_batches(tmp_path: Path) -> None:
     source_dir = _write_sample_sources(tmp_path)
     db_path = tmp_path / "index.db"

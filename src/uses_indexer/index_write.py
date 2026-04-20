@@ -200,6 +200,12 @@ class IndexWriteService:
         )
         block_counter.update(local_blocks)
         block_edge_counter.update(local_block_edges)
+        self.upsert_procedure_features(
+            conn,
+            file_id=file_id,
+            procedure_id=procedure_id,
+            procedure_name=unit.name,
+        )
 
         return edge_counter, variable_ref_counter, action_counter, chunk_counter, vector_counter, block_counter, block_edge_counter
 
@@ -225,6 +231,7 @@ class IndexWriteService:
                   procedure_id,
                   seq,
                   chunk_type,
+                  chunk_role,
                   line_start,
                   line_end,
                   statement_start_seq,
@@ -234,16 +241,19 @@ class IndexWriteService:
                   action_names_json,
                   target_names_json,
                   variable_names_json,
+                  chunk_features_json,
+                  embedding_text,
                   content,
                   summary_text
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     file_id,
                     procedure_id,
                     seq,
                     chunk["chunk_type"],
+                    chunk["chunk_role"],
                     chunk["line_start"],
                     chunk["line_end"],
                     chunk["statement_start_seq"],
@@ -253,6 +263,8 @@ class IndexWriteService:
                     json_dumps(chunk["action_names"]),
                     json_dumps(chunk["target_names"]),
                     json_dumps(chunk["variable_names"]),
+                    json_dumps(chunk["chunk_features"]),
+                    chunk["embedding_text"],
                     chunk["content"],
                     chunk["summary_text"],
                 ),
@@ -260,12 +272,13 @@ class IndexWriteService:
             chunk_id = int(cursor.lastrowid)
             conn.execute(
                 """
-                INSERT INTO chunks_fts(rowid, chunk_type, procedure_name, file_path, summary_text, content)
-                VALUES(?, ?, ?, ?, ?, ?)
+                INSERT INTO chunks_fts(rowid, chunk_type, chunk_role, procedure_name, file_path, summary_text, content)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     chunk_id,
                     chunk["chunk_type"],
+                    chunk["chunk_role"],
                     unit.name,
                     unit.path,
                     chunk["summary_text"],
@@ -287,7 +300,7 @@ class IndexWriteService:
         while True:
             rows = conn.execute(
                 """
-                SELECT c.id, c.summary_text, c.content
+                SELECT c.id, c.summary_text, c.content, c.embedding_text
                 FROM chunks c
                 LEFT JOIN chunk_vectors cv ON cv.chunk_id = c.id
                 WHERE cv.chunk_id IS NULL
@@ -299,7 +312,7 @@ class IndexWriteService:
             if not rows:
                 break
 
-            embedding_inputs = [f"{row[1]}\n{row[2]}" for row in rows]
+            embedding_inputs = [str(row[3] or f"{row[1]}\n{row[2]}") for row in rows]
             vectors = self.owner.embedder.embed_texts(embedding_inputs)
             embedder_info = self.owner.embedder.info
 
@@ -870,4 +883,205 @@ class IndexWriteService:
             VALUES(?, ?, ?, ?, ?, ?, ?)
             """,
             (edge_id, edge_type, source_name, target_name, target_kind, procedure_name, file_path),
+        )
+
+    def upsert_procedure_features(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        file_id: int,
+        procedure_id: int,
+        procedure_name: str,
+    ) -> None:
+        actions = [
+            str(row[0])
+            for row in conn.execute(
+                "SELECT DISTINCT action_name FROM actions WHERE procedure_id = ? AND action_name IS NOT NULL ORDER BY action_name",
+                (procedure_id,),
+            ).fetchall()
+        ]
+        outgoing_calls = [
+            str(row[0])
+            for row in conn.execute(
+                "SELECT DISTINCT target_name FROM edges WHERE procedure_id = ? AND edge_type = 'calls_procedure' ORDER BY target_name",
+                (procedure_id,),
+            ).fetchall()
+        ]
+        incoming_callers = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT source_name
+                FROM edges
+                WHERE edge_type = 'calls_procedure' AND target_name = ?
+                ORDER BY source_name
+                """,
+                (procedure_name,),
+            ).fetchall()
+        ]
+        read_tables = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT target_name
+                FROM edges
+                WHERE procedure_id = ? AND edge_type IN ('reads_table', 'reads_dynamic_table')
+                ORDER BY target_name
+                """,
+                (procedure_id,),
+            ).fetchall()
+        ]
+        write_tables = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT target_name
+                FROM edges
+                WHERE procedure_id = ? AND edge_type IN ('writes_table', 'writes_dynamic_table')
+                ORDER BY target_name
+                """,
+                (procedure_id,),
+            ).fetchall()
+        ]
+        mc_topics = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT target_name
+                FROM edges
+                WHERE procedure_id = ? AND edge_type = 'publishes_mc_topic'
+                ORDER BY target_name
+                """,
+                (procedure_id,),
+            ).fetchall()
+        ]
+        metadata_refs = [
+            f"{row[0]}:{row[1]}"
+            for row in conn.execute(
+                """
+                SELECT DISTINCT edge_type, target_name
+                FROM edges
+                WHERE procedure_id = ? AND edge_type LIKE 'references_%'
+                ORDER BY edge_type, target_name
+                """,
+                (procedure_id,),
+            ).fetchall()
+        ]
+        variable_reads = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT var_name
+                FROM variable_refs
+                WHERE procedure_id = ? AND access_type = 'read'
+                ORDER BY var_name
+                """,
+                (procedure_id,),
+            ).fetchall()
+        ]
+        variable_writes = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT var_name
+                FROM variable_refs
+                WHERE procedure_id = ? AND access_type = 'write'
+                ORDER BY var_name
+                """,
+                (procedure_id,),
+            ).fetchall()
+        ]
+        chunk_roles = [
+            str(row[0])
+            for row in conn.execute(
+                "SELECT DISTINCT chunk_role FROM chunks WHERE procedure_id = ? ORDER BY chunk_role",
+                (procedure_id,),
+            ).fetchall()
+        ]
+        counts_row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS statement_count,
+              SUM(CASE WHEN kind = 'call' THEN 1 ELSE 0 END) AS call_count,
+              SUM(CASE WHEN kind = 'action' THEN 1 ELSE 0 END) AS action_count
+            FROM statements
+            WHERE procedure_id = ?
+            """,
+            (procedure_id,),
+        ).fetchone()
+        statement_count = int(counts_row[0] or 0)
+        call_count = int(counts_row[1] or 0)
+        action_count = int(counts_row[2] or 0)
+        feature_flags = {
+            "has_calls": bool(outgoing_calls or incoming_callers),
+            "has_table_reads": bool(read_tables),
+            "has_table_writes": bool(write_tables),
+            "has_mc_topics": bool(mc_topics),
+            "has_metadata_refs": bool(metadata_refs),
+            "has_variable_writes": bool(variable_writes),
+            "has_failure_chunks": "failure_flow" in chunk_roles,
+            "has_call_chain_chunks": "call_chain" in chunk_roles,
+            "has_table_access_chunks": "table_access" in chunk_roles,
+            "statement_count": statement_count,
+            "action_count": action_count,
+            "call_count": call_count,
+            "call_density": round(call_count / max(statement_count, 1), 6),
+            "action_density": round(action_count / max(statement_count, 1), 6),
+        }
+        summary_parts = [procedure_name]
+        if outgoing_calls:
+            summary_parts.append(f"calls {', '.join(outgoing_calls[:4])}")
+        if read_tables or write_tables:
+            summary_parts.append(
+                f"tables R[{', '.join(read_tables[:3])}] W[{', '.join(write_tables[:3])}]".replace("R[] ", "").replace(" W[]", "")
+            )
+        if variable_writes:
+            summary_parts.append(f"writes vars {', '.join(variable_writes[:4])}")
+        if mc_topics:
+            summary_parts.append(f"publishes {', '.join(mc_topics[:3])}")
+        summary_text = " | ".join(part for part in summary_parts if part)
+
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO procedure_features(
+              procedure_id,
+              file_id,
+              procedure_name,
+              summary_text,
+              actions_json,
+              outgoing_calls_json,
+              incoming_callers_json,
+              read_tables_json,
+              write_tables_json,
+              mc_topics_json,
+              metadata_refs_json,
+              variable_reads_json,
+              variable_writes_json,
+              feature_flags_json
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                procedure_id,
+                file_id,
+                procedure_name,
+                summary_text,
+                json_dumps(actions),
+                json_dumps(outgoing_calls),
+                json_dumps(incoming_callers),
+                json_dumps(read_tables),
+                json_dumps(write_tables),
+                json_dumps(mc_topics),
+                json_dumps(metadata_refs),
+                json_dumps(variable_reads),
+                json_dumps(variable_writes),
+                json_dumps(feature_flags),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO procedure_features_fts(rowid, procedure_name, summary_text)
+            VALUES(?, ?, ?)
+            """,
+            (procedure_id, procedure_name, summary_text),
         )

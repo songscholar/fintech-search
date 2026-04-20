@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   procedure_id INTEGER NOT NULL,
   seq INTEGER NOT NULL,
   chunk_type TEXT NOT NULL,
+  chunk_role TEXT NOT NULL DEFAULT 'general',
   line_start INTEGER NOT NULL,
   line_end INTEGER NOT NULL,
   statement_start_seq INTEGER NOT NULL,
@@ -143,6 +144,8 @@ CREATE TABLE IF NOT EXISTS chunks (
   action_names_json TEXT NOT NULL DEFAULT '[]',
   target_names_json TEXT NOT NULL DEFAULT '[]',
   variable_names_json TEXT NOT NULL DEFAULT '[]',
+  chunk_features_json TEXT NOT NULL DEFAULT '{}',
+  embedding_text TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL,
   summary_text TEXT NOT NULL,
   FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE,
@@ -180,6 +183,25 @@ CREATE TABLE IF NOT EXISTS blocks (
   FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE,
   FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE,
   FOREIGN KEY(anchor_statement_id) REFERENCES statements(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS procedure_features (
+  procedure_id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL,
+  procedure_name TEXT NOT NULL,
+  summary_text TEXT NOT NULL,
+  actions_json TEXT NOT NULL DEFAULT '[]',
+  outgoing_calls_json TEXT NOT NULL DEFAULT '[]',
+  incoming_callers_json TEXT NOT NULL DEFAULT '[]',
+  read_tables_json TEXT NOT NULL DEFAULT '[]',
+  write_tables_json TEXT NOT NULL DEFAULT '[]',
+  mc_topics_json TEXT NOT NULL DEFAULT '[]',
+  metadata_refs_json TEXT NOT NULL DEFAULT '[]',
+  variable_reads_json TEXT NOT NULL DEFAULT '[]',
+  variable_writes_json TEXT NOT NULL DEFAULT '[]',
+  feature_flags_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE,
+  FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS block_edges (
@@ -231,10 +253,17 @@ CREATE VIRTUAL TABLE IF NOT EXISTS edges_fts USING fts5(
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
   chunk_type,
+  chunk_role,
   procedure_name,
   file_path,
   summary_text,
   content,
+  tokenize='unicode61 remove_diacritics 0'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS procedure_features_fts USING fts5(
+  procedure_name,
+  summary_text,
   tokenize='unicode61 remove_diacritics 0'
 );
 
@@ -262,6 +291,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_procedure_seq ON chunks(procedure_id, seq)
 CREATE INDEX IF NOT EXISTS idx_chunk_vectors_provider ON chunk_vectors(provider, model);
 CREATE INDEX IF NOT EXISTS idx_blocks_procedure_seq ON blocks(procedure_id, seq);
 CREATE INDEX IF NOT EXISTS idx_blocks_type ON blocks(block_type);
+CREATE INDEX IF NOT EXISTS idx_procedure_features_file_id ON procedure_features(file_id);
 CREATE INDEX IF NOT EXISTS idx_block_edges_block ON block_edges(block_id);
 CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 """
