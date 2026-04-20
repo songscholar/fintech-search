@@ -70,8 +70,12 @@ def test_retrieval_evaluator_reports_pass_at_k_and_recall(tmp_path: Path) -> Non
     assert report["case_count"] == 4
     assert report["summary"]["pass_at_k"]["5"] == 1.0
     assert report["summary"]["matched_cases"] == 4
+    assert report["summary"]["evidence_coverage"] == 11 / 12
+    assert report["summary"]["by_tag"]["variable"]["matched_cases"] == 1
+    assert report["summary"]["by_tag"]["variable"]["evidence_coverage"] == 2 / 3
     assert report["cases"][0]["first_relevant_rank"] == 1
     assert report["cases"][0]["expectations"][0]["matched"] is True
+    assert report["cases"][0]["evidence"]["coverage"] == 2 / 3
     assert report["cases"][0]["top_hits"]
 
 
@@ -98,6 +102,7 @@ def test_retrieval_evaluator_accepts_plain_case_list(tmp_path: Path) -> None:
 
     assert report["case_count"] == 1
     assert report["summary"]["pass_at_k"]["5"] == 1.0
+    assert report["summary"]["by_tag"]["untagged"]["matched_cases"] == 1
 
 
 def test_compare_eval_reports_marks_unchanged_cases(tmp_path: Path) -> None:

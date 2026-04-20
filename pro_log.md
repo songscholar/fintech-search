@@ -516,3 +516,44 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 增量建库的调试视角已经从“文件级别”提升到“业务对象级别”
 - 后续如果继续做更细粒度的局部重建，这一步会是非常关键的基础
+
+## [1.1.4] - 2026-04-20
+
+### Step 4: 补 retrieval / evidence 质量评测
+
+### 本步目标
+
+- 让评测不只覆盖 retrieval 命中，还覆盖 evidence 组装质量
+- 增加按问题标签拆分的统计视角
+- 帮助更快识别“检索命中了，但证据不够回答问题”的回归
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/evaluation.py`
+   - 在 case 级评测中加入 `assemble_evidence(...)`
+   - 为每个 case 产出：
+     - `evidence.evidence_count`
+     - `evidence.matched_count`
+     - `evidence.coverage`
+     - `evidence.expectations`
+     - `evidence.top_evidence`
+   - 新增按 evidence block 匹配 expectation 的逻辑
+   - 在 summary 中新增：
+     - `evidence_coverage`
+     - `by_tag`
+
+2. 更新 `tests/test_evaluation.py`
+   - 覆盖 summary 级 `evidence_coverage`
+   - 覆盖 `by_tag`
+   - 覆盖 case 级 `evidence.coverage`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evaluation.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py` 通过
+- 结果：`4 passed`
+
+### 结论
+
+- 评测体系已经从“检索是否命中”扩展到“证据是否足够支撑回答”
+- 后续如果 rerank 或 evidence 选择发生回归，现在会更容易被评测发现

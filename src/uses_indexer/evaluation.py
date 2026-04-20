@@ -52,10 +52,16 @@ class RetrievalEvaluator:
         question = str(case["question"])
         expected = _normalize_expected(case.get("expected", {}))
         query_result = self.indexer.query_index(db_path, question, limit=limit)
+        evidence_result = self.indexer.assemble_evidence(db_path, question, limit=min(5, limit))
         hits = list(query_result["hits"])
+        evidence_blocks = list(evidence_result["evidence"])
         expectations = _flatten_expectations(expected)
         match_details = [
             _match_expectation(expectation, hits)
+            for expectation in expectations
+        ]
+        evidence_match_details = [
+            _match_expectation_against_evidence(expectation, evidence_blocks)
             for expectation in expectations
         ]
 
@@ -86,6 +92,23 @@ class RetrievalEvaluator:
             "pass_at_k": pass_at_k,
             "recall_at_k": recall_at_k,
             "expectations": match_details,
+            "evidence": {
+                "evidence_count": evidence_result["evidence_count"],
+                "matched_count": sum(1 for detail in evidence_match_details if detail["matched"]),
+                "coverage": sum(1 for detail in evidence_match_details if detail["matched"]) / max(len(expectations), 1),
+                "expectations": evidence_match_details,
+                "top_evidence": [
+                    {
+                        "rank": block["rank"],
+                        "procedure_name": block["procedure_name"],
+                        "file_path": block["file_path"],
+                        "line_start": block["line_start"],
+                        "line_end": block["line_end"],
+                        "matched_text": block["matched_text"],
+                    }
+                    for block in evidence_blocks[: min(3, len(evidence_blocks))]
+                ],
+            },
             "top_hits": [
                 {
                     "rank": hit["rank"],
@@ -406,6 +429,35 @@ def _match_expectation(expectation: dict[str, object], hits: list[dict[str, obje
     }
 
 
+def _match_expectation_against_evidence(expectation: dict[str, object], evidence_blocks: list[dict[str, object]]) -> dict[str, object]:
+    kind = str(expectation["kind"])
+    value = expectation["value"]
+    for block in evidence_blocks:
+        if _evidence_matches(kind, value, block):
+            return {
+                "kind": kind,
+                "value": value,
+                "matched": True,
+                "first_rank": int(block["rank"]),
+                "matched_evidence": {
+                    "rank": block["rank"],
+                    "procedure_name": block["procedure_name"],
+                    "file_path": block["file_path"],
+                    "line_start": block["line_start"],
+                    "line_end": block["line_end"],
+                    "matched_text": block["matched_text"],
+                },
+            }
+
+    return {
+        "kind": kind,
+        "value": value,
+        "matched": False,
+        "first_rank": None,
+        "matched_evidence": None,
+    }
+
+
 def _hit_matches(kind: str, value: object, hit: dict[str, object]) -> bool:
     if kind == "procedure":
         return _contains(str(hit.get("procedure_name") or ""), str(value))
@@ -430,6 +482,36 @@ def _hit_matches(kind: str, value: object, hit: dict[str, object]) -> bool:
         expected_end = _as_int(value.get("end"))
         hit_start = _as_int(hit.get("line_start"))
         hit_end = _as_int(hit.get("line_end"))
+        if expected_start is None or expected_end is None or hit_start is None or hit_end is None:
+            return False
+        return max(expected_start, hit_start) <= min(expected_end, hit_end)
+    return False
+
+
+def _evidence_matches(kind: str, value: object, block: dict[str, object]) -> bool:
+    if kind == "procedure":
+        return _contains(str(block.get("procedure_name") or ""), str(value))
+    if kind == "path":
+        return _contains(str(block.get("file_path") or ""), str(value))
+    if kind == "text":
+        haystack = " ".join(
+            [
+                str(block.get("matched_text") or ""),
+                str(block.get("excerpt") or ""),
+                " ".join(str(reason) for reason in block.get("reasons", [])),
+            ]
+        )
+        return _contains(haystack, str(value))
+    if kind == "line_range":
+        if not isinstance(value, dict):
+            return False
+        path_contains = str(value.get("path_contains") or "")
+        if path_contains and not _contains(str(block.get("file_path") or ""), path_contains):
+            return False
+        expected_start = _as_int(value.get("start"))
+        expected_end = _as_int(value.get("end"))
+        hit_start = _as_int(block.get("line_start"))
+        hit_end = _as_int(block.get("line_end"))
         if expected_start is None or expected_end is None or hit_start is None or hit_end is None:
             return False
         return max(expected_start, hit_start) <= min(expected_end, hit_end)
@@ -499,7 +581,30 @@ def _matched_count_at_k(match_details: list[dict[str, object]], k: int) -> int:
     )
 
 
-def _summarize_case_results(case_results: list[dict[str, object]], *, top_k: tuple[int, ...]) -> dict[str, object]:
+def _summarize_by_tag(
+    case_results: list[dict[str, object]],
+    *,
+    top_k: tuple[int, ...],
+) -> dict[str, object]:
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for case in case_results:
+        tags = case.get("tags", [])
+        normalized_tags = tags if isinstance(tags, list) and tags else ["untagged"]
+        for tag in normalized_tags:
+            grouped.setdefault(str(tag), []).append(case)
+
+    return {
+        tag: _summarize_case_results(tag_cases, top_k=top_k, include_by_tag=False)
+        for tag, tag_cases in sorted(grouped.items())
+    }
+
+
+def _summarize_case_results(
+    case_results: list[dict[str, object]],
+    *,
+    top_k: tuple[int, ...],
+    include_by_tag: bool = True,
+) -> dict[str, object]:
     case_count = len(case_results)
     if case_count == 0:
         return {
@@ -507,6 +612,8 @@ def _summarize_case_results(case_results: list[dict[str, object]], *, top_k: tup
             "expectation_recall_at_k": {str(k): 0.0 for k in top_k},
             "mean_first_relevant_rank": None,
             "matched_cases": 0,
+            "evidence_coverage": 0.0,
+            "by_tag": {} if include_by_tag else None,
         }
 
     pass_at_k = {
@@ -530,4 +637,8 @@ def _summarize_case_results(case_results: list[dict[str, object]], *, top_k: tup
             sum(first_ranks) / len(first_ranks) if first_ranks else None
         ),
         "matched_cases": len(first_ranks),
+        "evidence_coverage": (
+            sum(float(case["evidence"]["coverage"]) for case in case_results) / case_count
+        ),
+        "by_tag": _summarize_by_tag(case_results, top_k=top_k) if include_by_tag else None,
     }
