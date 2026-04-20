@@ -1223,3 +1223,55 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - metadata 边推导和 target 识别现在有了独立模块归属
 - `index_write.py` 与 `semantic_recovery.py` 开始共享同一套 target 语义规则
 - `indexer.py` 文件长度从 `1171` 行继续下降到 `909` 行
+
+## [1.2.11] - 2026-04-21
+
+### Step 18: 删除 indexer 中剩余的 context-fetch 门面
+
+### 本步目标
+
+- 让 `EvidenceService` 和 `RetrievalService` 直接依赖 `ContextFetchService`
+- 删除 `indexer.py` 中那批只做转发、不再提供额外价值的 context wrapper
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - call-chain rerank 的邻居查询改为直接调用 `ContextFetchService.procedure_call_neighbors`
+
+2. 更新 `src/uses_indexer/evidence.py`
+   - 证据组装改为直接调用：
+     - `fetch_chunk_block`
+     - `fetch_block_context`
+     - `fetch_context_block`
+     - `fetch_covering_blocks`
+     - `fetch_related_context`
+
+3. 更新 `src/uses_indexer/indexer.py`
+   - 删除剩余的 context-fetch 门面方法：
+     - `_procedure_call_neighbors`
+     - `_fetch_context_block`
+     - `_fetch_chunk_block`
+     - `_fetch_block_context`
+     - `_fetch_covering_blocks`
+     - `_fetch_block_relation_summary`
+     - `_fetch_related_context`
+     - `_fetch_related_metadata_relations`
+     - `_fetch_related_mc_topics`
+     - `_fetch_related_call_edges`
+     - `_fetch_call_chain_paths`
+     - `_procedure_aliases`
+     - `_resolve_procedure_name`
+     - `_fetch_related_procedure_summaries`
+     - `_lookup_procedure_summary`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/retrieval.py src/uses_indexer/evidence.py src/uses_indexer/indexer.py src/uses_indexer/context_fetch.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py` 通过
+- 结果：`61 passed`
+
+### 结论
+
+- `ContextFetchService` 不再需要通过 `SQLiteIndexer` 中转即可被核心服务使用
+- `indexer.py` 继续收敛成编排入口，文件长度从 `909` 行下降到 `654` 行
+- 当前剩余内容已经基本集中在 schema、summary 和 index-write 门面上

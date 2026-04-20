@@ -29,6 +29,7 @@ class EvidenceService:
         debug: bool = False,
     ) -> dict[str, object]:
         started_at = time.perf_counter()
+        context_fetch = self.owner._context_fetch_service
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         candidates, fts_query, vector_status, retrieval_debug = self.owner._retrieval_service.retrieve_candidates(
@@ -58,11 +59,11 @@ class EvidenceService:
                 continue
 
             if candidate["hit_type"] == "chunk":
-                context = self.owner._fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
+                context = context_fetch.fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
             elif candidate["hit_type"] == "block":
-                context = self.owner._fetch_block_context(conn, block_id=int(candidate["entity_id"]))
+                context = context_fetch.fetch_block_context(conn, block_id=int(candidate["entity_id"]))
             else:
-                context = self.owner._fetch_context_block(
+                context = context_fetch.fetch_context_block(
                     conn,
                     procedure_id=procedure_id,
                     statement_id=maybe_int(candidate.get("statement_id")),
@@ -110,14 +111,14 @@ class EvidenceService:
                     "line_end": context["line_end"],
                     "excerpt": context["excerpt"],
                     "context_statements": context["statements"],
-                    "recovered_blocks": self.owner._fetch_covering_blocks(
+                    "recovered_blocks": context_fetch.fetch_covering_blocks(
                         conn,
                         procedure_id=procedure_id,
                         line_start=int(context["line_start"]),
                         line_end=int(context["line_end"]),
                         limit=3,
                     ),
-                    "related_context": self.owner._fetch_related_context(
+                    "related_context": context_fetch.fetch_related_context(
                         conn,
                         procedure_id=procedure_id,
                         procedure_name=str(candidate["procedure_name"]),

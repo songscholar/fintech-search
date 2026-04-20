@@ -77,6 +77,7 @@ class RetrievalService:
         debug: bool = False,
     ) -> tuple[list[dict[str, object]], str | None, dict[str, object], dict[str, object] | None]:
         started_at = time.perf_counter()
+        context_fetch = self.owner._context_fetch_service
         fts_query = build_fts_query(query)
         query_analysis = analyze_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
@@ -128,7 +129,7 @@ class RetrievalService:
             reranked,
             seed_limit=min(candidate_limit, 12),
             query_analysis=query_analysis,
-            procedure_call_neighbors=lambda procedure_name: self.owner._procedure_call_neighbors(
+            procedure_call_neighbors=lambda procedure_name: context_fetch.procedure_call_neighbors(
                 conn,
                 procedure_name=procedure_name,
             ),
