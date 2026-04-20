@@ -1179,3 +1179,47 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `indexer.py` 进一步从“实现堆叠文件”向“编排门面”收敛
 - `retrieval.py` 和 `context_fetch.py` 开始直接依赖共享工具层，重复实现继续减少
 - `indexer.py` 文件长度从 `1328` 行下降到 `1171` 行
+
+## [1.2.10] - 2026-04-21
+
+### Step 17: 抽离 metadata / target 语义 helper
+
+### 本步目标
+
+- 把 `indexer.py` 里 metadata 边推导和 target 识别逻辑完整迁出
+- 统一 `index_write.py` 与 `semantic_recovery.py` 对 target 推导规则的依赖，避免两套实现继续漂移
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/metadata_semantics.py`
+   - 收口：
+     - `derive_target`
+     - `metadata_edges_for_statement`
+   - 以及其内部依赖的 metadata entity / target / ref 分类 helper
+
+2. 更新 `src/uses_indexer/index_write.py`
+   - 直接复用 `derive_target`
+   - 直接复用 `metadata_edges_for_statement`
+   - 不再通过 `SQLiteIndexer` 中转调用这两个 helper
+
+3. 更新 `src/uses_indexer/semantic_recovery.py`
+   - 改为复用统一的 `derive_target`
+   - 删除本地重复 `_derive_target`
+
+4. 更新 `src/uses_indexer/indexer.py`
+   - 删除中转 wrapper：
+     - `_derive_target`
+     - `_metadata_edges_for_statement`
+   - 删除整块已迁出的 metadata helper 实现
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/metadata_semantics.py src/uses_indexer/index_write.py src/uses_indexer/semantic_recovery.py src/uses_indexer/indexer.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py` 通过
+- 结果：`61 passed`
+
+### 结论
+
+- metadata 边推导和 target 识别现在有了独立模块归属
+- `index_write.py` 与 `semantic_recovery.py` 开始共享同一套 target 语义规则
+- `indexer.py` 文件长度从 `1171` 行继续下降到 `909` 行

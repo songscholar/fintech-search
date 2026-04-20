@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
+from .metadata_semantics import derive_target, metadata_edges_for_statement
 from .models import CodeStatement, ParsedUnit
 from .semantic_recovery import (
     build_semantic_chunks,
@@ -603,7 +604,7 @@ class IndexWriteService:
     ) -> Counter[str]:
         action_counter: Counter[str] = Counter()
         action_name = statement.name if statement.kind in {"action", "call", "metadata_item"} else None
-        target_name, target_kind = self.owner._derive_target(statement)
+        target_name, target_kind = derive_target(statement)
 
         if action_name is not None:
             cursor = conn.execute(
@@ -641,7 +642,7 @@ class IndexWriteService:
             )
 
         if statement.kind == "metadata_item":
-            for metadata_edge in self.owner._metadata_edges_for_statement(statement):
+            for metadata_edge in metadata_edges_for_statement(statement):
                 self.insert_edge(
                     conn,
                     file_id=file_id,

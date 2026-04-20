@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from .constants import EXIT_LABEL_NAMES, TABLE_WITH_INDEX_RE
+from .metadata_semantics import derive_target
 from .models import CodeStatement
 from .parser import ASSIGN_RE
 
@@ -368,7 +369,7 @@ def collect_block_entities(statements: list[CodeStatement]) -> tuple[list[str], 
     target_names: set[str] = set()
     variable_names: set[str] = set()
     for statement in statements:
-        target_name, _ = _derive_target(statement)
+        target_name, _ = derive_target(statement)
         if target_name:
             target_names.add(target_name)
         variable_names.update(statement.reads)
@@ -552,7 +553,7 @@ def _infer_chunk_type(entries: list[tuple[int, CodeStatement]]) -> str:
 
 def _statement_targets(statement: CodeStatement) -> list[str]:
     targets: list[str] = []
-    derived_target, derived_kind = _derive_target(statement)
+    derived_target, derived_kind = derive_target(statement)
     if derived_target and derived_kind != "unknown":
         targets.append(derived_target)
     if statement.target and statement.target not in targets:
@@ -580,35 +581,6 @@ def _unique_preserve_order(values: object) -> list[str]:
         seen.add(text)
         result.append(text)
     return result
-
-
-def _derive_target(statement: CodeStatement) -> tuple[str | None, str]:
-    if statement.kind == "call" and statement.name:
-        return statement.name, "procedure"
-
-    mc_publish_detail = _classify_mc_publish(statement)
-    if mc_publish_detail is not None and mc_publish_detail.get("topic_name"):
-        return str(mc_publish_detail["topic_name"]), "mc_topic"
-
-    if not statement.groups or len(statement.groups) < 2:
-        return statement.target, "unknown"
-
-    candidate = statement.groups[1].strip()
-    if not candidate:
-        return None, "unknown"
-    if candidate.startswith("@"):
-        return candidate, "variable"
-    table_match = TABLE_WITH_INDEX_RE.match(candidate)
-    if table_match:
-        return table_match.group("table"), "table"
-    if "(" in candidate and ")" in candidate:
-        return candidate, "expression"
-    if "=" in candidate:
-        return candidate, "expression"
-    lowered = candidate.lower()
-    if lowered.startswith(("select ", "update ", "delete ", "insert ")):
-        return candidate, "sql"
-    return candidate, "table"
 
 
 def _extract_sql_preview(statements: list[CodeStatement]) -> str | None:
