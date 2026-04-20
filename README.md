@@ -17,6 +17,7 @@
 相关文档：
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：看整体分层、数据流和问答链路
+- [docs/INDEX_BOUNDARIES.md](docs/INDEX_BOUNDARIES.md)：看代码索引 / 元数据索引 / 全量索引 / 表结构索引的边界
 - [docs/CALL_SEMANTICS.md](docs/CALL_SEMANTICS.md)：看 `LS/LF/AF` 之间的本地调用与 RPC 调用语义规则
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：看怎么本地部署、怎么接 HTTP/MCP/Codex
 - [docs/USAGE.md](docs/USAGE.md)：看平时该怎么提问、怎么看返回结果
@@ -104,10 +105,10 @@ flowchart LR
 
 ### 完整代码根目录索引摘要
 
-当前推荐默认库是完整根目录索引：
+当前推荐默认代码检索库是完整根目录范围内的代码索引：
 
 - 源码根目录：`/Users/songzuoqiang/Documents/agent/code`
-- 索引库：`/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db`
+- 索引库：`/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
 - 文件总数：`21148`
 - `procedures`：`21148`
 - `statements`：`1122460`
@@ -137,14 +138,15 @@ flowchart LR
 
 摘要文件：
 
-- `examples/agent_code_index_summary.json`
-- `examples/agent_code_db_summary.json`
-- `examples/agent_code_mc_publish_example.json`
+- `examples/business_code_index_summary.json`
+- `examples/business_code_db_summary.json`
+- `examples/business_code_mc_publish_example.json`
 
 说明：
 
-- 这个完整根目录库现在是 CLI、HTTP API、MCP、Codex skill/plugin 的推荐默认库
-- 这个完整根目录库现在同时覆盖业务 DSL 文件和 `metadata` 目录里的元数据文件
+- 这个库是默认代码检索库，优先用于 CLI、HTTP API、MCP、Codex skill/plugin
+- 这个库覆盖完整根目录中的业务 DSL 代码文件，但不把 `metadata` 混进默认代码检索结果
+- 如果需要跨代码和 metadata 做综合检索，请使用 `examples/business_full_index.db`
 - `examples/uses_codes_index.db` 继续保留，用于更小范围的评测和回归验证
 
 ### uses_codes 子库解析层摘要
@@ -226,7 +228,7 @@ flowchart LR
 - `expectation_recall@10`: `0.9`
 - 当前自比较样例 `examples/uses_codes_eval_compare.json` 中 `improved/regressed` 都是 `0`，用于展示报告格式
 
-本地默认库发现现在会优先使用 `examples/agent_code_index.db`，如果不存在，再回退到 `examples/uses_codes_index.db`。这两个数据库文件体积都较大，当前都不纳入版本控制。
+本地默认库发现现在会优先使用 `examples/business_code_index.db`，如果不存在，再回退到 `examples/business_full_index.db`，最后才回退到 `examples/uses_codes_index.db`。这些数据库文件体积都较大，当前都不纳入版本控制。
 
 ## Embedding 配置
 
@@ -260,11 +262,11 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
-export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_embedding_cache.db"
+export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_embedding_cache.db"
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index_openai.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_openai.db
 ```
 
 如果外部 embedding 建库中途失败或被中断，可以复用同一个缓存和索引库续建缺失向量：
@@ -272,7 +274,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index_openai.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_openai.db \
   --resume-vectors
 ```
 
@@ -372,7 +374,7 @@ python3 -m uses_indexer parse-file \
 python3 -m uses_indexer scan-dir \
   /Users/songzuoqiang/Documents/agent/code \
   --limit 20 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_summary.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_summary.json
 ```
 
 构建 SQLite 索引：
@@ -380,8 +382,8 @@ python3 -m uses_indexer scan-dir \
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index_summary.json
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_summary.json
 ```
 
 只补齐已有索引库中缺失的向量：
@@ -389,7 +391,7 @@ python3 -m uses_indexer build-index \
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
   --resume-vectors
 ```
 
@@ -397,15 +399,15 @@ python3 -m uses_indexer build-index \
 
 ```bash
 python3 -m uses_indexer db-summary \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_db_summary.json
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_db_summary.json
 ```
 
 执行简单关键词查询：
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
   --query "证券代码获取" \
   --limit 10
 ```
@@ -448,12 +450,12 @@ python3 -m uses_indexer compare-eval \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
   --query "证券代码获取的逻辑在哪里" \
   --limit 6 \
   --context-window 2 \
   --related-limit 3 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_evidence_example.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_evidence_example.json
 ```
 
 这个命令会返回：
@@ -473,7 +475,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer ask-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
   --question "证券代码获取的逻辑在哪里" \
   --evidence-limit 6 \
   --context-window 2 \
@@ -492,12 +494,12 @@ python3 -m uses_indexer ask-codebase \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
   --question "证券代码获取的逻辑在哪里" \
   --evidence-limit 6 \
   --context-window 2 \
   --related-limit 3 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_answer_example.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_answer_example.json
 ```
 
 当前行为：
@@ -516,7 +518,7 @@ python3 -m uses_indexer answer-codebase \
 
 ```bash
 python3 -m uses_indexer serve-api \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -552,7 +554,7 @@ curl -s http://127.0.0.1:8000/answer \
 
 ```bash
 python3 -m uses_indexer serve-mcp \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db
 ```
 
 可用 MCP 工具：
@@ -577,7 +579,7 @@ python3 ./scripts/run_mcp_server.py
 
 默认索引库是：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
 
 如果需要切换索引库，可以传：
 

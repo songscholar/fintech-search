@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, request
@@ -22,6 +23,10 @@ class OpenAICompatibleConfig:
     base_url: str = "https://api.openai.com/v1/chat/completions"
     temperature: float = 0.1
     max_tokens: int = 1200
+    timeout_seconds: float = 60.0
+    max_retries: int = 0
+    retry_backoff_seconds: float = 1.0
+    provider: str = "openai-compatible"
 
 
 class OpenAICompatibleLlm:
@@ -30,14 +35,20 @@ class OpenAICompatibleLlm:
 
     @classmethod
     def from_env(cls) -> "OpenAICompatibleLlm":
+        provider = os.getenv("USES_INDEXER_LLM_PROVIDER", "openai-compatible").strip() or "openai-compatible"
         api_key = os.getenv("USES_INDEXER_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
         model = os.getenv("USES_INDEXER_LLM_MODEL")
         base_url = os.getenv("USES_INDEXER_LLM_BASE_URL", "https://api.openai.com/v1/chat/completions")
         temperature = float(os.getenv("USES_INDEXER_LLM_TEMPERATURE", "0.1"))
         max_tokens = int(os.getenv("USES_INDEXER_LLM_MAX_TOKENS", "1200"))
+        timeout_seconds = float(os.getenv("USES_INDEXER_LLM_TIMEOUT", "60"))
+        max_retries = int(os.getenv("USES_INDEXER_LLM_MAX_RETRIES", "0"))
+        retry_backoff_seconds = float(os.getenv("USES_INDEXER_LLM_RETRY_BACKOFF", "1.0"))
 
         if not api_key or not model:
             return cls(None)
+        if provider != "openai-compatible":
+            raise LlmConfigError(f"Unsupported USES_INDEXER_LLM_PROVIDER: {provider}")
 
         return cls(
             OpenAICompatibleConfig(
@@ -46,6 +57,10 @@ class OpenAICompatibleLlm:
                 base_url=base_url,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+                retry_backoff_seconds=retry_backoff_seconds,
+                provider=provider,
             )
         )
 
@@ -78,14 +93,7 @@ class OpenAICompatibleLlm:
             method="POST",
         )
 
-        try:
-            with request.urlopen(http_request, timeout=60) as response:
-                raw = response.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise LlmRequestError(f"LLM request failed with status {exc.code}: {detail}") from exc
-        except error.URLError as exc:
-            raise LlmRequestError(f"LLM request failed: {exc.reason}") from exc
+        raw = self._perform_request(http_request)
 
         parsed = json.loads(raw)
         content = _extract_content(parsed)
@@ -93,12 +101,37 @@ class OpenAICompatibleLlm:
             raise LlmRequestError("LLM response did not contain assistant content")
 
         return {
-            "provider": "openai-compatible",
+            "provider": self.config.provider,
             "model": self.config.model,
             "base_url": self.config.base_url,
             "content": content,
             "raw_response": parsed,
         }
+
+    def _perform_request(self, http_request: request.Request) -> str:
+        if not self.config:
+            raise LlmConfigError("LLM is not configured.")
+
+        attempts = self.config.max_retries + 1
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with request.urlopen(http_request, timeout=self.config.timeout_seconds) as response:
+                    return response.read().decode("utf-8")
+            except error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                last_error = LlmRequestError(f"LLM request failed with status {exc.code}: {detail}")
+            except error.URLError as exc:
+                last_error = LlmRequestError(f"LLM request failed: {exc.reason}")
+            except TimeoutError as exc:
+                last_error = LlmRequestError(f"LLM request timed out: {exc}")
+
+            if attempt < attempts:
+                time.sleep(self.config.retry_backoff_seconds * attempt)
+
+        if last_error is not None:
+            raise last_error
+        raise LlmRequestError("LLM request failed for an unknown reason")
 
 
 def _extract_content(payload: dict[str, Any]) -> str:

@@ -8,18 +8,13 @@ from pathlib import Path
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .evaluation import RetrievalEvaluator, compare_eval_reports
+from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
 from .mcp_server import CodebaseMcpServer
 from .parser import UftDslParser, is_supported_path
 from .qa import CodebaseQA
 from .table_indexer import TableIndexer
-
-DEFAULT_DB_CANDIDATES = (
-    "agent_code_index.db",
-    "uses_codes_index.db",
-)
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Parse USES UFT DSL files.")
@@ -49,6 +44,11 @@ def main() -> int:
         default="all",
         help="Index type: all (default), code (only code files), metadata (only metadata files).",
     )
+    build_index_parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help="Incrementally update an existing SQLite index by re-indexing changed files only.",
+    )
 
     db_summary_parser = subparsers.add_parser("db-summary", help="Show SQLite index summary.")
     db_summary_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -58,6 +58,7 @@ def main() -> int:
     query_index_parser.add_argument("--db", required=True, help="SQLite database path.")
     query_index_parser.add_argument("--query", required=True, help="Keyword to search for.")
     query_index_parser.add_argument("--limit", type=int, default=20, help="Maximum number of hits.")
+    query_index_parser.add_argument("--debug", action="store_true", help="Include retrieval debug traces and rerank breakdown.")
     query_index_parser.add_argument("--output", help="Optional JSON output path.")
 
     eval_parser = subparsers.add_parser("eval-retrieval", help="Evaluate retrieval quality against JSON cases.")
@@ -78,6 +79,7 @@ def main() -> int:
     evidence_parser.add_argument("--limit", type=int, default=6, help="Maximum number of evidence blocks.")
     evidence_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
     evidence_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    evidence_parser.add_argument("--debug", action="store_true", help="Include retrieval and evidence pruning debug traces.")
     evidence_parser.add_argument("--output", help="Optional JSON output path.")
 
     ask_parser = subparsers.add_parser("ask-codebase", help="Build a QA package from indexed evidence.")
@@ -106,9 +108,18 @@ def main() -> int:
     mcp_parser.add_argument(
         "--db",
         help=(
-            "Default SQLite database path. If omitted, the server will try "
-            "examples/agent_code_index.db first, then examples/uses_codes_index.db."
+            "Default SQLite code database path. If omitted, the server will try "
+            "examples/business_code_index.db first, then examples/business_full_index.db, "
+            "then examples/uses_codes_index.db."
         ),
+    )
+    mcp_parser.add_argument(
+        "--metadata-db",
+        help="Default metadata index database path.",
+    )
+    mcp_parser.add_argument(
+        "--table-db",
+        help="Default table structure index database path.",
     )
 
     install_parser = subparsers.add_parser("install-codex-integration", help="Install repo-local plugin and skill into the local Codex home via symlinks.")
@@ -137,7 +148,15 @@ def main() -> int:
     installer = CodexIntegrationInstaller()
     api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=getattr(args, "db", None))
     default_mcp_db = getattr(args, "db", None) or _discover_default_db(Path.cwd())
-    mcp_server = CodebaseMcpServer(indexer=indexer, qa=qa, answerer=answerer, default_db_path=default_mcp_db)
+    mcp_server = CodebaseMcpServer(
+        indexer=indexer, 
+        qa=qa, 
+        answerer=answerer, 
+        table_indexer=table_indexer,
+        default_db_path=default_mcp_db,
+        default_metadata_db_path=getattr(args, "metadata_db", None),
+        default_table_db_path=getattr(args, "table_db", None),
+    )
 
     if args.command == "serve-api":
         api.serve(host=args.host, port=args.port)
@@ -156,9 +175,15 @@ def main() -> int:
     elif args.command == "scan-dir":
         data = _scan_dir(parser_impl, Path(args.path), args.limit)
     elif args.command == "build-index":
-        data = indexer.build_index(args.path, args.db, resume_vectors=args.resume_vectors, index_type=args.index_type)
+        data = indexer.build_index(
+            args.path,
+            args.db,
+            resume_vectors=args.resume_vectors,
+            incremental=args.incremental,
+            index_type=args.index_type,
+        )
     elif args.command == "query-index":
-        data = indexer.query_index(args.db, args.query, limit=args.limit)
+        data = indexer.query_index(args.db, args.query, limit=args.limit, debug=args.debug)
     elif args.command == "build-table-index":
         data = table_indexer.build_index(
             source_root=args.path,
@@ -184,6 +209,7 @@ def main() -> int:
             limit=args.limit,
             context_window=args.context_window,
             related_limit=args.related_limit,
+            debug=args.debug,
         )
     elif args.command == "ask-codebase":
         data = qa.ask(
@@ -248,11 +274,7 @@ def _scan_dir(parser: UftDslParser, root: Path, limit: int) -> dict[str, object]
 
 
 def _discover_default_db(root: Path) -> str | None:
-    for filename in DEFAULT_DB_CANDIDATES:
-        candidate = root / "examples" / filename
-        if candidate.exists():
-            return str(candidate)
-    return None
+    return discover_default_db(root)
 
 
 def _parse_top_k(raw: str) -> tuple[int, ...]:

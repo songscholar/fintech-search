@@ -16,8 +16,21 @@ from .embeddings import (
     create_embedder_from_env,
     dot_similarity,
 )
+from .evidence import EvidenceService
+from .index_build import IndexBuildService
 from .models import CodeStatement, ParsedUnit
 from .parser import ASSIGN_RE, UftDslParser, is_supported_path
+from .retrieval import RetrievalService
+from .semantic_recovery import (
+    build_semantic_chunks,
+    collect_block_entities,
+    extract_sql_access_edges,
+    format_excerpt,
+    maybe_int,
+    recover_blocks,
+    summarize_block,
+    update_string_hints,
+)
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -373,6 +386,8 @@ FOCUS_EXCLUDED_QUERY_TERMS = (
 
 
 class SQLiteIndexer:
+    SCHEMA_SQL = SCHEMA_SQL
+
     def __init__(
         self,
         parser: UftDslParser | None = None,
@@ -381,141 +396,29 @@ class SQLiteIndexer:
         self.parser = parser or UftDslParser()
         self.embedder = embedder or create_embedder_from_env()
         self._vector_cache: dict[tuple[str, int, int, str, str], list[dict[str, object]]] = {}
+        self._index_build_service = IndexBuildService(self)
+        self._retrieval_service = RetrievalService(self)
+        self._evidence_service = EvidenceService(self)
 
-    def build_index(self, source_root: str | Path, db_path: str | Path, *, resume_vectors: bool = False, index_type: str = "all") -> dict[str, object]:
-        root = Path(source_root)
-        db_file = Path(db_path)
-        db_file.parent.mkdir(parents=True, exist_ok=True)
-
-        if resume_vectors:
-            return self.resume_chunk_vectors(root, db_file, index_type=index_type)
-
-        if db_file.exists():
-            db_file.unlink()
-
-        conn = sqlite3.connect(db_file)
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.executescript(SCHEMA_SQL)
-
-        def is_metadata_path(path: Path) -> bool:
-            """Check if a path is a metadata file."""
-            return "metadata" in str(path).lower() and path.suffix not in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface")
-
-        def is_code_path(path: Path) -> bool:
-            """Check if a path is a code file."""
-            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface") and "metadata" not in str(path).lower()
-
-        files = sorted(
-            path for path in root.rglob("*")
-            if path.is_file() and is_supported_path(path) and (
-                index_type == "all" or
-                (index_type == "metadata" and is_metadata_path(path)) or
-                (index_type == "code" and is_code_path(path))
-            ) and not any(excluded in str(path) for excluded in ["通用数据", "commondata", "tools"])
+    def build_index(
+        self,
+        source_root: str | Path,
+        db_path: str | Path,
+        *,
+        resume_vectors: bool = False,
+        incremental: bool = False,
+        index_type: str = "all",
+    ) -> dict[str, object]:
+        return self._index_build_service.build_index(
+            source_root,
+            db_path,
+            resume_vectors=resume_vectors,
+            incremental=incremental,
+            index_type=index_type,
         )
 
-        unit_kind_counter: Counter[str] = Counter()
-        prefix_counter: Counter[str] = Counter()
-        statement_counter: Counter[str] = Counter()
-        edge_counter: Counter[str] = Counter()
-        variable_ref_counter: Counter[str] = Counter()
-        action_counter: Counter[str] = Counter()
-        chunk_counter: Counter[str] = Counter()
-        vector_counter: Counter[str] = Counter()
-        block_counter: Counter[str] = Counter()
-        block_edge_counter: Counter[str] = Counter()
-        initial_embedder_info = self.embedder.info
-
-        try:
-            with conn:
-                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("source_root", str(root)))
-                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("file_count", str(len(files))))
-                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("schema_version", "7"))
-                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
-                conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
-                self._store_embedding_metadata(conn, initial_embedder_info)
-
-                for path in files:
-                    unit = self.parser.parse_path(path)
-                    file_id, procedure_id = self._insert_unit(conn, unit)
-
-                    unit_kind_counter[unit.unit_kind] += 1
-                    prefix_counter[unit.prefix] += 1
-
-                    for statement in unit.statements:
-                        statement_counter[statement.kind] += 1
-
-                    local_edges, local_var_refs, local_actions, local_chunks, local_vectors, local_blocks, local_block_edges = self._insert_statements(conn, file_id, procedure_id, unit)
-                    edge_counter.update(local_edges)
-                    variable_ref_counter.update(local_var_refs)
-                    action_counter.update(local_actions)
-                    chunk_counter.update(local_chunks)
-                    vector_counter.update(local_vectors)
-                    block_counter.update(local_blocks)
-                    block_edge_counter.update(local_block_edges)
-
-            vector_stats = self._populate_missing_chunk_vectors(conn)
-        finally:
-            conn.close()
-        self._vector_cache.clear()
-
-        db_summary = self.summarize_db(db_file)
-
-        return {
-            "source_root": str(root),
-            "db_path": str(db_file),
-            "index_type": index_type,
-            "file_count": int(db_summary["files"]),
-            "unit_kind_counts": db_summary["unit_kind_counts"],
-            "prefix_counts": db_summary["file_prefix_counts"],
-            "statement_counts": db_summary["statement_kind_counts"],
-            "edge_counts": db_summary["edge_type_counts"],
-            "variable_ref_counts": db_summary["variable_ref_type_counts"],
-            "action_counts": dict(action_counter),
-            "chunk_counts": db_summary["chunk_type_counts"],
-            "vector_counts": db_summary["vector_provider_counts"],
-            "block_counts": db_summary["block_type_counts"],
-            "block_edge_counts": db_summary["block_edge_type_counts"],
-            "fts_counts": db_summary["fts_counts"],
-            "vector_stats": vector_stats,
-            "embedding": {
-                "provider": db_summary["embedding"]["provider"],
-                "model": db_summary["embedding"]["model"],
-                "dimension": int(db_summary["embedding"]["dimension"] or 0),
-            },
-        }
-
     def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path, index_type: str = "all") -> dict[str, object]:
-        root = Path(source_root)
-        db_file = Path(db_path)
-        if not db_file.exists():
-            raise FileNotFoundError(f"Cannot resume vectors because database does not exist: {db_file}")
-
-        conn = sqlite3.connect(db_file)
-        conn.execute("PRAGMA foreign_keys=ON")
-        try:
-            self._validate_resume_source(conn, root)
-            vector_stats = self._populate_missing_chunk_vectors(conn)
-        finally:
-            conn.close()
-        self._vector_cache.clear()
-
-        db_summary = self.summarize_db(db_file)
-        return {
-            "source_root": str(root),
-            "db_path": str(db_file),
-            "resume_vectors": True,
-            "index_type": index_type,
-            "file_count": int(db_summary["files"]),
-            "chunk_counts": db_summary["chunk_type_counts"],
-            "vector_counts": db_summary["vector_provider_counts"],
-            "vector_stats": vector_stats,
-            "embedding": {
-                "provider": db_summary["embedding"]["provider"],
-                "model": db_summary["embedding"]["model"],
-                "dimension": int(db_summary["embedding"]["dimension"] or 0),
-            },
-        }
+        return self._index_build_service.resume_chunk_vectors(source_root, db_path, index_type=index_type)
 
     def summarize_db(self, db_path: str | Path) -> dict[str, object]:
         conn = sqlite3.connect(db_path)
@@ -630,32 +533,14 @@ class SQLiteIndexer:
             return None
         return str(row[0])
 
-    def query_index(self, db_path: str | Path, query: str, limit: int = 20) -> dict[str, object]:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        candidates, fts_query, vector_status = self._retrieve_candidates(
-            conn,
-            db_path=db_path,
-            query=query,
-            candidate_limit=max(limit * 6, 30),
-        )
-        conn.close()
+    def _build_fts_query(self, query: str) -> str | None:
+        return _build_fts_query(query)
 
-        hits = [
-            _public_hit(candidate, rank=index)
-            for index, candidate in enumerate(candidates[:limit], start=1)
-        ]
+    def _merge_candidate(self, store: dict[tuple[object, ...], dict[str, object]], candidate: dict[str, object]) -> None:
+        _merge_candidate(store, candidate)
 
-        return {
-            "db_path": str(db_path),
-            "query": query,
-            "fts_query": fts_query,
-            "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank",
-            "vector_status": vector_status,
-            "candidate_count": len(candidates),
-            "hit_count": len(hits),
-            "hits": hits,
-        }
+    def query_index(self, db_path: str | Path, query: str, limit: int = 20, *, debug: bool = False) -> dict[str, object]:
+        return self._retrieval_service.query_index(db_path, query, limit=limit, debug=debug)
 
     def assemble_evidence(
         self,
@@ -664,101 +549,17 @@ class SQLiteIndexer:
         limit: int = 6,
         context_window: int = 2,
         related_limit: int = 3,
+        *,
+        debug: bool = False,
     ) -> dict[str, object]:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        candidates, fts_query, vector_status = self._retrieve_candidates(
-            conn,
-            db_path=db_path,
-            query=query,
-            candidate_limit=max(limit * 8, 40),
+        return self._evidence_service.assemble_evidence(
+            db_path,
+            query,
+            limit=limit,
+            context_window=context_window,
+            related_limit=related_limit,
+            debug=debug,
         )
-
-        evidence_blocks: list[dict[str, object]] = []
-        seen_contexts: set[tuple[int, int, int]] = set()
-        procedure_counts: defaultdict[int, int] = defaultdict(int)
-
-        for rank, candidate in enumerate(candidates, start=1):
-            procedure_id = int(candidate["procedure_id"])
-            if procedure_counts[procedure_id] >= 2:
-                continue
-
-            if candidate["hit_type"] == "chunk":
-                context = self._fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
-            elif candidate["hit_type"] == "block":
-                context = self._fetch_block_context(conn, block_id=int(candidate["entity_id"]))
-            else:
-                context = self._fetch_context_block(
-                    conn,
-                    procedure_id=procedure_id,
-                    statement_id=_maybe_int(candidate.get("statement_id")),
-                    context_window=context_window,
-                )
-            context_key = (
-                procedure_id,
-                int(context["line_start"]),
-                int(context["line_end"]),
-            )
-            if context_key in seen_contexts:
-                continue
-
-            seen_contexts.add(context_key)
-            procedure_counts[procedure_id] += 1
-
-            evidence_blocks.append(
-                {
-                    "rank": rank,
-                    "score": round(float(candidate["score"]), 3),
-                    "hit_type": candidate["hit_type"],
-                    "retrieval_source": candidate["retrieval_source"],
-                    "match_source": candidate["match_source"],
-                    "procedure_name": candidate["procedure_name"],
-                    "chinese_name": candidate.get("chinese_name"),
-                    "object_id": candidate.get("object_id"),
-                    "file_path": candidate["file_path"],
-                    "matched_text": candidate["matched_text"],
-                    "reasons": list(candidate["reasons"]),
-                    "chunk_type": context.get("chunk_type"),
-                    "chunk_summary": context.get("summary_text"),
-                    "block_type": context.get("block_type"),
-                    "block_summary": context.get("block_summary"),
-                    "line_start": context["line_start"],
-                    "line_end": context["line_end"],
-                    "excerpt": context["excerpt"],
-                    "context_statements": context["statements"],
-                    "recovered_blocks": self._fetch_covering_blocks(
-                        conn,
-                        procedure_id=procedure_id,
-                        line_start=int(context["line_start"]),
-                        line_end=int(context["line_end"]),
-                        limit=3,
-                    ),
-                    "related_context": self._fetch_related_context(
-                        conn,
-                        procedure_id=procedure_id,
-                        procedure_name=str(candidate["procedure_name"]),
-                        related_limit=related_limit,
-                    ),
-                }
-            )
-
-            if len(evidence_blocks) >= limit:
-                break
-
-        llm_context = self._build_llm_context(query, evidence_blocks)
-        conn.close()
-
-        return {
-            "db_path": str(db_path),
-            "query": query,
-            "fts_query": fts_query,
-            "retrieval_strategy": "fts(block/chunk/procedure/action/statement/edge) + vector(if compatible) + sql fallback + python rerank + evidence assembly",
-            "vector_status": vector_status,
-            "candidate_count": len(candidates),
-            "evidence_count": len(evidence_blocks),
-            "evidence": evidence_blocks,
-            "llm_context": llm_context,
-        }
 
     def _insert_unit(self, conn: sqlite3.Connection, unit: ParsedUnit) -> tuple[int, int]:
         attributes_json = _json(unit.attributes)
@@ -913,7 +714,7 @@ class SQLiteIndexer:
                 string_hints=string_hints,
             )
             action_counter.update(inserted_actions)
-            _update_string_hints(string_hints, statement)
+            update_string_hints(string_hints, statement)
 
         local_chunks, local_vectors = self._insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit)
         chunk_counter.update(local_chunks)
@@ -940,7 +741,7 @@ class SQLiteIndexer:
     ) -> tuple[Counter[str], Counter[str]]:
         counter: Counter[str] = Counter()
         vector_counter: Counter[str] = Counter()
-        semantic_chunks = _build_semantic_chunks(unit.name, unit.statements)
+        semantic_chunks = build_semantic_chunks(unit.name, unit.statements)
         if not semantic_chunks:
             return counter, vector_counter
 
@@ -1121,7 +922,7 @@ class SQLiteIndexer:
     ) -> tuple[Counter[str], Counter[str]]:
         block_counter: Counter[str] = Counter()
         block_edge_counter: Counter[str] = Counter()
-        recovered_blocks = _recover_blocks(unit.statements)
+        recovered_blocks = recover_blocks(unit.statements)
 
         for seq, block in enumerate(recovered_blocks, start=1):
             statements = unit.statements[block["statement_start_seq"] - 1 : block["statement_end_seq"]]
@@ -1136,8 +937,8 @@ class SQLiteIndexer:
                 }
                 for offset, statement in enumerate(statements)
             ]
-            action_names, target_names, variable_names = _collect_block_entities(statements)
-            summary_text = _summarize_block(
+            action_names, target_names, variable_names = collect_block_entities(statements)
+            summary_text = summarize_block(
                 procedure_name=unit.name,
                 block_type=str(block["block_type"]),
                 anchor_name=str(block["anchor_name"]),
@@ -1145,7 +946,7 @@ class SQLiteIndexer:
                 action_names=action_names,
                 target_names=target_names,
             )
-            excerpt = _format_excerpt(statement_rows)
+            excerpt = format_excerpt(statement_rows)
             table_names = self._fetch_block_table_names(
                 conn,
                 procedure_id=procedure_id,
@@ -1465,7 +1266,7 @@ class SQLiteIndexer:
                 )
                 edge_counter[edge_type] += 1
 
-            for sql_edge in _extract_sql_access_edges(statement, string_hints):
+            for sql_edge in extract_sql_access_edges(statement, string_hints):
                 self._insert_edge(
                     conn,
                     file_id=file_id,
@@ -2637,7 +2438,7 @@ class SQLiteIndexer:
             "line_start": line_start,
             "line_end": line_end,
             "statements": statements,
-            "excerpt": _format_excerpt(statements),
+            "excerpt": format_excerpt(statements),
         }
 
     def _fetch_chunk_block(
@@ -2695,7 +2496,7 @@ class SQLiteIndexer:
             "line_start": int(chunk_row["line_start"]),
             "line_end": int(chunk_row["line_end"]),
             "statements": statements,
-            "excerpt": _format_excerpt(statements),
+            "excerpt": format_excerpt(statements),
         }
 
     def _fetch_block_context(
@@ -2753,7 +2554,7 @@ class SQLiteIndexer:
             "line_start": int(block_row["line_start"]),
             "line_end": int(block_row["line_end"]),
             "statements": statements,
-            "excerpt": _format_excerpt(statements),
+            "excerpt": format_excerpt(statements),
         }
 
     def _fetch_covering_blocks(

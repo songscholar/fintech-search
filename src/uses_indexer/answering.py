@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .answer_strategy import AdaptiveAnswerStrategy
 from .llm import LlmConfigError, LlmRequestError, OpenAICompatibleLlm
 from .qa import CodebaseQA
 
@@ -11,9 +12,11 @@ class CodebaseAnswerer:
         self,
         qa: CodebaseQA | None = None,
         llm: OpenAICompatibleLlm | None = None,
+        strategy: AdaptiveAnswerStrategy | None = None,
     ) -> None:
         self.qa = qa or CodebaseQA()
         self.llm = llm or OpenAICompatibleLlm.from_env()
+        self.strategy = strategy or AdaptiveAnswerStrategy()
 
     def answer(
         self,
@@ -33,7 +36,8 @@ class CodebaseAnswerer:
             related_limit=related_limit,
         )
 
-        prompt_package = qa_bundle["prompt_package"]
+        prompt_package = self.strategy.build_prompt_package(qa_bundle)
+        qa_bundle["prompt_package"] = prompt_package
         llm_enabled = self.llm.is_configured()
 
         if llm_enabled:

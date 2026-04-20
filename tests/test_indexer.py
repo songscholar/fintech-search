@@ -692,3 +692,53 @@ def test_assemble_evidence_surfaces_exception_blocks_for_failure_query(tmp_path:
     block_types = {item["block_type"] for item in failure_block["recovered_blocks"]}
     assert "failure_handler" in block_types or failure_block.get("block_type") == "failure_handler"
     assert "exception_handler" in block_types or "when_others_handler" in block_types
+
+
+def test_query_index_debug_includes_retrieval_trace(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "AF_DEEP 被谁调用", limit=5, debug=True)
+
+    debug = result["debug"]
+    assert "query_analysis" in debug
+    assert "retrieval_contributions" in debug
+    assert "rerank_preview" in debug
+    assert "call_chain" in debug["query_analysis"]["intents"]
+
+
+def test_assemble_evidence_debug_includes_pruning_trace(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.assemble_evidence(db_path, "证券代码获取的逻辑在哪里", limit=1, context_window=1, related_limit=2, debug=True)
+
+    assert "debug" in result
+    assert "retrieval" in result["debug"]
+    assert "evidence_pruning" in result["debug"]
+
+
+def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "incremental.db"
+    indexer = SQLiteIndexer()
+
+    initial = indexer.build_index(source_dir, db_path, index_type="code")
+    assert initial["file_count"] == 3
+
+    new_source = source_dir / "LF_NEW.uftfunction"
+    new_source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LF_测试_增量" objectId="4">
+  <code><![CDATA[
+  [AF_SAMPLE][][]
+  ]]></code>
+</business:Function>
+""",
+        encoding="utf-8",
+    )
+
+    updated = indexer.build_index(source_dir, db_path, incremental=True, index_type="code")
+
+    assert updated["incremental"] is True
+    assert str(new_source) in updated["incremental_changes"]["added"]
+    summary = indexer.summarize_db(db_path)
+    assert summary["files"] == 4

@@ -76,7 +76,7 @@ class CodebaseApi:
             db_path = self._resolve_db_path(payload.get("db_path"))
             query = self._require_string(payload, "query")
             limit = _coerce_int(payload.get("limit", 20), "limit")
-            return HTTPStatus.OK, self.indexer.query_index(db_path, query, limit=limit)
+            return HTTPStatus.OK, self.indexer.query_index(db_path, query, limit=limit, debug=bool(payload.get("debug", False)))
 
         if route == "/evidence" and method == "POST":
             payload = self._parse_json_body(body)
@@ -91,6 +91,7 @@ class CodebaseApi:
                 limit=limit,
                 context_window=context_window,
                 related_limit=related_limit,
+                debug=bool(payload.get("debug", False)),
             )
 
         if route == "/ask" and method == "POST":

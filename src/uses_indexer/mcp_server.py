@@ -8,6 +8,7 @@ from typing import Any, TextIO
 from .answering import CodebaseAnswerer
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
+from .table_indexer import TableIndexer
 
 JSON_RPC_VERSION = "2.0"
 MCP_PROTOCOL_VERSION = "2025-11-25"
@@ -28,12 +29,18 @@ class CodebaseMcpServer:
         indexer: SQLiteIndexer | None = None,
         qa: CodebaseQA | None = None,
         answerer: CodebaseAnswerer | None = None,
+        table_indexer: TableIndexer | None = None,
         default_db_path: str | Path | None = None,
+        default_metadata_db_path: str | Path | None = None,
+        default_table_db_path: str | Path | None = None,
     ) -> None:
         self.indexer = indexer or SQLiteIndexer()
         self.qa = qa or CodebaseQA(self.indexer)
         self.answerer = answerer or CodebaseAnswerer(self.qa)
+        self.table_indexer = table_indexer or TableIndexer()
         self.default_db_path = str(default_db_path) if default_db_path else None
+        self.default_metadata_db_path = str(default_metadata_db_path) if default_metadata_db_path else None
+        self.default_table_db_path = str(default_table_db_path) if default_table_db_path else None
         self._initialized = False
 
     def serve(
@@ -161,6 +168,8 @@ class CodebaseMcpServer:
             "assemble_evidence": self._tool_assemble_evidence,
             "ask_codebase": self._tool_ask_codebase,
             "answer_codebase": self._tool_answer_codebase,
+            "query_metadata": self._tool_query_metadata,
+            "query_table": self._tool_query_table,
         }
 
         handler = tool_map.get(name)
@@ -219,6 +228,7 @@ class CodebaseMcpServer:
                         "db_path": {"type": "string"},
                         "query": {"type": "string"},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                        "debug": {"type": "boolean"},
                     },
                     "required": ["query"],
                     "additionalProperties": False,
@@ -235,6 +245,7 @@ class CodebaseMcpServer:
                         "limit": {"type": "integer", "minimum": 1, "maximum": 20},
                         "context_window": {"type": "integer", "minimum": 0, "maximum": 20},
                         "related_limit": {"type": "integer", "minimum": 0, "maximum": 20},
+                        "debug": {"type": "boolean"},
                     },
                     "required": ["query"],
                     "additionalProperties": False,
@@ -273,7 +284,73 @@ class CodebaseMcpServer:
                     "additionalProperties": False,
                 },
             },
+            {
+                "name": "query_metadata",
+                "description": "Query metadata index (constants, configs, error numbers, etc.) for USES/UFT codebase.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "db_path": {"type": "string"},
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "query_table",
+                "description": "Query table structure index for USES/UFT codebase.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "db_path": {"type": "string"},
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            },
         ]
+
+    def _resolve_metadata_db_path(self, arguments: dict[str, object]) -> str:
+        db_path = self._optional_string(arguments, "db_path")
+        if not db_path:
+            db_path = self._optional_string(arguments, "metadata_db_path")
+        if not db_path:
+            db_path = self.default_metadata_db_path
+        if not db_path:
+            raise McpProtocolError(-32602, "Invalid params", {"detail": "db_path is required for metadata query when no default is configured."})
+        db_file = Path(db_path)
+        if not db_file.exists():
+            raise McpProtocolError(-32602, "Invalid params", {"detail": f"SQLite database does not exist: {db_file}"})
+        return str(db_file)
+
+    def _resolve_table_db_path(self, arguments: dict[str, object]) -> str:
+        db_path = self._optional_string(arguments, "db_path")
+        if not db_path:
+            db_path = self._optional_string(arguments, "table_db_path")
+        if not db_path:
+            db_path = self.default_table_db_path
+        if not db_path:
+            raise McpProtocolError(-32602, "Invalid params", {"detail": "db_path is required for table query when no default is configured."})
+        db_file = Path(db_path)
+        if not db_file.exists():
+            raise McpProtocolError(-32602, "Invalid params", {"detail": f"SQLite database does not exist: {db_file}"})
+        return str(db_file)
+
+    def _tool_query_metadata(self, arguments: dict[str, object]) -> dict[str, object]:
+        db_path = self._resolve_metadata_db_path(arguments)
+        query = self._required_string(arguments, "query")
+        limit = self._optional_int(arguments, "limit", default=10)
+        return self.indexer.query_index(db_path, query, limit=limit)
+
+    def _tool_query_table(self, arguments: dict[str, object]) -> dict[str, object]:
+        db_path = self._resolve_table_db_path(arguments)
+        query = self._required_string(arguments, "query")
+        limit = self._optional_int(arguments, "limit", default=10)
+        return self.table_indexer.query_index(db_path, query, limit=limit)
 
     def _tool_db_summary(self, arguments: dict[str, object]) -> dict[str, object]:
         db_path = self._resolve_db_path(arguments)
@@ -283,7 +360,8 @@ class CodebaseMcpServer:
         db_path = self._resolve_db_path(arguments)
         query = self._required_string(arguments, "query")
         limit = self._optional_int(arguments, "limit", default=10)
-        return self.indexer.query_index(db_path, query, limit=limit)
+        debug = self._optional_bool(arguments, "debug", default=False)
+        return self.indexer.query_index(db_path, query, limit=limit, debug=debug)
 
     def _tool_assemble_evidence(self, arguments: dict[str, object]) -> dict[str, object]:
         db_path = self._resolve_db_path(arguments)
@@ -291,12 +369,14 @@ class CodebaseMcpServer:
         limit = self._optional_int(arguments, "limit", default=6)
         context_window = self._optional_int(arguments, "context_window", default=2)
         related_limit = self._optional_int(arguments, "related_limit", default=3)
+        debug = self._optional_bool(arguments, "debug", default=False)
         return self.indexer.assemble_evidence(
             db_path,
             query,
             limit=limit,
             context_window=context_window,
             related_limit=related_limit,
+            debug=debug,
         )
 
     def _tool_ask_codebase(self, arguments: dict[str, object]) -> dict[str, object]:
