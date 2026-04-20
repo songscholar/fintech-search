@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
 from .observability import build_incremental_trace
 from .parser import is_supported_path
+from .semantic_recovery import build_semantic_chunks, recover_blocks
 
 
 if TYPE_CHECKING:
@@ -383,11 +384,32 @@ class IndexBuildService:
     ) -> list[dict[str, object]]:
         affected_units: list[dict[str, object]] = []
         for path in added_paths:
-            affected_units.append({"change_type": "added", **self._describe_source_unit(Path(path))})
+            estimated_scope = self._estimate_source_scope(Path(path))
+            affected_units.append(
+                {
+                    "change_type": "added",
+                    **self._describe_source_unit(Path(path)),
+                    "rebuild_targets": self._scope_to_rebuild_targets(estimated_scope),
+                }
+            )
         for path in changed_paths:
-            affected_units.append({"change_type": "changed", **self._describe_indexed_unit(conn, path)})
+            estimated_scope = self._estimate_source_scope(Path(path))
+            affected_units.append(
+                {
+                    "change_type": "changed",
+                    **self._describe_indexed_unit(conn, path),
+                    "rebuild_targets": self._scope_to_rebuild_targets(estimated_scope),
+                }
+            )
         for path in removed_paths:
-            affected_units.append({"change_type": "removed", **self._describe_indexed_unit(conn, path)})
+            indexed_scope = self._describe_index_scope(conn, path)
+            affected_units.append(
+                {
+                    "change_type": "removed",
+                    **self._describe_indexed_unit(conn, path),
+                    "rebuild_targets": self._scope_to_rebuild_targets(indexed_scope),
+                }
+            )
 
         affected_units.sort(
             key=lambda item: (
@@ -407,6 +429,22 @@ class IndexBuildService:
             "prefix": unit.prefix,
             "chinese_name": unit.chinese_name,
             "object_id": unit.object_id,
+        }
+
+    def _estimate_source_scope(self, path: Path) -> dict[str, object]:
+        unit = self.owner.parser.parse_path(path)
+        action_count = sum(1 for statement in unit.statements if statement.kind == "action")
+        estimated_chunks = build_semantic_chunks(unit.name, unit.statements)
+        estimated_blocks = recover_blocks(unit.statements)
+        return {
+            "file_path": str(path),
+            "procedure_name": unit.name,
+            "statement_count": len(unit.statements),
+            "action_count": action_count,
+            "chunk_count": len(estimated_chunks),
+            "block_count": len(estimated_blocks),
+            "edge_count": 0,
+            "vector_target_count": len(estimated_chunks),
         }
 
     def _describe_indexed_unit(self, conn: sqlite3.Connection, path: str) -> dict[str, object]:
@@ -471,10 +509,24 @@ class IndexBuildService:
             "chunk_count": int(row[2]) if row and row[2] is not None else 0,
             "block_count": int(row[3]) if row and row[3] is not None else 0,
             "edge_count": int(row[4]) if row and row[4] is not None else 0,
+            "vector_target_count": int(row[2]) if row and row[2] is not None else 0,
         }
         return {
             **unit,
             **counts,
+        }
+
+    def _scope_to_rebuild_targets(self, scope: dict[str, object]) -> dict[str, int]:
+        return {
+            "procedure_count": 1 if scope.get("procedure_name") else 0,
+            "statement_count": int(scope.get("statement_count") or 0),
+            "chunk_count": int(scope.get("chunk_count") or 0),
+            "block_count": int(scope.get("block_count") or 0),
+            "vector_target_count": int(
+                scope.get("vector_target_count")
+                or scope.get("chunk_count")
+                or 0
+            ),
         }
 
     def _build_rebuild_scope_report(
@@ -495,6 +547,7 @@ class IndexBuildService:
                     "change_type": "added",
                     "file_path": path,
                     "procedure_name": current.get("procedure_name"),
+                    "rebuild_targets": self._scope_to_rebuild_targets(current),
                     "before": None,
                     "after": current,
                 }
@@ -508,6 +561,7 @@ class IndexBuildService:
                     "change_type": "changed",
                     "file_path": path,
                     "procedure_name": after.get("procedure_name") or before.get("procedure_name"),
+                    "rebuild_targets": self._scope_to_rebuild_targets(after or before),
                     "before": before,
                     "after": after,
                 }
@@ -520,6 +574,7 @@ class IndexBuildService:
                     "change_type": "removed",
                     "file_path": path,
                     "procedure_name": before.get("procedure_name"),
+                    "rebuild_targets": self._scope_to_rebuild_targets(before),
                     "before": before,
                     "after": None,
                 }
@@ -539,6 +594,19 @@ class IndexBuildService:
             "after_statement_count": sum(int((item.get("after") or {}).get("statement_count") or 0) for item in items),
             "after_chunk_count": sum(int((item.get("after") or {}).get("chunk_count") or 0) for item in items),
             "after_block_count": sum(int((item.get("after") or {}).get("block_count") or 0) for item in items),
+            "after_vector_target_count": sum(int((item.get("after") or {}).get("vector_target_count") or 0) for item in items),
+            "rebuild_target_statement_count": sum(
+                int(((item.get("after") or item.get("before") or {}).get("statement_count") or 0))
+                for item in items
+            ),
+            "rebuild_target_chunk_count": sum(
+                int(((item.get("after") or item.get("before") or {}).get("chunk_count") or 0))
+                for item in items
+            ),
+            "rebuild_target_block_count": sum(
+                int(((item.get("after") or item.get("before") or {}).get("block_count") or 0))
+                for item in items
+            ),
         }
         return {
             "summary": summary,

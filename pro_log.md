@@ -675,6 +675,49 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 文档入口现在已经不再只靠 README 承担
 - 新用户、继续开发的人、排障的人都可以直接进入对应路径
 
+## [1.1.8] - 2026-04-20
+
+### Step 8: 细化增量建库重建目标
+
+### 本步目标
+
+- 让增量建库输出不只告诉我们“哪个 unit 受影响”
+- 还直接告诉我们“这次预计要重建多少 statement / chunk / block / vector target”
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 为 `added / changed` 文件增加源码侧 scope 估算
+   - 为 `removed` 文件复用索引侧 scope 统计
+   - 在 `incremental_impact.affected_units` 中新增：
+     - `rebuild_targets`
+   - 在 `incremental_scope.items` 中也补齐：
+     - `rebuild_targets`
+   - 在 `incremental_scope.summary` 中新增：
+     - `rebuild_target_statement_count`
+     - `rebuild_target_chunk_count`
+     - `rebuild_target_block_count`
+     - `after_vector_target_count`
+
+2. 更新 `src/uses_indexer/observability.py`
+   - 在 `incremental_trace.trace.summary` 中增加重建目标统计字段
+
+3. 更新测试
+   - 校验 `affected_units[].rebuild_targets`
+   - 校验 `incremental_scope.summary`
+   - 校验 `incremental_trace.trace.summary`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py src/uses_indexer/observability.py tests/test_indexer.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py::test_build_index_supports_incremental_updates tests/test_indexer.py::test_query_index_debug_includes_retrieval_trace tests/test_indexer.py::test_assemble_evidence_debug_includes_pruning_trace` 通过
+- 结果：`3 passed`
+
+### 结论
+
+- 增量建库现在已经能回答“本次改动大概要重建多少内容”
+- 这为后面继续往 procedure / chunk / block 级局部重建推进打下了更直接的基础
+
 ## [1.2.1] - 2026-04-20
 
 ### Step 8: 增强检索质量评测与趋势统计

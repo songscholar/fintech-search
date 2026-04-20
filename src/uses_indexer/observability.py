@@ -198,6 +198,9 @@ def build_incremental_trace(
             "summary": {
                 "reindexed_count": len(reindexed_paths),
                 "affected_unit_count": len(affected_units),
+                "rebuild_target_statement_count": int(((rebuild_scope or {}).get("summary") or {}).get("rebuild_target_statement_count") or 0),
+                "rebuild_target_chunk_count": int(((rebuild_scope or {}).get("summary") or {}).get("rebuild_target_chunk_count") or 0),
+                "rebuild_target_block_count": int(((rebuild_scope or {}).get("summary") or {}).get("rebuild_target_block_count") or 0),
                 "after_chunk_count": int(((rebuild_scope or {}).get("summary") or {}).get("after_chunk_count") or 0),
                 "after_block_count": int(((rebuild_scope or {}).get("summary") or {}).get("after_block_count") or 0),
             },
