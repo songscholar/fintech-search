@@ -467,3 +467,52 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - debug 输出已经不只是“能看”，而是开始具备稳定消费的基础
 - 后续不论是命令行排障、HTTP 接口接入，还是 MCP 诊断，都可以围绕统一 trace schema 展开
+
+## [1.1.3] - 2026-04-20
+
+### Step 3: 增强增量建库影响范围与变更报告
+
+### 本步目标
+
+- 让增量建库不仅返回文件级变更，还返回受影响的业务对象信息
+- 帮助定位“这次增量到底动了哪些 procedure / unit”
+- 为后续更细粒度的增量分析铺路
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 为增量建库新增 `incremental_impact`
+   - 引入：
+     - `_build_incremental_impact_report`
+     - `_describe_source_unit`
+     - `_describe_indexed_unit`
+   - 现在对 `added / changed / removed` 三类文件，会生成对应的受影响 unit 描述
+   - 影响信息包括：
+     - `change_type`
+     - `file_path`
+     - `procedure_name`
+     - `unit_kind`
+     - `prefix`
+     - `chinese_name`
+     - `object_id`
+
+2. 更新 `src/uses_indexer/observability.py`
+   - 在 `incremental_trace.trace` 下新增 `impact`
+   - 提供：
+     - `affected_unit_count`
+     - `affected_units`
+
+3. 更新测试
+   - 校验 `incremental_impact`
+   - 校验 `incremental_trace.trace.impact`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py src/uses_indexer/observability.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py::test_build_index_supports_incremental_updates tests/test_indexer.py::test_query_index_debug_includes_retrieval_trace tests/test_indexer.py::test_assemble_evidence_debug_includes_pruning_trace` 通过
+- 结果：`3 passed`
+
+### 结论
+
+- 增量建库的调试视角已经从“文件级别”提升到“业务对象级别”
+- 后续如果继续做更细粒度的局部重建，这一步会是非常关键的基础

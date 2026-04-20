@@ -131,6 +131,7 @@ def build_incremental_trace(
     added_paths: list[str],
     changed_paths: list[str],
     removed_paths: list[str],
+    affected_units: list[dict[str, object]],
     vector_stats: dict[str, object],
 ) -> dict[str, object]:
     reindexed_paths = sorted([*added_paths, *changed_paths])
@@ -153,6 +154,10 @@ def build_incremental_trace(
                 "changed": changed_paths,
                 "removed": removed_paths,
                 "reindexed": reindexed_paths,
+            },
+            "impact": {
+                "affected_unit_count": len(affected_units),
+                "affected_units": affected_units,
             },
             "vector_stats": vector_stats,
         },

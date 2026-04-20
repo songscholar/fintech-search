@@ -127,6 +127,12 @@ class IndexBuildService:
             )
 
             changed_files = [Path(path) for path in [*added_paths, *changed_paths]]
+            affected_units = self._build_incremental_impact_report(
+                conn,
+                added_paths=added_paths,
+                changed_paths=changed_paths,
+                removed_paths=removed_paths,
+            )
 
             with conn:
                 for path in [*removed_paths, *changed_paths]:
@@ -158,8 +164,13 @@ class IndexBuildService:
                 added_paths=added_paths,
                 changed_paths=changed_paths,
                 removed_paths=removed_paths,
+                affected_units=affected_units,
                 vector_stats=vector_stats,
             )
+            payload["incremental_impact"] = {
+                "affected_unit_count": len(affected_units),
+                "affected_units": affected_units,
+            }
             return payload
         finally:
             conn.close()
@@ -340,6 +351,77 @@ class IndexBuildService:
             f"DELETE FROM {table} WHERE rowid IN ({placeholders})",
             row_ids,
         )
+
+    def _build_incremental_impact_report(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        added_paths: list[str],
+        changed_paths: list[str],
+        removed_paths: list[str],
+    ) -> list[dict[str, object]]:
+        affected_units: list[dict[str, object]] = []
+        for path in added_paths:
+            affected_units.append({"change_type": "added", **self._describe_source_unit(Path(path))})
+        for path in changed_paths:
+            affected_units.append({"change_type": "changed", **self._describe_indexed_unit(conn, path)})
+        for path in removed_paths:
+            affected_units.append({"change_type": "removed", **self._describe_indexed_unit(conn, path)})
+
+        affected_units.sort(
+            key=lambda item: (
+                str(item.get("change_type") or ""),
+                str(item.get("procedure_name") or ""),
+                str(item.get("file_path") or ""),
+            )
+        )
+        return affected_units
+
+    def _describe_source_unit(self, path: Path) -> dict[str, object]:
+        unit = self.owner.parser.parse_path(path)
+        return {
+            "file_path": str(path),
+            "procedure_name": unit.name,
+            "unit_kind": unit.unit_kind,
+            "prefix": unit.prefix,
+            "chinese_name": unit.chinese_name,
+            "object_id": unit.object_id,
+        }
+
+    def _describe_indexed_unit(self, conn: sqlite3.Connection, path: str) -> dict[str, object]:
+        row = conn.execute(
+            """
+            SELECT
+              f.path,
+              f.unit_kind,
+              f.prefix,
+              p.name,
+              p.chinese_name,
+              p.object_id
+            FROM files f
+            JOIN procedures p ON p.file_id = f.id
+            WHERE f.path = ?
+            LIMIT 1
+            """,
+            (path,),
+        ).fetchone()
+        if row is None:
+            return {
+                "file_path": path,
+                "procedure_name": None,
+                "unit_kind": None,
+                "prefix": None,
+                "chinese_name": None,
+                "object_id": None,
+            }
+        return {
+            "file_path": str(row[0]),
+            "unit_kind": str(row[1]) if row[1] is not None else None,
+            "prefix": str(row[2]) if row[2] is not None else None,
+            "procedure_name": str(row[3]) if row[3] is not None else None,
+            "chinese_name": str(row[4]) if row[4] is not None else None,
+            "object_id": str(row[5]) if row[5] is not None else None,
+        }
 
     def _build_summary_payload(
         self,
