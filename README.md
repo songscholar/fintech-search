@@ -17,6 +17,9 @@
 相关文档：
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：看整体分层、数据流和问答链路
+- [docs/NEWCOMER_GUIDE.md](docs/NEWCOMER_GUIDE.md)：第一次接触仓库时先看这里
+- [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)：继续开发时优先看这里
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)：结果不对、建库异常时优先看这里
 - [docs/INDEX_BOUNDARIES.md](docs/INDEX_BOUNDARIES.md)：看代码索引 / 元数据索引 / 全量索引 / 表结构索引的边界
 - [docs/CALL_SEMANTICS.md](docs/CALL_SEMANTICS.md)：看 `LS/LF/AF` 之间的本地调用与 RPC 调用语义规则
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：看怎么本地部署、怎么接 HTTP/MCP/Codex
@@ -43,9 +46,10 @@ flowchart LR
 
 如果你第一次接触这个仓库，建议按下面顺序理解：
 
-1. 先看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 里的总览图和端到端调用链
-2. 再看 [docs/INDEX_SCHEMA.md](docs/INDEX_SCHEMA.md) 理解 SQLite 里到底存了什么
-3. 最后用 README 里的 `query-index / assemble-evidence / answer-codebase` 跑一遍真实问题
+1. 先看 [docs/NEWCOMER_GUIDE.md](docs/NEWCOMER_GUIDE.md)
+2. 再看 [docs/USAGE.md](docs/USAGE.md) 跑一遍真实问题
+3. 再看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 理解端到端调用链
+4. 如果要继续改代码，再看 [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
 
 ## 当前已实现
 
