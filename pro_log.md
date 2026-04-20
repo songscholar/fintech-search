@@ -375,3 +375,50 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   - 检索质量未出现回退
   - 证据组装行为保持稳定
   - 模块边界更加清晰，后续继续拆分的风险更可控
+
+## [1.1.1] - 2026-04-20
+
+### Step 1: 继续拆分 `indexer.py` 的写库/建库 helper
+
+### 本步目标
+
+- 将 `indexer.py` 中剩余的大块写库逻辑继续下沉
+- 保持外部方法名和行为不变，先做“服务委托”式拆分
+- 继续降低 `SQLiteIndexer` 作为“上帝对象”的复杂度
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/index_write.py`
+   - 新增 `IndexWriteService`
+   - 负责承接以下写库/建库相关逻辑：
+     - `insert_unit`
+     - `insert_statements`
+     - `insert_chunks`
+     - `populate_missing_chunk_vectors`
+     - `insert_blocks`
+     - `insert_variable_refs`
+     - `insert_action_and_edges`
+     - `insert_edge`
+     - block 内部辅助查询
+
+2. `src/uses_indexer/indexer.py`
+   - 新增 `_index_write_service` 成员
+   - 为 `_json / _maybe_int / _paths_match / _embedder_batch_size / _derive_target / _metadata_edges_for_statement / _classify_call_semantics / _classify_mc_publish` 增加薄包装方法，供写库服务复用
+   - 将原有写库/建库相关方法改为委托到 `IndexWriteService`
+
+### 效果
+
+- `indexer.py` 从约 `3157` 行进一步压缩到约 `2502` 行
+- 写库层职责边界比之前清晰很多
+- 后续如果继续拆 `index_build` / persistence / semantic rules，会更容易推进
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_write.py src/uses_indexer/indexer.py src/uses_indexer/index_build.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py` 通过
+- 结果：`41 passed`
+
+### 结论
+
+- 这是一次纯结构性重构，没有主动修改检索策略
+- 测试结果表明行为稳定，没有引入回归
