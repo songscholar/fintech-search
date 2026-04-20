@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections import Counter, defaultdict
-from heapq import nlargest
+from collections import Counter
 from pathlib import Path
 
 from .constants import (
@@ -14,32 +13,18 @@ from .constants import (
 )
 from .embeddings import (
     Embedder,
-    EmbeddingConfigError,
-    EmbeddingInfo,
-    EmbeddingRequestError,
     create_embedder_from_env,
-    dot_similarity,
 )
 from .context_fetch import ContextFetchService
 from .evidence import EvidenceService
 from .index_build import IndexBuildService
-from .index_utils import (
-    embedder_batch_size,
-    json_dumps,
-    json_loads_object,
-    maybe_int,
-    paths_match,
-)
+from .index_utils import json_loads_object
 from .index_write import IndexWriteService
-from .models import CodeStatement, ParsedUnit
-from .parser import ASSIGN_RE, UftDslParser, is_supported_path
+from .parser import UftDslParser
 from .retrieval import RetrievalService
 from .response_schema import apply_response_envelope
 from .semantic_recovery import (
-    classify_call_semantics,
-    classify_mc_publish,
     coerce_call_semantics,
-    maybe_int,
     SEMANTIC_RULE_REGISTRY,
 )
 
@@ -463,24 +448,6 @@ class SQLiteIndexer:
             return None
         return str(row[0])
 
-    def _json(self, value: object) -> str:
-        return json_dumps(value)
-
-    def _maybe_int(self, value: object) -> int | None:
-        return maybe_int(value)
-
-    def _paths_match(self, left: str | Path, right: str | Path) -> bool:
-        return paths_match(left, right)
-
-    def _embedder_batch_size(self, embedder: Embedder) -> int:
-        return embedder_batch_size(embedder)
-
-    def _classify_call_semantics(self, source_name: str, target_name: str) -> dict[str, object]:
-        return classify_call_semantics(source_name, target_name)
-
-    def _classify_mc_publish(self, statement: CodeStatement) -> dict[str, object] | None:
-        return classify_mc_publish(statement)
-
     def query_index(self, db_path: str | Path, query: str, limit: int = 20, *, debug: bool = False) -> dict[str, object]:
         return self._retrieval_service.query_index(db_path, query, limit=limit, debug=debug)
 
@@ -501,154 +468,6 @@ class SQLiteIndexer:
             context_window=context_window,
             related_limit=related_limit,
             debug=debug,
-        )
-
-    def _insert_unit(self, conn: sqlite3.Connection, unit: ParsedUnit) -> tuple[int, int]:
-        return self._index_write_service.insert_unit(conn, unit)
-
-    def _insert_statements(
-        self,
-        conn: sqlite3.Connection,
-        file_id: int,
-        procedure_id: int,
-        unit: ParsedUnit,
-    ) -> tuple[Counter[str], Counter[str], Counter[str], Counter[str], Counter[str], Counter[str], Counter[str]]:
-        return self._index_write_service.insert_statements(conn, file_id, procedure_id, unit)
-
-    def _insert_chunks(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        file_id: int,
-        procedure_id: int,
-        unit: ParsedUnit,
-    ) -> tuple[Counter[str], Counter[str]]:
-        return self._index_write_service.insert_chunks(conn, file_id=file_id, procedure_id=procedure_id, unit=unit)
-
-    def _populate_missing_chunk_vectors(self, conn: sqlite3.Connection) -> dict[str, object]:
-        return self._index_write_service.populate_missing_chunk_vectors(conn)
-
-    def _validate_resume_source(self, conn: sqlite3.Connection, root: Path) -> None:
-        self._index_write_service.validate_resume_source(conn, root)
-
-    def _validate_vector_space_for_population(self, conn: sqlite3.Connection) -> None:
-        self._index_write_service.validate_vector_space_for_population(conn)
-
-    def _store_embedding_metadata(self, conn: sqlite3.Connection, info: EmbeddingInfo) -> None:
-        self._index_write_service.store_embedding_metadata(conn, info)
-
-    def _missing_chunk_vector_count(self, conn: sqlite3.Connection) -> int:
-        return self._index_write_service.missing_chunk_vector_count(conn)
-
-    def _insert_blocks(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        file_id: int,
-        procedure_id: int,
-        unit: ParsedUnit,
-        statement_ids_by_seq: dict[int, int],
-    ) -> tuple[Counter[str], Counter[str]]:
-        return self._index_write_service.insert_blocks(
-            conn,
-            file_id=file_id,
-            procedure_id=procedure_id,
-            unit=unit,
-            statement_ids_by_seq=statement_ids_by_seq,
-        )
-
-    def _fetch_block_table_names(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        procedure_id: int,
-        statement_start_seq: int,
-        statement_end_seq: int,
-    ) -> list[str]:
-        return self._index_write_service.fetch_block_table_names(
-            conn,
-            procedure_id=procedure_id,
-            statement_start_seq=statement_start_seq,
-            statement_end_seq=statement_end_seq,
-        )
-
-    def _fetch_block_edges(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        procedure_id: int,
-        statement_start_seq: int,
-        statement_end_seq: int,
-    ) -> list[dict[str, object]]:
-        return self._index_write_service.fetch_block_edges(
-            conn,
-            procedure_id=procedure_id,
-            statement_start_seq=statement_start_seq,
-            statement_end_seq=statement_end_seq,
-        )
-
-    def _insert_variable_refs(
-        self,
-        conn: sqlite3.Connection,
-        file_id: int,
-        procedure_id: int,
-        statement_id: int,
-        statement: CodeStatement,
-        counter: Counter[str],
-    ) -> None:
-        self._index_write_service.insert_variable_refs(conn, file_id, procedure_id, statement_id, statement, counter)
-
-    def _insert_action_and_edges(
-        self,
-        conn: sqlite3.Connection,
-        file_id: int,
-        procedure_id: int,
-        statement_id: int,
-        unit: ParsedUnit,
-        statement: CodeStatement,
-        seq: int,
-        edge_counter: Counter[str],
-        string_hints: dict[str, str],
-    ) -> Counter[str]:
-        return self._index_write_service.insert_action_and_edges(
-            conn,
-            file_id=file_id,
-            procedure_id=procedure_id,
-            statement_id=statement_id,
-            unit=unit,
-            statement=statement,
-            seq=seq,
-            edge_counter=edge_counter,
-            string_hints=string_hints,
-        )
-
-    def _insert_edge(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        file_id: int,
-        procedure_id: int,
-        statement_id: int | None,
-        procedure_name: str,
-        file_path: str,
-        edge_type: str,
-        source_name: str,
-        target_name: str,
-        target_kind: str,
-        detail: dict[str, object],
-    ) -> None:
-        self._index_write_service.insert_edge(
-            conn,
-            file_id=file_id,
-            procedure_id=procedure_id,
-            statement_id=statement_id,
-            procedure_name=procedure_name,
-            file_path=file_path,
-            edge_type=edge_type,
-            source_name=source_name,
-            target_name=target_name,
-            target_kind=target_kind,
-            detail=detail,
         )
 
 

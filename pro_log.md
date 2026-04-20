@@ -1275,3 +1275,55 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `ContextFetchService` 不再需要通过 `SQLiteIndexer` 中转即可被核心服务使用
 - `indexer.py` 继续收敛成编排入口，文件长度从 `909` 行下降到 `654` 行
 - 当前剩余内容已经基本集中在 schema、summary 和 index-write 门面上
+
+## [1.2.12] - 2026-04-21
+
+### Step 19: 让 index-build / index-write 直接协作
+
+### 本步目标
+
+- 继续删除 `SQLiteIndexer` 中仅用于 write-side 中转的门面方法
+- 让 `IndexBuildService` 直接调用 `IndexWriteService`
+- 让 `IndexWriteService` 直接依赖共享工具函数与语义函数，而不是回绕 `owner`
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_write.py`
+   - 改为直接复用：
+     - `json_dumps`
+     - `maybe_int`
+     - `paths_match`
+     - `embedder_batch_size`
+     - `classify_call_semantics`
+     - `classify_mc_publish`
+   - 使用常量：
+     - `READ_ACTIONS`
+     - `WRITE_ACTIONS`
+     - `COMPONENT_ACTIONS`
+     - `EXIT_LABEL_NAMES`
+   - 新增内部 `_metadata()`，不再通过 `owner._metadata()` 读取 metadata
+
+2. 更新 `src/uses_indexer/index_build.py`
+   - 改为直接调用 `IndexWriteService`：
+     - `insert_unit`
+     - `insert_statements`
+     - `populate_missing_chunk_vectors`
+     - `validate_resume_source`
+     - `store_embedding_metadata`
+   - 增量构建和恢复向量也不再通过 `SQLiteIndexer` write-side 门面中转
+
+3. 更新 `src/uses_indexer/indexer.py`
+   - 删除一整批已经失去调用方的 write-side 门面方法
+   - 同步清理相关无用 import
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_write.py src/uses_indexer/index_build.py src/uses_indexer/indexer.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_cli.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_evaluation.py tests/test_semantic_rules.py tests/test_embeddings.py` 通过
+- 结果：`61 passed`
+
+### 结论
+
+- `IndexBuildService` 和 `IndexWriteService` 现在已经形成直接协作关系
+- `SQLiteIndexer` 的 write-side 中转职责再次收缩
+- `indexer.py` 文件长度从 `654` 行进一步下降到 `473` 行

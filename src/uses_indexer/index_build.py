@@ -44,6 +44,7 @@ class IndexBuildService:
         started_at = time.perf_counter()
         root = Path(source_root)
         db_file = Path(db_path)
+        write_service = self.owner._index_write_service
         db_file.parent.mkdir(parents=True, exist_ok=True)
 
         if resume_vectors:
@@ -68,7 +69,7 @@ class IndexBuildService:
                 counters = self._index_files(conn, files)
                 self._upsert_indexed_file_state(conn, files, index_type=index_type)
 
-            vector_stats = self.owner._populate_missing_chunk_vectors(conn)
+            vector_stats = write_service.populate_missing_chunk_vectors(conn)
         finally:
             conn.close()
         self.owner._vector_cache.clear()
@@ -94,6 +95,7 @@ class IndexBuildService:
         started_at = time.perf_counter()
         root = Path(source_root)
         db_file = Path(db_path)
+        write_service = self.owner._index_write_service
         if not db_file.exists():
             return self.build_index(root, db_file, index_type=index_type)
 
@@ -101,8 +103,8 @@ class IndexBuildService:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(INDEX_STATE_SCHEMA_SQL)
         try:
-            self.owner._validate_resume_source(conn, root)
-            existing_index_type = self.owner._metadata(conn, "index_type")
+            write_service.validate_resume_source(conn, root)
+            existing_index_type = write_service._metadata(conn, "index_type")
             if existing_index_type and existing_index_type != index_type:
                 raise EmbeddingConfigError(
                     f"Cannot run incremental build with index_type={index_type}; existing db was built as {existing_index_type}"
@@ -149,7 +151,7 @@ class IndexBuildService:
                 self._upsert_indexed_file_state(conn, files, index_type=index_type)
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=self.owner.embedder.info)
 
-            vector_stats = self.owner._populate_missing_chunk_vectors(conn)
+            vector_stats = write_service.populate_missing_chunk_vectors(conn)
             current_scope = {
                 path: self._describe_index_scope(conn, path)
                 for path in [*added_paths, *changed_paths]
@@ -206,9 +208,10 @@ class IndexBuildService:
 
         conn = sqlite3.connect(db_file)
         conn.execute("PRAGMA foreign_keys=ON")
+        write_service = self.owner._index_write_service
         try:
-            self.owner._validate_resume_source(conn, root)
-            vector_stats = self.owner._populate_missing_chunk_vectors(conn)
+            write_service.validate_resume_source(conn, root)
+            vector_stats = write_service.populate_missing_chunk_vectors(conn)
         finally:
             conn.close()
         self.owner._vector_cache.clear()
@@ -260,12 +263,12 @@ class IndexBuildService:
 
         for path in files:
             unit = self.owner.parser.parse_path(path)
-            file_id, procedure_id = self.owner._insert_unit(conn, unit)
+            file_id, procedure_id = self.owner._index_write_service.insert_unit(conn, unit)
             unit_kind_counter[unit.unit_kind] += 1
             prefix_counter[unit.prefix] += 1
             for statement in unit.statements:
                 statement_counter[statement.kind] += 1
-            local_edges, local_var_refs, local_actions, local_chunks, local_vectors, local_blocks, local_block_edges = self.owner._insert_statements(
+            local_edges, local_var_refs, local_actions, local_chunks, local_vectors, local_blocks, local_block_edges = self.owner._index_write_service.insert_statements(
                 conn,
                 file_id,
                 procedure_id,
@@ -307,7 +310,7 @@ class IndexBuildService:
         conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("fts_enabled", "true"))
         conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("vector_enabled", "true"))
         conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("index_type", index_type))
-        self.owner._store_embedding_metadata(conn, embedder_info)
+        self.owner._index_write_service.store_embedding_metadata(conn, embedder_info)
 
     def _upsert_indexed_file_state(self, conn: sqlite3.Connection, files: list[Path], *, index_type: str) -> None:
         conn.execute("DELETE FROM indexed_files WHERE index_type = ?", (index_type,))

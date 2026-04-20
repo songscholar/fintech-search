@@ -6,11 +6,15 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .constants import COMPONENT_ACTIONS, EXIT_LABEL_NAMES, READ_ACTIONS, WRITE_ACTIONS
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
+from .index_utils import embedder_batch_size, json_dumps, maybe_int, paths_match
 from .metadata_semantics import derive_target, metadata_edges_for_statement
 from .models import CodeStatement, ParsedUnit
 from .semantic_recovery import (
     build_semantic_chunks,
+    classify_call_semantics,
+    classify_mc_publish,
     collect_block_entities,
     extract_sql_access_edges,
     format_excerpt,
@@ -29,7 +33,7 @@ class IndexWriteService:
         self.owner = owner
 
     def insert_unit(self, conn: sqlite3.Connection, unit: ParsedUnit) -> tuple[int, int]:
-        attributes_json = self.owner._json(unit.attributes)
+        attributes_json = json_dumps(unit.attributes)
         cursor = conn.execute(
             """
             INSERT INTO files(path, file_name, unit_kind, prefix, name, chinese_name, object_id, code_line_count, attributes_json)
@@ -80,7 +84,7 @@ class IndexWriteService:
                     history.order_number,
                     history.modified_by,
                     history.modified,
-                    self.owner._json(history.extra_attributes),
+                    json_dumps(history.extra_attributes),
                 ),
             )
 
@@ -102,7 +106,7 @@ class IndexWriteService:
                     param.comments,
                     param.default_value,
                     param.flags,
-                    self.owner._json(param.extra_attributes),
+                    json_dumps(param.extra_attributes),
                 ),
             )
 
@@ -143,10 +147,10 @@ class IndexWriteService:
                     statement.name,
                     statement.condition,
                     statement.target,
-                    self.owner._json(statement.groups),
-                    self.owner._json(statement.arguments),
-                    self.owner._json(statement.reads),
-                    self.owner._json(statement.writes),
+                    json_dumps(statement.groups),
+                    json_dumps(statement.arguments),
+                    json_dumps(statement.reads),
+                    json_dumps(statement.writes),
                 ),
             )
             statement_id = int(cursor.lastrowid)
@@ -244,10 +248,10 @@ class IndexWriteService:
                     chunk["statement_start_seq"],
                     chunk["statement_end_seq"],
                     chunk["statement_count"],
-                    self.owner._json(chunk["anchor_kinds"]),
-                    self.owner._json(chunk["action_names"]),
-                    self.owner._json(chunk["target_names"]),
-                    self.owner._json(chunk["variable_names"]),
+                    json_dumps(chunk["anchor_kinds"]),
+                    json_dumps(chunk["action_names"]),
+                    json_dumps(chunk["target_names"]),
+                    json_dumps(chunk["variable_names"]),
                     chunk["content"],
                     chunk["summary_text"],
                 ),
@@ -273,7 +277,7 @@ class IndexWriteService:
 
     def populate_missing_chunk_vectors(self, conn: sqlite3.Connection) -> dict[str, object]:
         self.validate_vector_space_for_population(conn)
-        batch_size = self.owner._embedder_batch_size(self.owner.embedder)
+        batch_size = embedder_batch_size(self.owner.embedder)
         missing_before = self.missing_chunk_vector_count(conn)
         inserted = 0
         batches = 0
@@ -310,7 +314,7 @@ class IndexWriteService:
                             embedder_info.provider,
                             embedder_info.model,
                             len(vector),
-                            self.owner._json(vector),
+                            json_dumps(vector),
                         ),
                     )
                     provider_counts[embedder_info.provider] += 1
@@ -333,17 +337,17 @@ class IndexWriteService:
         }
 
     def validate_resume_source(self, conn: sqlite3.Connection, root: Path) -> None:
-        source_root = self.owner._metadata(conn, "source_root")
+        source_root = self._metadata(conn, "source_root")
         if source_root is None:
             raise EmbeddingConfigError("Cannot resume vectors because source_root metadata is missing")
-        if not self.owner._paths_match(source_root, root):
+        if not paths_match(source_root, root):
             raise EmbeddingConfigError(f"Cannot resume vectors for {root}; index source_root is {source_root}")
 
     def validate_vector_space_for_population(self, conn: sqlite3.Connection) -> None:
         current_info = self.owner.embedder.info
-        db_provider = self.owner._metadata(conn, "embedding_provider")
-        db_model = self.owner._metadata(conn, "embedding_model")
-        db_dimension = self.owner._maybe_int(self.owner._metadata(conn, "embedding_dimension"))
+        db_provider = self._metadata(conn, "embedding_provider")
+        db_model = self._metadata(conn, "embedding_model")
+        db_dimension = maybe_int(self._metadata(conn, "embedding_dimension"))
 
         if db_provider and current_info.provider != db_provider:
             raise EmbeddingConfigError(
@@ -361,7 +365,7 @@ class IndexWriteService:
     def store_embedding_metadata(self, conn: sqlite3.Connection, info: EmbeddingInfo) -> None:
         dimension = info.dimension
         if dimension == 0:
-            dimension = self.owner._maybe_int(self.owner._metadata(conn, "embedding_dimension")) or 0
+            dimension = maybe_int(self._metadata(conn, "embedding_dimension")) or 0
         conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_provider", info.provider))
         conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_model", info.model))
         conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES(?, ?)", ("embedding_dimension", str(dimension)))
@@ -458,10 +462,10 @@ class IndexWriteService:
                     statement_ids_by_seq.get(int(block["anchor_seq"])),
                     summary_text,
                     excerpt,
-                    self.owner._json(action_names),
-                    self.owner._json(target_names),
-                    self.owner._json(table_names),
-                    self.owner._json(variable_names),
+                    json_dumps(action_names),
+                    json_dumps(target_names),
+                    json_dumps(table_names),
+                    json_dumps(variable_names),
                 ),
             )
             block_id = int(cursor.lastrowid)
@@ -498,7 +502,7 @@ class IndexWriteService:
                         edge["edge_type"],
                         edge["target_name"],
                         edge["target_kind"],
-                        self.owner._json(edge["detail"]),
+                        json_dumps(edge["detail"]),
                     ),
                 )
                 block_edge_counter[str(edge["edge_type"])] += 1
@@ -669,7 +673,7 @@ class IndexWriteService:
                 "tag": statement.tag,
                 "line_start": statement.line_start,
                 "line_end": statement.line_end,
-                **self.owner._classify_call_semantics(unit.name, statement.name),
+                **classify_call_semantics(unit.name, statement.name),
             }
             self.insert_edge(
                 conn,
@@ -687,7 +691,7 @@ class IndexWriteService:
             edge_counter["calls_procedure"] += 1
 
         if statement.kind == "action" and statement.name:
-            mc_publish_detail = self.owner._classify_mc_publish(statement)
+            mc_publish_detail = classify_mc_publish(statement)
             self.insert_edge(
                 conn,
                 file_id=file_id,
@@ -706,11 +710,11 @@ class IndexWriteService:
             if target_name and target_kind != "unknown":
                 if mc_publish_detail is not None:
                     edge_type = "publishes_mc_topic"
-                elif statement.name in self.owner.READ_ACTIONS:
+                elif statement.name in READ_ACTIONS:
                     edge_type = "reads_table" if target_kind == "table" else "uses_target"
-                elif statement.name in self.owner.WRITE_ACTIONS:
+                elif statement.name in WRITE_ACTIONS:
                     edge_type = "writes_table" if target_kind == "table" else "uses_target"
-                elif statement.name in self.owner.COMPONENT_ACTIONS:
+                elif statement.name in COMPONENT_ACTIONS:
                     edge_type = "uses_component"
                 else:
                     edge_type = "uses_target"
@@ -787,7 +791,7 @@ class IndexWriteService:
             )
             edge_counter["jumps_to_label"] += 1
 
-            if statement.target in self.owner.EXIT_LABEL_NAMES:
+            if statement.target in EXIT_LABEL_NAMES:
                 self.insert_edge(
                     conn,
                     file_id=file_id,
@@ -849,7 +853,7 @@ class IndexWriteService:
                 source_name,
                 target_name,
                 target_kind,
-                self.owner._json(detail),
+                json_dumps(detail),
             ),
         )
         edge_id = int(cursor.lastrowid)
@@ -861,3 +865,9 @@ class IndexWriteService:
             """,
             (edge_id, edge_type, source_name, target_name, target_kind, procedure_name, file_path),
         )
+
+    def _metadata(self, conn: sqlite3.Connection, key: str) -> str | None:
+        row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
+        if row is None:
+            return None
+        return str(row[0])
