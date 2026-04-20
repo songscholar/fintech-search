@@ -77,6 +77,7 @@ def test_answer_uses_draft_when_llm_not_configured(tmp_path: Path) -> None:
 
     assert result["answer_source"] == "draft"
     assert result["final_answer"]["source"] == "draft"
+    assert result["final_answer"]["tier"] == "grounded_summary"
     assert "AF_SAMPLE" in result["final_answer"]["text"]
 
 
@@ -88,6 +89,7 @@ def test_answer_uses_llm_when_available(tmp_path: Path) -> None:
     assert result["answer_source"] == "llm"
     assert result["final_answer"]["text"] == "这是模型生成的最终答案。"
     assert result["final_answer"]["used_model"] == "stub-model"
+    assert result["final_answer"]["tier"] == "llm_grounded"
 
 
 def test_answer_strategy_adds_profile_metadata(tmp_path: Path) -> None:
@@ -97,6 +99,7 @@ def test_answer_strategy_adds_profile_metadata(tmp_path: Path) -> None:
 
     assert result["prompt_package"]["strategy_profile"] == "call_chain"
     assert "策略要求" in result["prompt_package"]["system_prompt"]
+    assert result["prompt_package"]["question_plan"]["query_type"] == "callers"
 
 
 def test_answer_strategy_uses_custom_profile_config(tmp_path: Path) -> None:

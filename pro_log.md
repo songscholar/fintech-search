@@ -1574,3 +1574,78 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 检索链路现在已经开始把“关系”和“语义特征”当一等公民，而不只是关键词命中
 - rerank trace 现在能直接看出分数前后变化
 - 评测层已经能按 query type 观察检索质量，不再只有整体平均值
+
+## [1.2.17] - 2026-04-21
+
+### Step 24: 升级回答规划、证据压缩与 fallback 分层
+
+### 本步目标
+
+- 在生成前先做 answer planning，而不是所有问题共用一个提示模板
+- 把 evidence compression 从“简单截断”升级成按问题类型组织的压缩
+- 让 draft answer 更 grounded、更模板化
+- 让最终返回结果带出更清晰的 fallback tier
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/strategy_config.py`
+   - `PromptProfileConfig` 新增 `answer_sections`
+   - 新增 profile：
+     - `failure_flow`
+     - `variable_flow`
+     - `metadata`
+     - `topic`
+     - `procedure_lookup`
+
+2. 更新 `src/uses_indexer/answer_strategy.py`
+   - 引入 `analyze_query()`
+   - `select_profile()` 改为按 `query_type` 选策略
+   - 新增 `build_question_plan()`
+   - prompt package 新增：
+     - `question_plan`
+     - `strategy_profile`
+     - `compressed_llm_context`
+   - `_compress_context()` 改为：
+     - 去重同位置 evidence
+     - 按 query type 额外压入 call chain / tables / failure flow / metadata 关系
+
+3. 更新 `src/uses_indexer/qa.py`
+   - draft answer 现在会先分析 `query_type`
+   - 输出按问题类型切换：
+     - `主调用链`
+     - `表访问`
+     - `失败处理路径`
+     - `变量流向`
+     - `元数据关系`
+     - `主题关系`
+     - `实现位置`
+   - draft answer 新增：
+     - `tier`
+     - `query_type`
+
+4. 更新 `src/uses_indexer/answering.py`
+   - `final_answer` 新增 `tier`
+   - 约定：
+     - `llm_grounded`
+     - `grounded_summary`
+     - `retrieval_only`
+
+5. 更新测试
+   - `tests/test_qa.py`
+     - 校验 `grounded_summary`
+     - 校验 `retrieval_only`
+   - `tests/test_answering.py`
+     - 校验 `question_plan.query_type`
+     - 校验 `final_answer.tier`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/qa.py src/uses_indexer/answering.py src/uses_indexer/answer_strategy.py src/uses_indexer/strategy_config.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_api.py tests/test_mcp.py tests/test_qa.py tests/test_answering.py` 通过
+- 结果：`13 passed`
+
+### 结论
+
+- 回答链路现在会先识别问题类型，再决定提示策略和证据压缩方式
+- draft answer 已经从“简单拼接命中”升级成“按问题类型组织的 grounded 摘要”
+- 回答结果现在能更清楚地区分 LLM grounded、draft grounded 和 retrieval-only 三层能力

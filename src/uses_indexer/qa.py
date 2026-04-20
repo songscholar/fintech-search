@@ -4,6 +4,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .indexer import SQLiteIndexer
+from .rerank import analyze_query
 from .response_schema import apply_response_envelope
 from .strategy_config import QaPolicy
 
@@ -94,6 +95,8 @@ class CodebaseQA:
         )
 
     def _build_draft_answer(self, question: str, evidence: list[dict[str, object]]) -> dict[str, object]:
+        question_analysis = analyze_query(question)
+        query_type = str(question_analysis.get("query_type") or "location")
         if not evidence:
             return {
                 "status": "insufficient_evidence",
@@ -101,6 +104,8 @@ class CodebaseQA:
                 "summary_points": [],
                 "supporting_locations": [],
                 "uncertainties": ["未命中可直接支撑该问题的过程或语句，需要换关键词或补充向量检索。"],
+                "tier": "retrieval_only",
+                "query_type": query_type,
             }
 
         top_evidence = evidence[:3]
@@ -148,18 +153,40 @@ class CodebaseQA:
                 )
                 related_hints.append(f"{item['procedure_name']} 涉及表访问 {table_desc}。")
 
-        answer_lines = [
-            f"围绕“{question}”，当前索引最优先命中的实现位置是 {lead['procedure_name']}。"
-        ]
+        answer_lines = [f"结论: 围绕“{question}”，当前索引最优先命中的实现位置是 {lead['procedure_name']}。"]
+        if query_type in {"callers", "callees"}:
+            answer_lines.append("主调用链:")
+        elif query_type in {"table_write", "table_read"}:
+            answer_lines.append("表访问:")
+        elif query_type == "failure_flow":
+            answer_lines.append("失败处理路径:")
+        elif query_type in {"variable_write", "variable_read", "variable"}:
+            answer_lines.append("变量流向:")
+        elif query_type == "metadata":
+            answer_lines.append("元数据关系:")
+        elif query_type == "topic":
+            answer_lines.append("主题关系:")
+        else:
+            answer_lines.append("实现位置:")
         for line in summary_points:
-            answer_lines.append(line)
-        answer_lines.extend(related_hints[:2])
+            answer_lines.append(f"- {line}")
+        for line in related_hints[:2]:
+            answer_lines.append(f"- {line}")
+        answer_lines.append("关键证据:")
+        for item in top_locations:
+            answer_lines.append(
+                f"- {item['procedure_name']} {item['file_path']}:{item['line_start']}-{item['line_end']}"
+            )
 
         uncertainties = []
         if len(top_evidence) > 1:
             uncertainties.append("仓库里存在多个相近候选过程，最终答案可能依赖具体业务场景。")
         if not related_hints:
             uncertainties.append("当前证据主要来自直接命中语句，尚未展开更深层调用链。")
+        if uncertainties:
+            answer_lines.append("不确定点:")
+            for item in uncertainties:
+                answer_lines.append(f"- {item}")
 
         return {
             "status": "ok",
@@ -167,4 +194,6 @@ class CodebaseQA:
             "summary_points": summary_points + related_hints[:2],
             "supporting_locations": top_locations,
             "uncertainties": uncertainties,
+            "tier": "grounded_summary",
+            "query_type": query_type,
         }

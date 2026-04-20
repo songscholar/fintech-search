@@ -97,10 +97,12 @@ class CodebaseAnswerer:
         error: str | None,
     ) -> dict[str, object]:
         result = dict(qa_bundle)
+        draft_answer = dict(qa_bundle.get("draft_answer") or {})
         result["answer_source"] = answer_source
         result["final_answer"] = {
             "text": answer_text,
             "source": answer_source,
+            "tier": draft_answer.get("tier") if answer_source != "llm" else "llm_grounded",
             "used_model": model_response["model"] if model_response else None,
             "provider": model_response["provider"] if model_response else None,
             "error": error,
