@@ -752,3 +752,56 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - trace 现在已经开始形成一条可串联的诊断链
 - 排障时不仅能看“结果是什么”，还能看“这一阶段花了多久、处理了多少对象”
+
+## [1.2.3] - 2026-04-20
+
+### Step 10: 细化增量建库到更小影响范围
+
+### 本步目标
+
+- 让增量建库从“文件变更”进一步提升到“重建作用域”视角
+- 直接看到本次重建涉及哪些 procedure，以及对应多少 statements / chunks / blocks
+- 为后续继续推进真正的局部重建提供基础数据
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 新增：
+     - `_describe_index_scope`
+     - `_build_rebuild_scope_report`
+   - 增量建库现在会同时生成：
+     - `incremental_scope.summary`
+     - `incremental_scope.items`
+   - 每个作用域项包含：
+     - `change_type`
+     - `procedure_name`
+     - `before`
+     - `after`
+   - `before / after` 中包含：
+     - `statement_count`
+     - `action_count`
+     - `chunk_count`
+     - `block_count`
+     - `edge_count`
+
+2. 更新 `src/uses_indexer/observability.py`
+   - 在 `incremental_trace.trace` 下新增：
+     - `rebuild_scope`
+   - 在 trace summary 中加入：
+     - `after_chunk_count`
+     - `after_block_count`
+
+3. 更新测试
+   - 校验 `incremental_scope`
+   - 校验 trace 中的 `rebuild_scope`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py src/uses_indexer/observability.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py::test_build_index_supports_incremental_updates` 通过
+- 结果：`1 passed`
+
+### 结论
+
+- 增量建库现在已经不只告诉你“哪些文件变了”，还会告诉你“这次到底重建了哪些过程和多少索引对象”
+- 这一步让后续继续做更细粒度局部重建时，具备了更清晰的作用域基线

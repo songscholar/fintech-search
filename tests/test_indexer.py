@@ -767,5 +767,9 @@ def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
     assert updated["incremental_impact"]["affected_unit_count"] == 1
     assert updated["incremental_impact"]["affected_units"][0]["procedure_name"] == "LF_NEW"
     assert updated["incremental_trace"]["trace"]["impact"]["affected_unit_count"] == 1
+    assert updated["incremental_scope"]["summary"]["reindexed_procedure_count"] == 1
+    assert updated["incremental_scope"]["items"][0]["after"]["procedure_name"] == "LF_NEW"
+    assert updated["incremental_scope"]["items"][0]["after"]["chunk_count"] >= 1
+    assert updated["incremental_trace"]["trace"]["rebuild_scope"]["summary"]["after_chunk_count"] >= 1
     summary = indexer.summarize_db(db_path)
     assert summary["files"] == 4

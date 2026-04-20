@@ -130,6 +130,10 @@ class IndexBuildService:
             )
 
             changed_files = [Path(path) for path in [*added_paths, *changed_paths]]
+            previous_scope = {
+                path: self._describe_index_scope(conn, path)
+                for path in [*changed_paths, *removed_paths]
+            }
             affected_units = self._build_incremental_impact_report(
                 conn,
                 added_paths=added_paths,
@@ -145,6 +149,17 @@ class IndexBuildService:
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=self.owner.embedder.info)
 
             vector_stats = self.owner._populate_missing_chunk_vectors(conn)
+            current_scope = {
+                path: self._describe_index_scope(conn, path)
+                for path in [*added_paths, *changed_paths]
+            }
+            rebuild_scope = self._build_rebuild_scope_report(
+                added_paths=added_paths,
+                changed_paths=changed_paths,
+                removed_paths=removed_paths,
+                previous_scope=previous_scope,
+                current_scope=current_scope,
+            )
             db_summary = self.owner.summarize_db(db_file)
             payload = self._build_summary_payload(
                 db_file=db_file,
@@ -168,6 +183,7 @@ class IndexBuildService:
                 changed_paths=changed_paths,
                 removed_paths=removed_paths,
                 affected_units=affected_units,
+                rebuild_scope=rebuild_scope,
                 vector_stats=vector_stats,
                 elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
             )
@@ -175,6 +191,7 @@ class IndexBuildService:
                 "affected_unit_count": len(affected_units),
                 "affected_units": affected_units,
             }
+            payload["incremental_scope"] = rebuild_scope
             return payload
         finally:
             conn.close()
@@ -425,6 +442,107 @@ class IndexBuildService:
             "procedure_name": str(row[3]) if row[3] is not None else None,
             "chinese_name": str(row[4]) if row[4] is not None else None,
             "object_id": str(row[5]) if row[5] is not None else None,
+        }
+
+    def _describe_index_scope(self, conn: sqlite3.Connection, path: str) -> dict[str, object]:
+        unit = self._describe_indexed_unit(conn, path)
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(DISTINCT s.id) AS statement_count,
+              COUNT(DISTINCT a.id) AS action_count,
+              COUNT(DISTINCT c.id) AS chunk_count,
+              COUNT(DISTINCT b.id) AS block_count,
+              COUNT(DISTINCT e.id) AS edge_count
+            FROM files f
+            JOIN procedures p ON p.file_id = f.id
+            LEFT JOIN statements s ON s.procedure_id = p.id
+            LEFT JOIN actions a ON a.procedure_id = p.id
+            LEFT JOIN chunks c ON c.procedure_id = p.id
+            LEFT JOIN blocks b ON b.procedure_id = p.id
+            LEFT JOIN edges e ON e.procedure_id = p.id
+            WHERE f.path = ?
+            """,
+            (path,),
+        ).fetchone()
+        counts = {
+            "statement_count": int(row[0]) if row and row[0] is not None else 0,
+            "action_count": int(row[1]) if row and row[1] is not None else 0,
+            "chunk_count": int(row[2]) if row and row[2] is not None else 0,
+            "block_count": int(row[3]) if row and row[3] is not None else 0,
+            "edge_count": int(row[4]) if row and row[4] is not None else 0,
+        }
+        return {
+            **unit,
+            **counts,
+        }
+
+    def _build_rebuild_scope_report(
+        self,
+        *,
+        added_paths: list[str],
+        changed_paths: list[str],
+        removed_paths: list[str],
+        previous_scope: dict[str, dict[str, object]],
+        current_scope: dict[str, dict[str, object]],
+    ) -> dict[str, object]:
+        items: list[dict[str, object]] = []
+
+        for path in added_paths:
+            current = dict(current_scope.get(path) or {"file_path": path})
+            items.append(
+                {
+                    "change_type": "added",
+                    "file_path": path,
+                    "procedure_name": current.get("procedure_name"),
+                    "before": None,
+                    "after": current,
+                }
+            )
+
+        for path in changed_paths:
+            before = dict(previous_scope.get(path) or {"file_path": path})
+            after = dict(current_scope.get(path) or {"file_path": path})
+            items.append(
+                {
+                    "change_type": "changed",
+                    "file_path": path,
+                    "procedure_name": after.get("procedure_name") or before.get("procedure_name"),
+                    "before": before,
+                    "after": after,
+                }
+            )
+
+        for path in removed_paths:
+            before = dict(previous_scope.get(path) or {"file_path": path})
+            items.append(
+                {
+                    "change_type": "removed",
+                    "file_path": path,
+                    "procedure_name": before.get("procedure_name"),
+                    "before": before,
+                    "after": None,
+                }
+            )
+
+        items.sort(
+            key=lambda item: (
+                str(item.get("change_type") or ""),
+                str(item.get("procedure_name") or ""),
+                str(item.get("file_path") or ""),
+            )
+        )
+
+        summary = {
+            "reindexed_procedure_count": len([item for item in items if item["change_type"] in {"added", "changed"}]),
+            "removed_procedure_count": len([item for item in items if item["change_type"] == "removed"]),
+            "after_statement_count": sum(int((item.get("after") or {}).get("statement_count") or 0) for item in items),
+            "after_chunk_count": sum(int((item.get("after") or {}).get("chunk_count") or 0) for item in items),
+            "after_block_count": sum(int((item.get("after") or {}).get("block_count") or 0) for item in items),
+        }
+        return {
+            "summary": summary,
+            "items": items,
         }
 
     def _build_summary_payload(

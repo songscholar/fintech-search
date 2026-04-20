@@ -163,6 +163,7 @@ def build_incremental_trace(
     changed_paths: list[str],
     removed_paths: list[str],
     affected_units: list[dict[str, object]],
+    rebuild_scope: dict[str, object] | None,
     vector_stats: dict[str, object],
     elapsed_ms: float | None = None,
 ) -> dict[str, object]:
@@ -192,10 +193,13 @@ def build_incremental_trace(
                 "affected_unit_count": len(affected_units),
                 "affected_units": affected_units,
             },
+            "rebuild_scope": rebuild_scope or {"summary": {}, "items": []},
             "vector_stats": vector_stats,
             "summary": {
                 "reindexed_count": len(reindexed_paths),
                 "affected_unit_count": len(affected_units),
+                "after_chunk_count": int(((rebuild_scope or {}).get("summary") or {}).get("after_chunk_count") or 0),
+                "after_block_count": int(((rebuild_scope or {}).get("summary") or {}).get("after_block_count") or 0),
             },
         },
     }
