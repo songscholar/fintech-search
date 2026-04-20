@@ -274,3 +274,104 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - FTS 全文搜索和向量检索
 - 调用链分析和语义块切分
 - CLI、HTTP API、MCP Server 等多种接口
+
+## [1.1.0] - 2026-04-20
+
+### 提交记录
+
+- `3be9ba8` `Refactor indexer into layered services and add incremental indexing`
+- `d8f5038` `Add remaining project updates and utilities`
+- `543d81d` `Add structured observability traces`
+- `c335e7e` `Extract evidence context fetch service`
+- `a973ed2` `Remove duplicated retrieval logic from indexer`
+
+### 本轮核心改动
+
+1. **重构 `indexer.py`，开始按职责分层**
+   - 新增模块：
+     - `src/uses_indexer/index_build.py`
+     - `src/uses_indexer/retrieval.py`
+     - `src/uses_indexer/rerank.py`
+     - `src/uses_indexer/evidence.py`
+     - `src/uses_indexer/semantic_recovery.py`
+     - `src/uses_indexer/index_catalog.py`
+     - `src/uses_indexer/answer_strategy.py`
+   - `SQLiteIndexer` 逐步退化为门面层，建库、检索、证据组装、语义恢复开始迁移到独立服务模块。
+
+2. **新增增量建库能力**
+   - `build-index` 支持 `--incremental`
+   - 新增 `indexed_files` 状态表，记录文件指纹
+   - 支持按文件变更识别 `added / changed / removed`
+   - 仅重建受影响的索引数据，并补齐缺失向量
+
+3. **统一索引边界和默认库语义**
+   - 新增 `docs/INDEX_BOUNDARIES.md`
+   - 明确区分：
+     - `business_code_index.db`：代码检索默认库
+     - `business_metadata_index.db`：元数据检索库
+     - `business_full_index.db`：代码 + 元数据综合库
+     - `business_table_index.db`：表结构索引库
+   - 更新 `README.md`、`docs/USAGE.md`、`docs/DEPLOYMENT.md` 文档口径
+
+4. **增强检索可观测性**
+   - 新增 `src/uses_indexer/observability.py`
+   - `query-index` / `assemble-evidence` / API / MCP 支持稳定结构化 debug 输出
+   - trace 中统一包含：
+     - `schema`
+     - `version`
+     - `trace.stage`
+     - query analysis
+     - retrieval contributions
+     - rerank preview
+     - evidence pruning
+     - incremental build change report
+
+5. **继续拆分证据查询上下文逻辑**
+   - 新增 `src/uses_indexer/context_fetch.py`
+   - 从 `indexer.py` 中迁出：
+     - `_fetch_context_block`
+     - `_fetch_chunk_block`
+     - `_fetch_block_context`
+     - `_fetch_covering_blocks`
+     - `_fetch_related_context`
+     - 调用链邻居、别名解析、相关 procedure 摘要查询等辅助逻辑
+   - `indexer.py` 保留薄封装，实际 SQL 查询由 `ContextFetchService` 负责
+
+6. **清理旧的重复检索实现**
+   - 删除 `indexer.py` 中与 `retrieval.py` 重复的一整套旧检索代码
+   - 避免两份检索逻辑后续漂移，降低维护风险
+   - `indexer.py` 文件规模从约 `4700+` 行逐步收缩到约 `3157` 行
+
+7. **回答层策略升级**
+   - `llm.py` 增加 provider / timeout / retry / backoff 配置能力
+   - `answering.py` 接入 `AdaptiveAnswerStrategy`
+   - 支持按问题类型切换回答 profile，并在回答前做一定的 evidence compression
+
+### 本轮新增/重点文件
+
+- `src/uses_indexer/observability.py`
+- `src/uses_indexer/context_fetch.py`
+- `src/uses_indexer/index_build.py`
+- `src/uses_indexer/retrieval.py`
+- `src/uses_indexer/evidence.py`
+- `src/uses_indexer/rerank.py`
+- `src/uses_indexer/semantic_recovery.py`
+- `src/uses_indexer/answer_strategy.py`
+- `docs/INDEX_BOUNDARIES.md`
+
+### 验证结果
+
+- `python3 -m py_compile src/uses_indexer/*.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_indexer.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_embeddings.py` 通过
+- 本轮多次拆分后继续验证：
+  - `PYTHONPATH=. pytest -q tests/test_indexer.py tests/test_qa.py tests/test_answering.py tests/test_api.py tests/test_mcp.py tests/test_cli.py`
+  - 结果：`41 passed`
+
+### 风险与结论
+
+- 本轮重构主要是“职责迁移”和“结构化输出”升级，没有主动调整核心检索策略
+- 中途发现一次调用语义标签字段搬迁遗漏，已通过测试修复
+- 最终验证结果表明：
+  - 检索质量未出现回退
+  - 证据组装行为保持稳定
+  - 模块边界更加清晰，后续继续拆分的风险更可控
