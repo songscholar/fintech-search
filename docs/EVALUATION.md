@@ -188,13 +188,21 @@ PYTHONPATH=. python3 -m uses_indexer debug-bundle \
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
   --before examples/debug_callers_before \
-  --after examples/debug_callers_after
+  --after examples/debug_callers_after \
+  --markdown-output examples/debug_callers_compare.md
 ```
 
 这样你就能把“总体指标变化”和“单题链路变化”连起来看：
 
 - `eval-retrieval` 负责告诉你“整体有没有退化”
 - `compare-debug-bundles` 负责告诉你“到底是哪一段链路变了”
+
+推荐的查看顺序是：
+
+1. 先看 `debug_callers_compare.md`
+2. 再根据里面的 `focus_area` 去看 JSON 明细
+
+这样通常会比直接翻整份 `debug_bundle_compare.json` 更快。
 
 ## 当前基准
 

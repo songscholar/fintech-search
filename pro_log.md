@@ -2088,3 +2088,53 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在不仅能保存单次问题的完整诊断包，还能直接比较两个版本的 query / evidence / answer 差异
 - 这让排障和效果复盘从“手工看两份 JSON”升级成了“结构化 diff”
+
+## [1.2.27] - 2026-04-21
+
+### Step 34: 增加 debug bundle reviewer 摘要
+
+### 本步目标
+
+- 让 debug bundle compare 结果不只适合机器消费，也适合人快速审阅
+- 给对比结果增加“先看哪里”的判断层，降低手工阅读整份 JSON 的成本
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - compare 结果新增：
+     - `review_summary.verdict`
+     - `review_summary.priority`
+     - `review_summary.focus_area`
+     - `review_summary.findings`
+     - `review_summary.next_steps`
+   - 新增 `markdown_summary`
+   - 新增 reviewer 逻辑：
+     - `stable`
+     - `behavior_changed`
+     - `possible_regression`
+     - `query_drift`
+     - `invalid_comparison`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - `compare-debug-bundles` 新增：
+     - `--markdown-output`
+
+3. 更新测试
+   - `tests/test_cli.py`
+     - 新增 reviewer summary 和 markdown summary 断言
+
+4. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 reviewer summary 的读法
+   - `docs/EVALUATION.md`
+     - 补充 markdown compare 复盘建议
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py tests/test_cli.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- compare 结果现在不仅能 diff 两次 bundle，还能直接给出“该先看哪一层”的 reviewer 视角摘要
+- 这一步让问题复盘从“结构化 diff”继续升级成了“可快速审阅的 diff”

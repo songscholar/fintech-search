@@ -186,6 +186,9 @@ def test_compare_debug_bundles_reports_differences(tmp_path: Path) -> None:
     comparison = compare_debug_bundles(before_path, after_dir)
 
     assert comparison["bundle_kind"] == "debug_bundle_comparison"
+    assert comparison["review_summary"]["verdict"] == "behavior_changed"
+    assert comparison["review_summary"]["focus_area"] == "retrieval"
+    assert comparison["markdown_summary"].startswith("# Debug Bundle Comparison")
     assert comparison["summary"]["query_hit_count"]["delta"] == 1
     assert comparison["summary"]["candidate_count"]["delta"] == 2
     assert comparison["summary"]["answer_source"]["changed"] is True

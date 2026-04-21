@@ -118,7 +118,7 @@ def compare_debug_bundles(before_path: str | Path, after_path: str | Path) -> di
     if before_query_type != after_query_type:
         warnings.append("query_type_changed")
 
-    return {
+    comparison = {
         "bundle_kind": "debug_bundle_comparison",
         "before_path": str(before_path),
         "after_path": str(after_path),
@@ -180,6 +180,59 @@ def compare_debug_bundles(before_path: str | Path, after_path: str | Path) -> di
             "after_final_answer_excerpt": _truncate(after_answer_text),
         },
     }
+    comparison["review_summary"] = _build_review_summary(comparison)
+    comparison["markdown_summary"] = render_debug_bundle_comparison_markdown(comparison)
+    return comparison
+
+
+def render_debug_bundle_comparison_markdown(comparison: dict[str, object]) -> str:
+    review_summary = dict(comparison.get("review_summary") or {})
+    summary = dict(comparison.get("summary") or {})
+    query = dict(comparison.get("query") or {})
+    evidence = dict(comparison.get("evidence") or {})
+    answer = dict(comparison.get("answer") or {})
+
+    lines = [
+        "# Debug Bundle Comparison",
+        "",
+        f"- Verdict: {review_summary.get('verdict', 'unknown')}",
+        f"- Priority: {review_summary.get('priority', 'medium')}",
+        f"- Focus area: {review_summary.get('focus_area', 'general')}",
+        f"- Query hits delta: {_render_delta(summary.get('query_hit_count'))}",
+        f"- Candidates delta: {_render_delta(summary.get('candidate_count'))}",
+        f"- Evidence delta: {_render_delta(summary.get('evidence_count'))}",
+        f"- Query type changed: {bool((summary.get('query_type') or {}).get('changed'))}",
+        f"- Top hit changed: {bool(query.get('top_hit_changed'))}",
+        f"- Top evidence changed: {bool(evidence.get('top_evidence_changed'))}",
+        f"- Final answer changed: {bool(answer.get('final_answer_changed'))}",
+        "",
+        "## Findings",
+    ]
+
+    findings = list(review_summary.get("findings") or [])
+    if findings:
+        lines.extend(f"- {item}" for item in findings)
+    else:
+        lines.append("- No major differences detected.")
+
+    lines.extend(["", "## Suggested Next Steps"])
+    next_steps = list(review_summary.get("next_steps") or [])
+    if next_steps:
+        lines.extend(f"- {item}" for item in next_steps)
+    else:
+        lines.append("- No follow-up needed.")
+
+    if answer.get("before_final_answer_excerpt") or answer.get("after_final_answer_excerpt"):
+        lines.extend(
+            [
+                "",
+                "## Final Answer Excerpts",
+                f"- Before: {answer.get('before_final_answer_excerpt') or ''}",
+                f"- After: {answer.get('after_final_answer_excerpt') or ''}",
+            ]
+        )
+
+    return "\n".join(lines).strip() + "\n"
 
 
 def _load_debug_bundle(path: str | Path) -> dict[str, object]:
@@ -276,3 +329,136 @@ def _truncate(text: str, *, limit: int = 160) -> str:
 
 def _top_first(items: list[dict[str, object]]) -> dict[str, object] | None:
     return items[0] if items else None
+
+
+def _build_review_summary(comparison: dict[str, object]) -> dict[str, object]:
+    warnings = list(comparison.get("warnings") or [])
+    summary = dict(comparison.get("summary") or {})
+    query = dict(comparison.get("query") or {})
+    evidence = dict(comparison.get("evidence") or {})
+    answer = dict(comparison.get("answer") or {})
+    findings: list[str] = []
+    next_steps: list[str] = []
+
+    if warnings:
+        findings.append(f"Input drift detected: {', '.join(warnings)}.")
+        next_steps.append("Confirm the two bundles come from the same question and comparable index/database inputs.")
+
+    if bool((summary.get("query_type") or {}).get("changed")):
+        findings.append("Query understanding changed between the two runs.")
+        next_steps.append("Inspect query analysis first; query_type drift can invalidate downstream hit/evidence comparisons.")
+
+    query_hit_delta = _delta_value(summary.get("query_hit_count"))
+    candidate_delta = _delta_value(summary.get("candidate_count"))
+    evidence_delta = _delta_value(summary.get("evidence_count"))
+
+    if query_hit_delta is not None and query_hit_delta > 0:
+        findings.append(f"Top-level hit count increased by {query_hit_delta}.")
+    elif query_hit_delta is not None and query_hit_delta < 0:
+        findings.append(f"Top-level hit count dropped by {abs(query_hit_delta)}.")
+        next_steps.append("Check retrieval contributions and rerank changes; recall may have regressed.")
+
+    if candidate_delta is not None and candidate_delta > 0 and bool(query.get("top_hit_changed")):
+        findings.append("Candidate pool grew and the top hit changed.")
+        next_steps.append("Review rerank behavior; broader recall may be pushing a weaker hit to the top.")
+
+    if evidence_delta is not None and evidence_delta < 0:
+        findings.append(f"Evidence count dropped by {abs(evidence_delta)}.")
+        next_steps.append("Inspect evidence pruning decisions and procedure evidence caps.")
+
+    if bool(evidence.get("top_evidence_changed")):
+        findings.append("Top evidence block changed.")
+        next_steps.append("Compare evidence snippets to verify the new context still supports the same conclusion.")
+
+    if bool(answer.get("final_answer_changed")):
+        findings.append("Final answer text changed.")
+        next_steps.append("Check whether the answer shift is grounded in retrieval/evidence changes or only in answer policy.")
+
+    answer_source = dict(summary.get("answer_source") or {})
+    if bool(answer_source.get("changed")):
+        findings.append(
+            f"Answer source changed from {answer_source.get('before')} to {answer_source.get('after')}."
+        )
+
+    focus_area = _determine_focus_area(comparison)
+    verdict = _determine_verdict(comparison)
+    priority = _determine_priority(comparison, warnings)
+
+    if not findings:
+        findings.append("No significant behavioral differences were detected in query, evidence, or answer output.")
+
+    if not next_steps:
+        next_steps.append("If this change was intentional, keep the current baseline as the new comparison reference.")
+
+    return {
+        "verdict": verdict,
+        "priority": priority,
+        "focus_area": focus_area,
+        "findings": findings,
+        "next_steps": next_steps,
+    }
+
+
+def _determine_focus_area(comparison: dict[str, object]) -> str:
+    summary = dict(comparison.get("summary") or {})
+    query = dict(comparison.get("query") or {})
+    evidence = dict(comparison.get("evidence") or {})
+    answer = dict(comparison.get("answer") or {})
+
+    if bool((summary.get("query_type") or {}).get("changed")):
+        return "query_understanding"
+    if bool(query.get("top_hit_changed")):
+        return "retrieval"
+    if bool(evidence.get("top_evidence_changed")):
+        return "evidence"
+    if bool(answer.get("final_answer_changed")):
+        return "answering"
+    return "stable"
+
+
+def _determine_verdict(comparison: dict[str, object]) -> str:
+    warnings = list(comparison.get("warnings") or [])
+    summary = dict(comparison.get("summary") or {})
+    query = dict(comparison.get("query") or {})
+    evidence = dict(comparison.get("evidence") or {})
+    answer = dict(comparison.get("answer") or {})
+    query_hit_delta = _delta_value(summary.get("query_hit_count"))
+    evidence_delta = _delta_value(summary.get("evidence_count"))
+
+    if "question_changed" in warnings:
+        return "invalid_comparison"
+    if bool((summary.get("query_type") or {}).get("changed")):
+        return "query_drift"
+    if (query_hit_delta is not None and query_hit_delta < 0) or (evidence_delta is not None and evidence_delta < 0):
+        return "possible_regression"
+    if bool(query.get("top_hit_changed")) or bool(evidence.get("top_evidence_changed")) or bool(answer.get("final_answer_changed")):
+        return "behavior_changed"
+    return "stable"
+
+
+def _determine_priority(comparison: dict[str, object], warnings: list[str]) -> str:
+    summary = dict(comparison.get("summary") or {})
+    query_hit_delta = _delta_value(summary.get("query_hit_count"))
+    evidence_delta = _delta_value(summary.get("evidence_count"))
+    if "question_changed" in warnings or bool((summary.get("query_type") or {}).get("changed")):
+        return "high"
+    if (query_hit_delta is not None and query_hit_delta < 0) or (evidence_delta is not None and evidence_delta < 0):
+        return "high"
+    if query_hit_delta or evidence_delta:
+        return "medium"
+    return "low"
+
+
+def _delta_value(delta_payload: object) -> float | int | None:
+    if not isinstance(delta_payload, dict):
+        return None
+    return _coerce_number(delta_payload.get("delta"))
+
+
+def _render_delta(delta_payload: object) -> str:
+    if not isinstance(delta_payload, dict):
+        return "n/a"
+    before = delta_payload.get("before")
+    after = delta_payload.get("after")
+    delta = delta_payload.get("delta")
+    return f"{before} -> {after} ({delta:+})" if isinstance(delta, (int, float)) else f"{before} -> {after}"

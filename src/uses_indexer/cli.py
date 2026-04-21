@@ -86,6 +86,7 @@ def main() -> int:
     compare_bundle_parser = subparsers.add_parser("compare-debug-bundles", help="Compare two debug bundle archives or bundle.json files.")
     compare_bundle_parser.add_argument("--before", required=True, help="Baseline debug bundle path or archive directory.")
     compare_bundle_parser.add_argument("--after", required=True, help="New debug bundle path or archive directory.")
+    compare_bundle_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
     compare_bundle_parser.add_argument("--output", help="Optional JSON comparison output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
@@ -288,6 +289,11 @@ def main() -> int:
         output_path.write_text(rendered, encoding="utf-8")
     else:
         print(rendered)
+
+    if args.command == "compare-debug-bundles" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
 
     if args.command == "eval-retrieval" and args.fail_on_thresholds and data["thresholds"]["status"] != "pass":
         return 2

@@ -165,6 +165,7 @@ PYTHONPATH=. python3 -m uses_indexer debug-bundle \
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
   --before ./examples/debug_bundle_archive_before \
   --after ./examples/debug_bundle_archive_after \
+  --markdown-output ./examples/debug_bundle_compare.md \
   --output ./examples/debug_bundle_compare.json
 ```
 
@@ -184,6 +185,14 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
 - `query.top_hit_changed`
 - `evidence.top_evidence_changed`
 - `answer.before_final_answer_excerpt / after_final_answer_excerpt`
+
+如果你传了 `--markdown-output`，还会额外生成一份更适合人直接看的 reviewer 摘要，里面会有：
+
+- `verdict`
+- `priority`
+- `focus_area`
+- `findings`
+- `suggested next steps`
 
 ### 什么时候最适合用 compare-debug-bundles
 
@@ -209,12 +218,39 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
 5. 最后看 `answer.before_final_answer_excerpt / after_final_answer_excerpt`
    - 用来快速判断回答文案是不是只是润色变化，还是结论本身变了
 
+如果你先看 markdown reviewer 摘要，可以按这三个字段快速分流：
+
+- `verdict`
+  - `stable`：基本没有重要行为变化
+  - `behavior_changed`：行为变了，但不一定是坏事
+  - `possible_regression`：命中数或证据数下降，值得优先排查
+  - `query_drift`：问题理解变了，先查 query understanding
+  - `invalid_comparison`：两次输入不具备可比性
+- `priority`
+  - `high`：建议立刻看
+  - `medium`：有变化，但未必是回退
+  - `low`：基本稳定
+- `focus_area`
+  - `query_understanding`
+  - `retrieval`
+  - `evidence`
+  - `answering`
+  - `stable`
+
+一个实用习惯是：
+
+1. 先看 markdown reviewer 摘要
+2. 再看 JSON 里的 `summary`
+3. 最后只在需要时下钻到 `before_top_hits / after_top_hits` 和 `before_top_evidence / after_top_evidence`
+
 ### 一些经验判断
 
 - `candidate_count` 上升，但 `top_hit_changed` 变差：通常是召回更宽了，但排序没跟上
 - `query` 看起来差不多，`evidence.top_evidence_changed` 变差：通常是证据裁剪或上下文扩展出了偏差
 - `query/evidence` 都没明显变化，但 `final_answer_changed` 很大：优先看 answer policy、prompt 或 LLM provider
 - `query_type_changed`：优先先解决 query understanding，不要急着调 rerank
+- `verdict=possible_regression` 且 `focus_area=retrieval`：先看 top hit 是否被更宽泛但更弱的候选替换
+- `verdict=behavior_changed` 且 `focus_area=evidence`：先看 evidence pruning 和 context expansion
 
 ## 8. 相关文档
 
