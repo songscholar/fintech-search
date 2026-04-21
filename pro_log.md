@@ -2287,3 +2287,45 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在无论是 CLI、HTTP 还是 MCP，批量 panel 和 panel gate 都已经能统一使用
 - 这一步让 release gate 从本地命令进一步升级成了服务化能力
+
+## [1.2.31] - 2026-04-21
+
+### Step 38: 增加 panel baseline 对比
+
+### 本步目标
+
+- 让批量 panel 不只是一份当前快照，也能作为历史基线长期保存和比较
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - `build_debug_bundle_regression_panel()` 现在在 `archive_dir` 下会补写：
+     - `panel.json`
+     - `panel.md`
+     - `panel_summary.json`
+   - 新增 `write_debug_bundle_regression_panel_archive()`
+   - 新增 `compare_debug_bundle_regression_panels()`
+   - 新增 panel-level comparison markdown
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `compare-debug-bundle-panels`
+
+3. 更新测试
+   - `tests/test_cli.py`
+     - 新增 panel baseline compare 回归
+
+4. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 panel baseline compare 的使用方式
+   - `docs/EVALUATION.md`
+     - 补充长期 panel 趋势跟踪建议
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py tests/test_cli.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- 批量 panel 现在已经可以作为长期基线产物保存下来
+- 这一步让回归能力从“当前版本审阅”进一步升级成了“历史基线比较”

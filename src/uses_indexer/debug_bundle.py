@@ -242,6 +242,8 @@ def build_debug_bundle_regression_panel(
         "archive_manifest": archive_manifest,
     }
     panel["markdown_summary"] = render_debug_bundle_regression_panel_markdown(panel)
+    if archive_root is not None:
+        panel["archive"] = write_debug_bundle_regression_panel_archive(panel, archive_root)
     return panel
 
 
@@ -296,6 +298,110 @@ def evaluate_debug_bundle_regression_panel_thresholds(
         "failed_count": sum(1 for item in checks if not item["passed"]),
         "checks": checks,
     }
+
+
+def write_debug_bundle_regression_panel_archive(panel: dict[str, object], archive_dir: str | Path) -> dict[str, object]:
+    root = Path(archive_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    panel_path = root / "panel.json"
+    markdown_path = root / "panel.md"
+    summary_path = root / "panel_summary.json"
+
+    panel_path.write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    markdown_path.write_text(str(panel.get("markdown_summary") or ""), encoding="utf-8")
+
+    summary = {
+        "bundle_kind": "debug_bundle_regression_panel_summary",
+        "before_db_path": panel.get("before_db_path"),
+        "after_db_path": panel.get("after_db_path"),
+        "cases_path": panel.get("cases_path"),
+        "case_count": panel.get("case_count"),
+        "summary": panel.get("summary"),
+        "thresholds": panel.get("thresholds"),
+    }
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "archive_dir": str(root),
+        "files": {
+            "panel": str(panel_path),
+            "markdown": str(markdown_path),
+            "summary": str(summary_path),
+        },
+    }
+
+
+def compare_debug_bundle_regression_panels(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
+    before_panel = _load_debug_bundle_regression_panel(before_path)
+    after_panel = _load_debug_bundle_regression_panel(after_path)
+
+    before_summary = dict(before_panel.get("summary") or {})
+    after_summary = dict(after_panel.get("summary") or {})
+    before_cases = {str(item.get("case_id") or item.get("question_text") or index): item for index, item in enumerate(list(before_panel.get("cases") or []), start=1)}
+    after_cases = {str(item.get("case_id") or item.get("question_text") or index): item for index, item in enumerate(list(after_panel.get("cases") or []), start=1)}
+    case_ids = sorted(set(before_cases) | set(after_cases))
+
+    verdict_delta = _count_delta(
+        dict(before_summary.get("verdict_counts") or {}),
+        dict(after_summary.get("verdict_counts") or {}),
+    )
+    priority_delta = _count_delta(
+        dict(before_summary.get("priority_counts") or {}),
+        dict(after_summary.get("priority_counts") or {}),
+    )
+    focus_area_delta = _count_delta(
+        dict(before_summary.get("focus_area_counts") or {}),
+        dict(after_summary.get("focus_area_counts") or {}),
+    )
+
+    case_changes: list[dict[str, object]] = []
+    for case_id in case_ids:
+        before_case = before_cases.get(case_id)
+        after_case = after_cases.get(case_id)
+        if before_case is None or after_case is None:
+            continue
+        before_review = dict(before_case.get("review_summary") or {})
+        after_review = dict(after_case.get("review_summary") or {})
+        verdict_before = str(before_review.get("verdict") or "unknown")
+        verdict_after = str(after_review.get("verdict") or "unknown")
+        focus_before = str(before_review.get("focus_area") or "stable")
+        focus_after = str(after_review.get("focus_area") or "stable")
+        changed = verdict_before != verdict_after or focus_before != focus_after
+        case_changes.append(
+            {
+                "case_id": case_id,
+                "question": after_case.get("question_text") or before_case.get("question_text"),
+                "changed": changed,
+                "before_verdict": verdict_before,
+                "after_verdict": verdict_after,
+                "before_focus_area": focus_before,
+                "after_focus_area": focus_after,
+                "before_priority": before_review.get("priority"),
+                "after_priority": after_review.get("priority"),
+            }
+        )
+
+    comparison = {
+        "bundle_kind": "debug_bundle_regression_panel_comparison",
+        "before_path": str(before_path),
+        "after_path": str(after_path),
+        "summary": {
+            "case_count": _numeric_delta(before_panel.get("case_count"), after_panel.get("case_count")),
+            "changed_case_count": _numeric_delta(before_summary.get("changed_case_count"), after_summary.get("changed_case_count")),
+            "stable_case_count": _numeric_delta(before_summary.get("stable_case_count"), after_summary.get("stable_case_count")),
+            "verdict_counts_delta": verdict_delta,
+            "priority_counts_delta": priority_delta,
+            "focus_area_counts_delta": focus_area_delta,
+        },
+        "high_priority_cases": {
+            "before": list(before_summary.get("high_priority_cases") or []),
+            "after": list(after_summary.get("high_priority_cases") or []),
+        },
+        "case_changes": case_changes,
+    }
+    comparison["review_summary"] = _build_panel_comparison_review_summary(comparison)
+    comparison["markdown_summary"] = render_debug_bundle_regression_panel_comparison_markdown(comparison)
+    return comparison
 
 
 def compare_debug_bundles_from_payloads(
@@ -419,6 +525,16 @@ def _load_regression_cases(path: str | Path) -> list[dict[str, object]]:
             raise ValueError(f"Regression case #{index} is missing a question: {path}")
         cases.append(item)
     return cases
+
+
+def _load_debug_bundle_regression_panel(path: str | Path) -> dict[str, object]:
+    candidate = Path(path)
+    if candidate.is_dir():
+        candidate = candidate / "panel.json"
+    payload = json.loads(candidate.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Debug bundle regression panel must be a JSON object: {candidate}")
+    return payload
 
 
 def _query_type(query_payload: dict[str, object]) -> str:
@@ -748,11 +864,89 @@ def render_debug_bundle_regression_panel_markdown(panel: dict[str, object]) -> s
     return "\n".join(lines).strip() + "\n"
 
 
+def render_debug_bundle_regression_panel_comparison_markdown(comparison: dict[str, object]) -> str:
+    summary = dict(comparison.get("summary") or {})
+    review = dict(comparison.get("review_summary") or {})
+    lines = [
+        "# Debug Bundle Regression Panel Comparison",
+        "",
+        f"- Verdict: {review.get('verdict', 'unknown')}",
+        f"- Priority: {review.get('priority', 'medium')}",
+        f"- Changed cases delta: {_render_delta(summary.get('changed_case_count'))}",
+        f"- Stable cases delta: {_render_delta(summary.get('stable_case_count'))}",
+        "",
+        "## Verdict Delta",
+    ]
+    verdict_delta = dict(summary.get("verdict_counts_delta") or {})
+    if verdict_delta:
+        lines.extend(f"- {key}: {value:+}" for key, value in sorted(verdict_delta.items()))
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Findings"])
+    findings = list(review.get("findings") or [])
+    if findings:
+        lines.extend(f"- {item}" for item in findings)
+    else:
+        lines.append("- No major panel-level changes detected.")
+
+    lines.extend(["", "## Suggested Next Steps"])
+    next_steps = list(review.get("next_steps") or [])
+    if next_steps:
+        lines.extend(f"- {item}" for item in next_steps)
+    else:
+        lines.append("- No follow-up needed.")
+
+    return "\n".join(lines).strip() + "\n"
+
+
 def _slugify(value: str) -> str:
     lowered = value.strip().lower()
     normalized = re.sub(r"[^a-z0-9]+", "-", lowered)
     trimmed = normalized.strip("-")
     return trimmed or "case"
+
+
+def _count_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    keys = sorted(set(before) | set(after))
+    return {key: int(after.get(key, 0)) - int(before.get(key, 0)) for key in keys}
+
+
+def _build_panel_comparison_review_summary(comparison: dict[str, object]) -> dict[str, object]:
+    summary = dict(comparison.get("summary") or {})
+    findings: list[str] = []
+    next_steps: list[str] = []
+
+    changed_case_delta = _delta_value(summary.get("changed_case_count"))
+    if changed_case_delta is not None and changed_case_delta > 0:
+        findings.append(f"Changed case count increased by {changed_case_delta}.")
+        next_steps.append("Inspect newly changed cases first; the current panel baseline is noisier than before.")
+    elif changed_case_delta is not None and changed_case_delta < 0:
+        findings.append(f"Changed case count decreased by {abs(changed_case_delta)}.")
+
+    verdict_delta = dict(summary.get("verdict_counts_delta") or {})
+    possible_regression_delta = int(verdict_delta.get("possible_regression", 0))
+    high_priority_after = len(list((comparison.get("high_priority_cases") or {}).get("after") or []))
+    if possible_regression_delta > 0:
+        findings.append(f"`possible_regression` cases increased by {possible_regression_delta}.")
+        next_steps.append("Review the cases that newly entered possible_regression before accepting this baseline.")
+    if high_priority_after > 0:
+        findings.append(f"There are {high_priority_after} high priority cases in the current panel.")
+        next_steps.append("Start from the high priority cases list and inspect each comparison.md archive.")
+
+    if not findings:
+        findings.append("No significant panel-level regressions were detected against the saved baseline.")
+    if not next_steps:
+        next_steps.append("If this panel is the new expected state, store it as the next baseline archive.")
+
+    verdict = "possible_regression" if possible_regression_delta > 0 else ("changed" if changed_case_delta else "stable")
+    priority = "high" if possible_regression_delta > 0 or high_priority_after > 0 else ("medium" if changed_case_delta else "low")
+    return {
+        "verdict": verdict,
+        "priority": priority,
+        "findings": findings,
+        "next_steps": next_steps,
+    }
 
 
 def _panel_threshold_check(*, metric: str, actual: int | None, expected: int) -> dict[str, object]:

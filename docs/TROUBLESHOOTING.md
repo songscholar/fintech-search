@@ -382,6 +382,38 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 
 这样如果你是在上层 Agent、服务端任务或前端控制台里做回归，也可以直接复用同一套 panel 结构和 threshold 结果，而不用自己再拼装一层。
 
+### 怎么和历史基线 panel 做比较
+
+如果你已经保存过一份 panel archive，后面可以直接拿它和当前 panel 做比较：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
+  --before ./examples/debug_bundle_panel_baseline \
+  --after ./examples/debug_bundle_panel_current \
+  --markdown-output ./examples/debug_bundle_panel_compare.md \
+  --output ./examples/debug_bundle_panel_compare.json
+```
+
+这里的 `--before / --after` 既可以传：
+
+- panel archive 目录
+- 也可以直接传 `panel.json`
+
+返回结果会重点告诉你：
+
+- `changed_case_count` 的变化
+- `stable_case_count` 的变化
+- `verdict_counts_delta`
+- `priority_counts_delta`
+- `focus_area_counts_delta`
+- `high_priority_cases` 的前后差异
+
+一个实用的持续回归流程是：
+
+1. 先生成当前版本的 panel archive
+2. 用 `compare-debug-bundle-panels` 和上一次基线 archive 做比较
+3. 如果 panel-level 对比明显变差，再下钻到单题 `comparison.md`
+
 ## 9. 相关文档
 
 - [TRACE_SCHEMA.md](/Users/songzuoqiang/Documents/agent/condex/codes/docs/TRACE_SCHEMA.md)

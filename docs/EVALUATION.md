@@ -240,6 +240,18 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 - 整体指标退化
 - 典型关键问题退化
 
+如果你要做更长期的趋势跟踪，还可以把每次 panel 保存成 archive，然后比较两次 panel：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
+  --before examples/debug_bundle_panel_baseline \
+  --after examples/debug_bundle_panel_current \
+  --markdown-output examples/debug_bundle_panel_compare.md \
+  --output examples/debug_bundle_panel_compare.json
+```
+
+这样可以把“这次回归和上一次基线相比，整体 case 结构到底怎么变了”也一起量化出来。
+
 ## 当前基准
 
 当前初始评测集有 5 个 case，覆盖：

@@ -13,6 +13,7 @@ from .debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    compare_debug_bundle_regression_panels,
     evaluate_debug_bundle_regression_panel_thresholds,
     write_debug_bundle_archive,
 )
@@ -111,6 +112,12 @@ def main() -> int:
     compare_bundle_panel_parser.add_argument("--fail-on-thresholds", action="store_true", help="Exit with non-zero status when panel threshold checks fail.")
     compare_bundle_panel_parser.add_argument("--markdown-output", help="Optional markdown panel output path.")
     compare_bundle_panel_parser.add_argument("--output", help="Optional JSON panel output path.")
+
+    compare_panel_archives_parser = subparsers.add_parser("compare-debug-bundle-panels", help="Compare two saved debug bundle regression panel archives or panel.json files.")
+    compare_panel_archives_parser.add_argument("--before", required=True, help="Baseline panel archive directory or panel.json path.")
+    compare_panel_archives_parser.add_argument("--after", required=True, help="New panel archive directory or panel.json path.")
+    compare_panel_archives_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
+    compare_panel_archives_parser.add_argument("--output", help="Optional JSON comparison output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
     evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -285,6 +292,8 @@ def main() -> int:
                 max_focus_area_counts=_parse_named_int_pairs(args.max_focus_area_count),
             ),
         )
+    elif args.command == "compare-debug-bundle-panels":
+        data = compare_debug_bundle_regression_panels(args.before, args.after)
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,
@@ -339,6 +348,10 @@ def main() -> int:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
     if args.command == "compare-debug-bundle-panel" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "compare-debug-bundle-panels" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
