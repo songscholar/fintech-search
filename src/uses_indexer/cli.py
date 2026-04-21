@@ -20,6 +20,7 @@ from .debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
+    promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
     summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
@@ -133,6 +134,14 @@ def main() -> int:
     save_panel_baseline_parser.add_argument("--note", help="Optional free-form note for this baseline.")
     save_panel_baseline_parser.add_argument("--tag", action="append", default=[], help="Optional baseline tag. Can be provided multiple times.")
     save_panel_baseline_parser.add_argument("--output", help="Optional JSON output path.")
+
+    promote_panel_baseline_parser = subparsers.add_parser("promote-debug-bundle-panel-baseline", help="Promote a panel archive or panel.json file to the active named baseline.")
+    promote_panel_baseline_parser.add_argument("--panel", required=True, help="Panel archive directory or panel.json path.")
+    promote_panel_baseline_parser.add_argument("--name", required=True, help="Target baseline name.")
+    promote_panel_baseline_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    promote_panel_baseline_parser.add_argument("--note", help="Optional promotion note.")
+    promote_panel_baseline_parser.add_argument("--tag", action="append", default=[], help="Optional baseline tag. Can be provided multiple times.")
+    promote_panel_baseline_parser.add_argument("--output", help="Optional JSON output path.")
 
     list_panel_baselines_parser = subparsers.add_parser("list-debug-bundle-panel-baselines", help="List saved debug bundle regression panel baselines.")
     list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
@@ -347,6 +356,14 @@ def main() -> int:
         data = compare_debug_bundle_regression_panels(args.before, args.after)
     elif args.command == "save-debug-bundle-panel-baseline":
         data = save_debug_bundle_regression_panel_baseline(
+            args.panel,
+            args.name,
+            baseline_dir=args.baseline_dir,
+            baseline_notes=args.note,
+            baseline_tags=args.tag,
+        )
+    elif args.command == "promote-debug-bundle-panel-baseline":
+        data = promote_debug_bundle_regression_panel_baseline(
             args.panel,
             args.name,
             baseline_dir=args.baseline_dir,

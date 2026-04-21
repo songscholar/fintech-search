@@ -198,13 +198,30 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert status == 200
     assert shown["baseline_tags"] == ["nightly", "smoke"]
 
+    status, promoted = api.handle_request(
+        "POST",
+        "/promote-debug-bundle-panel-baseline",
+        json.dumps(
+            {
+                "panel_path": str(panel_archive),
+                "baseline_name": "active smoke",
+                "baseline_dir": str(tmp_path / "baseline_store"),
+                "baseline_notes": "promoted after smoke pass",
+                "baseline_tags": ["smoke", "active"],
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert promoted["bundle_kind"] == "debug_bundle_regression_panel_baseline_promoted"
+    assert promoted["promotion_source"] == str(panel_archive)
+
     status, trend = api.handle_request(
         "GET",
         f"/show-debug-bundle-panel-baseline-trend?baseline_dir={tmp_path / 'baseline_store'}&baseline_tag=smoke",
     )
     assert status == 200
     assert trend["bundle_kind"] == "debug_bundle_regression_panel_baseline_trend"
-    assert trend["baseline_count"] == 1
+    assert trend["baseline_count"] == 2
 
     status, compared = api.handle_request(
         "POST",

@@ -498,6 +498,20 @@ PYTHONPATH=. python3 -m uses_indexer delete-debug-bundle-panel-baseline \
   --baseline-dir ./examples/panel_baselines
 ```
 
+如果你已经确认当前 panel 可以作为新的正式标准，也可以直接 promote：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --note "通过 release gate，提升为当前正式基线" \
+  --tag release \
+  --tag active
+```
+
+`promote` 更适合 release / smoke gate 通过后的“正式提升”动作；`save` 更适合普通留档。
+
 如果你想看一组 baseline 的长期走势，而不是只做两两比较，可以直接看 trend：
 
 ```bash
@@ -533,6 +547,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `GET /show-debug-bundle-panel-baseline-trend`
   - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
+  - `POST /promote-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -542,6 +557,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `show_debug_bundle_panel_baseline_trend`
   - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
+  - `promote_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

@@ -2530,3 +2530,56 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在同一组 tagged baseline 已经可以直接看长期走势，不再只能两两比较
 - 这一步让 baseline 体系从“可管理”进一步升级成了“可做阶段性趋势复盘”的质量资产
+
+## [1.2.35] - 2026-04-21
+
+### Step 42: 增加 baseline promote 能力
+
+### 本步目标
+
+- 让“当前 panel 通过 gate 后提升为正式标准答案”成为一个明确动作
+- 让 baseline 元数据里能区分“普通保存”与“正式提升”
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - `save_debug_bundle_regression_panel_baseline()` 现在支持 `promotion_source`
+   - 新增 `promote_debug_bundle_regression_panel_baseline()`
+   - promote 返回：
+     - `bundle_kind = debug_bundle_regression_panel_baseline_promoted`
+     - `promotion_source`
+     - `baseline_notes`
+     - `baseline_tags`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `promote-debug-bundle-panel-baseline`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /promote-debug-bundle-panel-baseline`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `promote_debug_bundle_panel_baseline`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 promote 回归
+   - `tests/test_api.py`
+     - 新增 promote API 回归
+   - `tests/test_mcp.py`
+     - 新增 promote MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 promote 的使用方式和适用场景
+   - `docs/EVALUATION.md`
+     - 补充“通过 gate 后一键提升 baseline”的评测工作流
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `23 passed`
+
+### 结论
+
+- 现在 baseline 不只支持保存和比较，还支持“正式提升为当前标准版本”
+- 这一步让回归资产从“可管理”进一步升级成了“可治理、可显式切换当前标准答案”的流程能力

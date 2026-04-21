@@ -416,6 +416,7 @@ def save_debug_bundle_regression_panel_baseline(
     baseline_dir: str | Path | None = None,
     baseline_notes: str | None = None,
     baseline_tags: list[str] | None = None,
+    promotion_source: str | None = None,
 ) -> dict[str, object]:
     panel = _load_debug_bundle_regression_panel(panel_path)
     source_archive = _normalize_panel_archive_path(panel_path)
@@ -448,6 +449,7 @@ def save_debug_bundle_regression_panel_baseline(
         "after_db_path": panel.get("after_db_path"),
         "baseline_notes": baseline_notes,
         "baseline_tags": sorted({str(tag).strip() for tag in (baseline_tags or []) if str(tag).strip()}),
+        "promotion_source": promotion_source,
         "summary": panel.get("summary"),
     }
     baseline_record_path = target_dir / "baseline.json"
@@ -459,6 +461,37 @@ def save_debug_bundle_regression_panel_baseline(
         "summary": str(target_dir / "panel_summary.json"),
     }
     return baseline_record
+
+
+def promote_debug_bundle_regression_panel_baseline(
+    panel_path: str | Path,
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_notes: str | None = None,
+    baseline_tags: list[str] | None = None,
+) -> dict[str, object]:
+    record = save_debug_bundle_regression_panel_baseline(
+        panel_path,
+        baseline_name,
+        baseline_dir=baseline_dir,
+        baseline_notes=baseline_notes,
+        baseline_tags=baseline_tags,
+        promotion_source=str(panel_path),
+    )
+    return {
+        "bundle_kind": "debug_bundle_regression_panel_baseline_promoted",
+        "baseline_name": record.get("baseline_name"),
+        "baseline_slug": record.get("baseline_slug"),
+        "baseline_dir": record.get("archive_dir"),
+        "saved_at": record.get("saved_at"),
+        "baseline_notes": record.get("baseline_notes"),
+        "baseline_tags": list(record.get("baseline_tags") or []),
+        "promotion_source": record.get("promotion_source"),
+        "replaced": record.get("replaced"),
+        "files": record.get("files"),
+        "summary": record.get("summary"),
+    }
 
 
 def list_debug_bundle_regression_panel_baselines(

@@ -18,6 +18,7 @@ from uses_indexer.debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
+    promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
     summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
@@ -524,3 +525,40 @@ def test_baseline_trend_summarizes_tagged_history(tmp_path: Path) -> None:
     assert trend["latest"]["baseline_slug"] == "release-2"
     assert trend["summary"]["overall_changed_case_delta"]["delta"] == 2
     assert trend["markdown_summary"].startswith("# Debug Bundle Panel Baseline Trend")
+
+
+def test_promote_baseline_records_promotion_source(tmp_path: Path) -> None:
+    panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/a.db",
+        "after_db_path": "/tmp/b.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {
+            "changed_case_count": 0,
+            "stable_case_count": 1,
+            "verdict_counts": {"stable": 1},
+            "priority_counts": {"low": 1},
+            "focus_area_counts": {"stable": 1},
+            "high_priority_cases": [],
+        },
+        "cases": [],
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    panel_dir = tmp_path / "panel_archive"
+    baseline_dir = tmp_path / "baseline_store"
+    panel_dir.mkdir()
+    (panel_dir / "panel.json").write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_dir / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+    (panel_dir / "panel_summary.json").write_text(json.dumps({"summary": panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    promoted = promote_debug_bundle_regression_panel_baseline(
+        panel_dir,
+        "release-active",
+        baseline_dir=baseline_dir,
+        baseline_notes="promoted after gate pass",
+        baseline_tags=["release", "active"],
+    )
+    assert promoted["bundle_kind"] == "debug_bundle_regression_panel_baseline_promoted"
+    assert promoted["promotion_source"] == str(panel_dir)
+    assert promoted["baseline_tags"] == ["active", "release"]

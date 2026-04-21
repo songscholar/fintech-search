@@ -19,6 +19,7 @@ from .debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
+    promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
     summarize_debug_bundle_regression_panel_baseline_trend,
 )
@@ -189,6 +190,7 @@ class CodebaseMcpServer:
             "list_debug_bundle_panel_baselines": self._tool_list_debug_bundle_panel_baselines,
             "show_debug_bundle_panel_baseline_trend": self._tool_show_debug_bundle_panel_baseline_trend,
             "show_debug_bundle_panel_baseline": self._tool_show_debug_bundle_panel_baseline,
+            "promote_debug_bundle_panel_baseline": self._tool_promote_debug_bundle_panel_baseline,
             "delete_debug_bundle_panel_baseline": self._tool_delete_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_latest_baseline": self._tool_compare_debug_bundle_panel_latest_baseline,
@@ -429,6 +431,22 @@ class CodebaseMcpServer:
                         "baseline_dir": {"type": "string"},
                     },
                     "required": ["baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "promote_debug_bundle_panel_baseline",
+                "description": "Promote a panel archive or panel.json file to the active named debug bundle regression panel baseline.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "panel_path": {"type": "string"},
+                        "baseline_name": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                        "baseline_notes": {"type": "string"},
+                        "baseline_tags": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["panel_path", "baseline_name"],
                     "additionalProperties": False,
                 },
             },
@@ -689,6 +707,20 @@ class CodebaseMcpServer:
         baseline_name = self._required_string(arguments, "baseline_name")
         baseline_dir = self._optional_string(arguments, "baseline_dir")
         return load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
+
+    def _tool_promote_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
+        panel_path = self._required_string(arguments, "panel_path")
+        baseline_name = self._required_string(arguments, "baseline_name")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        baseline_notes = self._optional_string(arguments, "baseline_notes")
+        baseline_tags = self._optional_string_list(arguments, "baseline_tags")
+        return promote_debug_bundle_regression_panel_baseline(
+            panel_path,
+            baseline_name,
+            baseline_dir=baseline_dir,
+            baseline_notes=baseline_notes,
+            baseline_tags=baseline_tags,
+        )
 
     def _tool_delete_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
         baseline_name = self._required_string(arguments, "baseline_name")

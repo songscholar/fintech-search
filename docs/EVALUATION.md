@@ -415,6 +415,18 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline 
   --markdown-output ./examples/release_candidate_latest_compare.md
 ```
 
+如果当前这一版已经通过 gate，想把它直接提升成新的正式 baseline，也可以直接 promote：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_next \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --note "本轮 release gate 全通过，提升为正式基线" \
+  --tag release \
+  --tag active
+```
+
 这样做的价值是：
 
 - `eval-retrieval` 继续负责整体数值门槛
@@ -422,6 +434,7 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline 
 - `compare-debug-bundle-panels` 负责任意两个 archive 的历史对比
 - `compare-debug-bundle-panel-baseline` 则负责“和固定标准答案比”
 - `compare-debug-bundle-panel-latest-baseline` 则负责“和最近一份同类 baseline 比”
+- `promote-debug-bundle-panel-baseline` 则负责“把当前结果正式提升成标准答案”
 
 如果你想看某一类 baseline 的长期变化趋势，而不只是做一次比较，可以再加一层 trend：
 
@@ -446,6 +459,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `GET /show-debug-bundle-panel-baseline-trend`
   - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
+  - `POST /promote-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -455,6 +469,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `show_debug_bundle_panel_baseline_trend`
   - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
+  - `promote_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`
