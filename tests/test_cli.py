@@ -6,7 +6,12 @@ from pathlib import Path
 from tests.test_answering import StubLlm
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.cli import _discover_default_db, _parse_scoped_threshold_pairs, _parse_threshold_pairs
-from uses_indexer.debug_bundle import build_debug_bundle, compare_debug_bundles, write_debug_bundle_archive
+from uses_indexer.debug_bundle import (
+    build_debug_bundle,
+    build_debug_bundle_regression_panel,
+    compare_debug_bundles,
+    write_debug_bundle_archive,
+)
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
 
@@ -196,3 +201,72 @@ def test_compare_debug_bundles_reports_differences(tmp_path: Path) -> None:
     assert comparison["evidence"]["top_evidence_changed"] is True
     assert comparison["answer"]["final_answer_changed"] is True
     assert "db_path_changed" in comparison["warnings"]
+
+
+def test_build_debug_bundle_regression_panel_summarizes_cases(tmp_path: Path) -> None:
+    before_src = tmp_path / "before_src"
+    after_src = tmp_path / "after_src"
+    before_src.mkdir()
+    after_src.mkdir()
+    sample_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="AF_测试_样例" objectId="1">
+  <code><![CDATA[
+  [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
+  ]]></code>
+</business:Function>
+"""
+    changed_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="AF_测试_样例" objectId="1">
+  <code><![CDATA[
+  [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
+  [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
+  ]]></code>
+</business:Function>
+"""
+    (before_src / "AF_SAMPLE.uftatomfunction").write_text(sample_xml, encoding="utf-8")
+    (after_src / "AF_SAMPLE.uftatomfunction").write_text(changed_xml, encoding="utf-8")
+
+    before_db = tmp_path / "before.db"
+    after_db = tmp_path / "after.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(before_src, before_db)
+    indexer.build_index(after_src, after_db)
+
+    cases_path = tmp_path / "panel_cases.json"
+    cases_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "id": "stock-code",
+                        "question": "证券代码获取的逻辑在哪里",
+                        "tags": ["call_chain"],
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    qa = CodebaseQA(indexer)
+    answerer = CodebaseAnswerer(qa=qa, llm=StubLlm(None))
+
+    panel = build_debug_bundle_regression_panel(
+        indexer=indexer,
+        answerer=answerer,
+        before_db_path=str(before_db),
+        after_db_path=str(after_db),
+        cases_path=cases_path,
+        limit=3,
+        context_window=1,
+        related_limit=1,
+        archive_dir=tmp_path / "panel_archive",
+    )
+
+    assert panel["bundle_kind"] == "debug_bundle_regression_panel"
+    assert panel["case_count"] == 1
+    assert panel["summary"]["changed_case_count"] == 1
+    assert panel["summary"]["verdict_counts"]["behavior_changed"] == 1
+    assert sum(panel["summary"]["priority_counts"].values()) == 1
+    assert panel["archive_manifest"][0]["case_id"] == "stock-code"
+    assert panel["markdown_summary"].startswith("# Debug Bundle Regression Panel")

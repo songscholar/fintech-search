@@ -252,7 +252,79 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
 - `verdict=possible_regression` 且 `focus_area=retrieval`：先看 top hit 是否被更宽泛但更弱的候选替换
 - `verdict=behavior_changed` 且 `focus_area=evidence`：先看 evidence pruning 和 context expansion
 
-## 8. 相关文档
+## 8. 一组固定问题怎么批量复盘
+
+如果你不想逐题手工跑 `debug-bundle`，可以直接用批量回归面板：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
+  --before-db ./examples/business_code_index_before.db \
+  --after-db ./examples/business_code_index_after.db \
+  --cases ./eval/uses_codes_effect_cases.json \
+  --archive-dir ./examples/debug_bundle_panel \
+  --markdown-output ./examples/debug_bundle_panel.md \
+  --output ./examples/debug_bundle_panel.json
+```
+
+这个命令会做三件事：
+
+1. 对 `cases` 里的每个问题分别跑 before/after 两套 `debug-bundle`
+2. 逐题生成 comparison
+3. 最后汇总成一个总览 panel
+
+### cases 文件怎么准备
+
+它直接复用评测用例格式，所以最简单的方式就是沿用你已有的：
+
+- `eval/uses_codes_cases.json`
+- `eval/uses_codes_effect_cases.json`
+
+最少只需要有 `question`，例如：
+
+```json
+{
+  "cases": [
+    {
+      "id": "stock-code-callers",
+      "question": "证券代码获取被谁调用",
+      "tags": ["call_chain", "callers"]
+    }
+  ]
+}
+```
+
+### panel 输出里最值得先看什么
+
+先看 markdown 总览里的：
+
+- `changed cases`
+- `verdict counts`
+- `priority counts`
+- `focus areas`
+- `high priority cases`
+
+这几个字段能帮你快速判断：
+
+- 这次改动是不是影响了很多问题
+- 影响主要集中在 retrieval / evidence / answering 哪一层
+- 哪几个 case 最值得优先人工复盘
+
+### archive-dir 会产出什么
+
+如果传了 `--archive-dir`，每个 case 都会生成一套目录，里面包括：
+
+- `before/`
+- `after/`
+- `comparison.json`
+- `comparison.md`
+
+所以它特别适合：
+
+- 做一次版本发布前的回归审阅
+- 把高优先级 case 发给同事一起看
+- 留一份“这次改动到底影响了哪些典型问题”的证据包
+
+## 9. 相关文档
 
 - [TRACE_SCHEMA.md](/Users/songzuoqiang/Documents/agent/condex/codes/docs/TRACE_SCHEMA.md)
 - [USAGE.md](/Users/songzuoqiang/Documents/agent/condex/codes/docs/USAGE.md)

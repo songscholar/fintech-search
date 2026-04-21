@@ -8,7 +8,12 @@ from pathlib import Path
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .config import bootstrap_env
-from .debug_bundle import build_debug_bundle, compare_debug_bundles, write_debug_bundle_archive
+from .debug_bundle import (
+    build_debug_bundle,
+    build_debug_bundle_regression_panel,
+    compare_debug_bundles,
+    write_debug_bundle_archive,
+)
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
 from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
@@ -88,6 +93,17 @@ def main() -> int:
     compare_bundle_parser.add_argument("--after", required=True, help="New debug bundle path or archive directory.")
     compare_bundle_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
     compare_bundle_parser.add_argument("--output", help="Optional JSON comparison output path.")
+
+    compare_bundle_panel_parser = subparsers.add_parser("compare-debug-bundle-panel", help="Run a fixed question set across before/after DBs and build a regression panel.")
+    compare_bundle_panel_parser.add_argument("--before-db", required=True, help="Baseline SQLite database path.")
+    compare_bundle_panel_parser.add_argument("--after-db", required=True, help="New SQLite database path.")
+    compare_bundle_panel_parser.add_argument("--cases", required=True, help="Question cases JSON path.")
+    compare_bundle_panel_parser.add_argument("--limit", type=int, default=6, help="Maximum number of query hits / evidence blocks per question.")
+    compare_bundle_panel_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
+    compare_bundle_panel_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    compare_bundle_panel_parser.add_argument("--archive-dir", help="Optional directory to archive per-case before/after bundles and comparisons.")
+    compare_bundle_panel_parser.add_argument("--markdown-output", help="Optional markdown panel output path.")
+    compare_bundle_panel_parser.add_argument("--output", help="Optional JSON panel output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
     evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -241,6 +257,18 @@ def main() -> int:
         data = compare_eval_reports(args.before, args.after)
     elif args.command == "compare-debug-bundles":
         data = compare_debug_bundles(args.before, args.after)
+    elif args.command == "compare-debug-bundle-panel":
+        data = build_debug_bundle_regression_panel(
+            indexer=indexer,
+            answerer=answerer,
+            before_db_path=args.before_db,
+            after_db_path=args.after_db,
+            cases_path=args.cases,
+            limit=args.limit,
+            context_window=args.context_window,
+            related_limit=args.related_limit,
+            archive_dir=args.archive_dir,
+        )
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,
@@ -291,6 +319,10 @@ def main() -> int:
         print(rendered)
 
     if args.command == "compare-debug-bundles" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "compare-debug-bundle-panel" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")

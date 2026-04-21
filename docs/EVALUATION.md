@@ -204,6 +204,30 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
 
 这样通常会比直接翻整份 `debug_bundle_compare.json` 更快。
 
+## 批量问题面板
+
+如果你要在一次较大的改动后做“发布前回归”，建议直接跑批量面板，而不是只盯一个问题：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
+  --before-db examples/business_code_index_before.db \
+  --after-db examples/business_code_index_after.db \
+  --cases eval/uses_codes_effect_cases.json \
+  --markdown-output examples/debug_bundle_panel.md \
+  --output examples/debug_bundle_panel.json
+```
+
+这个面板的定位是：
+
+- `eval-retrieval` 看整体指标
+- `compare-debug-bundle-panel` 看一组典型问题的链路级变化
+
+推荐组合方式：
+
+1. 先跑 `eval-retrieval`
+2. 如果整体指标有变化，再跑 `compare-debug-bundle-panel`
+3. 从 panel 里的 `high priority cases` 开始逐题看 `comparison.md`
+
 ## 当前基准
 
 当前初始评测集有 5 个 case，覆盖：

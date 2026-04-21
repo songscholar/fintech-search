@@ -2138,3 +2138,59 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - compare 结果现在不仅能 diff 两次 bundle，还能直接给出“该先看哪一层”的 reviewer 视角摘要
 - 这一步让问题复盘从“结构化 diff”继续升级成了“可快速审阅的 diff”
+
+## [1.2.28] - 2026-04-21
+
+### Step 35: 增加批量 debug bundle 回归面板
+
+### 本步目标
+
+- 让一组固定问题可以批量跑 before/after 两套 debug bundle
+- 把逐题 comparison 再汇总成一个适合 release review 的总览 panel
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `build_debug_bundle_regression_panel()`
+   - 新增 `compare_debug_bundles_from_payloads()`
+   - 新增 panel 汇总：
+     - `summary.changed_case_count`
+     - `summary.stable_case_count`
+     - `summary.verdict_counts`
+     - `summary.priority_counts`
+     - `summary.focus_area_counts`
+     - `summary.high_priority_cases`
+   - 支持 `archive_dir` 输出每个 case 的：
+     - `before/`
+     - `after/`
+     - `comparison.json`
+     - `comparison.md`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `compare-debug-bundle-panel`
+   - 支持：
+     - `--before-db`
+     - `--after-db`
+     - `--cases`
+     - `--archive-dir`
+     - `--markdown-output`
+
+3. 更新测试
+   - `tests/test_cli.py`
+     - 新增 regression panel 回归
+
+4. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 新增批量回归面板的使用方式和产物说明
+   - `docs/EVALUATION.md`
+     - 新增“批量问题面板”建议流程
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py tests/test_cli.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- 现在不仅能复盘单题，还能对一组典型问题做批量链路级回归审阅
+- 这一步让 debug bundle 从“问题排障工具”进一步升级成了“版本回归审阅工具”

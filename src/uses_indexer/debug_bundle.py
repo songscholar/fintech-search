@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -93,7 +94,152 @@ def write_debug_bundle_archive(bundle: dict[str, object], archive_dir: str | Pat
 def compare_debug_bundles(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
     before_bundle = _load_debug_bundle(before_path)
     after_bundle = _load_debug_bundle(after_path)
+    comparison = compare_debug_bundles_from_payloads(before_bundle, after_bundle)
+    comparison["before_path"] = str(before_path)
+    comparison["after_path"] = str(after_path)
+    return comparison
 
+
+def render_debug_bundle_comparison_markdown(comparison: dict[str, object]) -> str:
+    review_summary = dict(comparison.get("review_summary") or {})
+    summary = dict(comparison.get("summary") or {})
+    query = dict(comparison.get("query") or {})
+    evidence = dict(comparison.get("evidence") or {})
+    answer = dict(comparison.get("answer") or {})
+
+    lines = [
+        "# Debug Bundle Comparison",
+        "",
+        f"- Verdict: {review_summary.get('verdict', 'unknown')}",
+        f"- Priority: {review_summary.get('priority', 'medium')}",
+        f"- Focus area: {review_summary.get('focus_area', 'general')}",
+        f"- Query hits delta: {_render_delta(summary.get('query_hit_count'))}",
+        f"- Candidates delta: {_render_delta(summary.get('candidate_count'))}",
+        f"- Evidence delta: {_render_delta(summary.get('evidence_count'))}",
+        f"- Query type changed: {bool((summary.get('query_type') or {}).get('changed'))}",
+        f"- Top hit changed: {bool(query.get('top_hit_changed'))}",
+        f"- Top evidence changed: {bool(evidence.get('top_evidence_changed'))}",
+        f"- Final answer changed: {bool(answer.get('final_answer_changed'))}",
+        "",
+        "## Findings",
+    ]
+
+    findings = list(review_summary.get("findings") or [])
+    if findings:
+        lines.extend(f"- {item}" for item in findings)
+    else:
+        lines.append("- No major differences detected.")
+
+    lines.extend(["", "## Suggested Next Steps"])
+    next_steps = list(review_summary.get("next_steps") or [])
+    if next_steps:
+        lines.extend(f"- {item}" for item in next_steps)
+    else:
+        lines.append("- No follow-up needed.")
+
+    if answer.get("before_final_answer_excerpt") or answer.get("after_final_answer_excerpt"):
+        lines.extend(
+            [
+                "",
+                "## Final Answer Excerpts",
+                f"- Before: {answer.get('before_final_answer_excerpt') or ''}",
+                f"- After: {answer.get('after_final_answer_excerpt') or ''}",
+            ]
+        )
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def build_debug_bundle_regression_panel(
+    *,
+    indexer: SQLiteIndexer,
+    answerer: CodebaseAnswerer,
+    before_db_path: str,
+    after_db_path: str,
+    cases_path: str | Path,
+    limit: int,
+    context_window: int,
+    related_limit: int,
+    archive_dir: str | Path | None = None,
+) -> dict[str, object]:
+    cases = _load_regression_cases(cases_path)
+    comparisons: list[dict[str, object]] = []
+    archive_manifest: list[dict[str, object]] = []
+
+    archive_root = Path(archive_dir) if archive_dir else None
+    if archive_root is not None:
+        archive_root.mkdir(parents=True, exist_ok=True)
+
+    for index, case in enumerate(cases, start=1):
+        case_id = str(case.get("id") or f"case-{index}")
+        question = str(case["question"])
+        tags = [str(item) for item in list(case.get("tags") or [])]
+
+        before_bundle = build_debug_bundle(
+            indexer=indexer,
+            answerer=answerer,
+            db_path=before_db_path,
+            question=question,
+            limit=limit,
+            context_window=context_window,
+            related_limit=related_limit,
+        )
+        after_bundle = build_debug_bundle(
+            indexer=indexer,
+            answerer=answerer,
+            db_path=after_db_path,
+            question=question,
+            limit=limit,
+            context_window=context_window,
+            related_limit=related_limit,
+        )
+
+        comparison = compare_debug_bundles_from_payloads(before_bundle, after_bundle)
+        comparison["case_id"] = case_id
+        comparison["question_text"] = question
+        comparison["tags"] = tags
+        comparisons.append(comparison)
+
+        if archive_root is not None:
+            case_dir = archive_root / f"{index:02d}_{_slugify(case_id)}"
+            before_dir = case_dir / "before"
+            after_dir = case_dir / "after"
+            before_archive = write_debug_bundle_archive(before_bundle, before_dir)
+            after_archive = write_debug_bundle_archive(after_bundle, after_dir)
+            comparison_path = case_dir / "comparison.json"
+            markdown_path = case_dir / "comparison.md"
+            comparison_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+            markdown_path.write_text(str(comparison.get("markdown_summary") or ""), encoding="utf-8")
+            archive_manifest.append(
+                {
+                    "case_id": case_id,
+                    "question": question,
+                    "tags": tags,
+                    "before_archive_dir": before_archive["archive_dir"],
+                    "after_archive_dir": after_archive["archive_dir"],
+                    "comparison_json": str(comparison_path),
+                    "comparison_markdown": str(markdown_path),
+                }
+            )
+
+    panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": before_db_path,
+        "after_db_path": after_db_path,
+        "cases_path": str(cases_path),
+        "case_count": len(comparisons),
+        "summary": _summarize_regression_panel(comparisons),
+        "cases": comparisons,
+        "archive_manifest": archive_manifest,
+    }
+    panel["markdown_summary"] = render_debug_bundle_regression_panel_markdown(panel)
+    return panel
+
+
+def compare_debug_bundles_from_payloads(
+    before_bundle: dict[str, object],
+    after_bundle: dict[str, object],
+) -> dict[str, object]:
     before_query = dict(before_bundle.get("query") or {})
     after_query = dict(after_bundle.get("query") or {})
     before_evidence = dict(before_bundle.get("evidence") or {})
@@ -120,8 +266,8 @@ def compare_debug_bundles(before_path: str | Path, after_path: str | Path) -> di
 
     comparison = {
         "bundle_kind": "debug_bundle_comparison",
-        "before_path": str(before_path),
-        "after_path": str(after_path),
+        "before_path": None,
+        "after_path": None,
         "question": {
             "before": before_bundle.get("question"),
             "after": after_bundle.get("question"),
@@ -185,56 +331,6 @@ def compare_debug_bundles(before_path: str | Path, after_path: str | Path) -> di
     return comparison
 
 
-def render_debug_bundle_comparison_markdown(comparison: dict[str, object]) -> str:
-    review_summary = dict(comparison.get("review_summary") or {})
-    summary = dict(comparison.get("summary") or {})
-    query = dict(comparison.get("query") or {})
-    evidence = dict(comparison.get("evidence") or {})
-    answer = dict(comparison.get("answer") or {})
-
-    lines = [
-        "# Debug Bundle Comparison",
-        "",
-        f"- Verdict: {review_summary.get('verdict', 'unknown')}",
-        f"- Priority: {review_summary.get('priority', 'medium')}",
-        f"- Focus area: {review_summary.get('focus_area', 'general')}",
-        f"- Query hits delta: {_render_delta(summary.get('query_hit_count'))}",
-        f"- Candidates delta: {_render_delta(summary.get('candidate_count'))}",
-        f"- Evidence delta: {_render_delta(summary.get('evidence_count'))}",
-        f"- Query type changed: {bool((summary.get('query_type') or {}).get('changed'))}",
-        f"- Top hit changed: {bool(query.get('top_hit_changed'))}",
-        f"- Top evidence changed: {bool(evidence.get('top_evidence_changed'))}",
-        f"- Final answer changed: {bool(answer.get('final_answer_changed'))}",
-        "",
-        "## Findings",
-    ]
-
-    findings = list(review_summary.get("findings") or [])
-    if findings:
-        lines.extend(f"- {item}" for item in findings)
-    else:
-        lines.append("- No major differences detected.")
-
-    lines.extend(["", "## Suggested Next Steps"])
-    next_steps = list(review_summary.get("next_steps") or [])
-    if next_steps:
-        lines.extend(f"- {item}" for item in next_steps)
-    else:
-        lines.append("- No follow-up needed.")
-
-    if answer.get("before_final_answer_excerpt") or answer.get("after_final_answer_excerpt"):
-        lines.extend(
-            [
-                "",
-                "## Final Answer Excerpts",
-                f"- Before: {answer.get('before_final_answer_excerpt') or ''}",
-                f"- After: {answer.get('after_final_answer_excerpt') or ''}",
-            ]
-        )
-
-    return "\n".join(lines).strip() + "\n"
-
-
 def _load_debug_bundle(path: str | Path) -> dict[str, object]:
     candidate = Path(path)
     if candidate.is_dir():
@@ -243,6 +339,24 @@ def _load_debug_bundle(path: str | Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"Debug bundle must be a JSON object: {candidate}")
     return payload
+
+
+def _load_regression_cases(path: str | Path) -> list[dict[str, object]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        raw_cases = payload.get("cases", [])
+    elif isinstance(payload, list):
+        raw_cases = payload
+    else:
+        raise ValueError(f"Regression cases must be a JSON object or list: {path}")
+    if not isinstance(raw_cases, list):
+        raise ValueError(f"Regression cases must contain a list under 'cases': {path}")
+    cases: list[dict[str, object]] = []
+    for index, item in enumerate(raw_cases, start=1):
+        if not isinstance(item, dict) or not item.get("question"):
+            raise ValueError(f"Regression case #{index} is missing a question: {path}")
+        cases.append(item)
+    return cases
 
 
 def _query_type(query_payload: dict[str, object]) -> str:
@@ -462,3 +576,107 @@ def _render_delta(delta_payload: object) -> str:
     after = delta_payload.get("after")
     delta = delta_payload.get("delta")
     return f"{before} -> {after} ({delta:+})" if isinstance(delta, (int, float)) else f"{before} -> {after}"
+
+
+def _summarize_regression_panel(comparisons: list[dict[str, object]]) -> dict[str, object]:
+    verdict_counts: dict[str, int] = {}
+    priority_counts: dict[str, int] = {}
+    focus_area_counts: dict[str, int] = {}
+    changed_cases = 0
+    high_priority_cases: list[dict[str, object]] = []
+
+    for item in comparisons:
+        review = dict(item.get("review_summary") or {})
+        verdict = str(review.get("verdict") or "unknown")
+        priority = str(review.get("priority") or "medium")
+        focus_area = str(review.get("focus_area") or "stable")
+        verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
+        priority_counts[priority] = priority_counts.get(priority, 0) + 1
+        focus_area_counts[focus_area] = focus_area_counts.get(focus_area, 0) + 1
+
+        if verdict != "stable":
+            changed_cases += 1
+        if priority == "high":
+            high_priority_cases.append(
+                {
+                    "case_id": item.get("case_id"),
+                    "question": item.get("question_text") or (item.get("question") or {}).get("after"),
+                    "verdict": verdict,
+                    "focus_area": focus_area,
+                }
+            )
+
+    return {
+        "changed_case_count": changed_cases,
+        "stable_case_count": len(comparisons) - changed_cases,
+        "verdict_counts": verdict_counts,
+        "priority_counts": priority_counts,
+        "focus_area_counts": focus_area_counts,
+        "high_priority_cases": high_priority_cases,
+    }
+
+
+def render_debug_bundle_regression_panel_markdown(panel: dict[str, object]) -> str:
+    summary = dict(panel.get("summary") or {})
+    lines = [
+        "# Debug Bundle Regression Panel",
+        "",
+        f"- Before DB: {panel.get('before_db_path')}",
+        f"- After DB: {panel.get('after_db_path')}",
+        f"- Cases: {panel.get('case_count')}",
+        f"- Changed cases: {summary.get('changed_case_count')}",
+        f"- Stable cases: {summary.get('stable_case_count')}",
+        "",
+        "## Verdict Counts",
+    ]
+
+    verdict_counts = dict(summary.get("verdict_counts") or {})
+    if verdict_counts:
+        lines.extend(f"- {key}: {value}" for key, value in sorted(verdict_counts.items()))
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Priority Counts"])
+    priority_counts = dict(summary.get("priority_counts") or {})
+    if priority_counts:
+        lines.extend(f"- {key}: {value}" for key, value in sorted(priority_counts.items()))
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Focus Areas"])
+    focus_area_counts = dict(summary.get("focus_area_counts") or {})
+    if focus_area_counts:
+        lines.extend(f"- {key}: {value}" for key, value in sorted(focus_area_counts.items()))
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## High Priority Cases"])
+    high_priority_cases = list(summary.get("high_priority_cases") or [])
+    if high_priority_cases:
+        for case in high_priority_cases:
+            lines.append(
+                f"- {case.get('case_id')}: {case.get('question')} "
+                f"[verdict={case.get('verdict')}, focus={case.get('focus_area')}]"
+            )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Case Summaries"])
+    for case in list(panel.get("cases") or []):
+        review = dict(case.get("review_summary") or {})
+        lines.append(
+            f"- {case.get('case_id')}: verdict={review.get('verdict')}, "
+            f"priority={review.get('priority')}, focus={review.get('focus_area')}"
+        )
+        findings = list(review.get("findings") or [])
+        if findings:
+            lines.append(f"  findings: {findings[0]}")
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def _slugify(value: str) -> str:
+    lowered = value.strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "-", lowered)
+    trimmed = normalized.strip("-")
+    return trimmed or "case"
