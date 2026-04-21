@@ -1779,3 +1779,44 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 增量建库现在已经从“文件级重算”往“chunk 级复用”迈了一步
 - 在大库场景下，这会直接减少 embedding 成本和更新时间
+
+## [1.2.21] - 2026-04-21
+
+### Step 28: 增强回答可信度与证据引用
+
+### 本步目标
+
+- 让回答结果不只返回文本，还返回“为什么能信”
+- 给调用方直接暴露 confidence 和 grounded citations
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/qa.py`
+   - draft answer 新增 `confidence`
+   - 新增 `_estimate_confidence()`
+   - `insufficient_evidence` 场景固定返回低置信度
+
+2. 更新 `src/uses_indexer/answering.py`
+   - `final_answer` 新增：
+     - `confidence`
+     - `grounding.citations`
+     - `grounding.supporting_locations`
+     - `grounding.uncertainties`
+
+3. 更新测试
+   - `tests/test_qa.py`
+     - 校验 `confidence`
+   - `tests/test_answering.py`
+     - 校验 `grounding citations`
+     - 校验 `final_answer.confidence`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/qa.py src/uses_indexer/answering.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_qa.py tests/test_answering.py` 通过
+- 结果：`8 passed`
+
+### 结论
+
+- 回答结果现在已经带出置信度和前 3 条 grounded citation
+- 后续无论是 API、MCP 还是前端展示，都更容易做“可解释回答”

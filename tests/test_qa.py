@@ -53,6 +53,7 @@ def test_ask_builds_prompt_and_draft_answer(tmp_path: Path) -> None:
     assert "用户问题: 证券代码获取的逻辑在哪里" in result["prompt_package"]["user_prompt"]
     assert result["draft_answer"]["status"] == "ok"
     assert result["draft_answer"]["tier"] == "grounded_summary"
+    assert result["draft_answer"]["confidence"]["label"] in {"medium", "high"}
     assert "AF_SAMPLE" in result["draft_answer"]["answer"]
     assert result["draft_answer"]["supporting_locations"]
 
@@ -64,6 +65,7 @@ def test_ask_returns_insufficient_evidence_when_no_hits(tmp_path: Path) -> None:
 
     assert result["draft_answer"]["status"] == "insufficient_evidence"
     assert result["draft_answer"]["tier"] == "retrieval_only"
+    assert result["draft_answer"]["confidence"]["label"] == "low"
     assert result["evidence_count"] == 0
 
 

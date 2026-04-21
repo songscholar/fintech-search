@@ -106,6 +106,7 @@ class CodebaseQA:
                 "uncertainties": ["未命中可直接支撑该问题的过程或语句，需要换关键词或补充向量检索。"],
                 "tier": "retrieval_only",
                 "query_type": query_type,
+                "confidence": {"score": 0.1, "label": "low"},
             }
 
         top_evidence = evidence[:3]
@@ -188,6 +189,7 @@ class CodebaseQA:
             for item in uncertainties:
                 answer_lines.append(f"- {item}")
 
+        confidence = self._estimate_confidence(top_evidence, related_hints, uncertainties)
         return {
             "status": "ok",
             "answer": "\n".join(answer_lines),
@@ -196,4 +198,25 @@ class CodebaseQA:
             "uncertainties": uncertainties,
             "tier": "grounded_summary",
             "query_type": query_type,
+            "confidence": confidence,
         }
+
+    def _estimate_confidence(
+        self,
+        evidence: list[dict[str, object]],
+        related_hints: list[str],
+        uncertainties: list[str],
+    ) -> dict[str, object]:
+        score = 0.35 + min(len(evidence), 3) * 0.15
+        if related_hints:
+            score += 0.1
+        if uncertainties:
+            score -= min(len(uncertainties), 2) * 0.08
+        score = max(0.1, min(round(score, 2), 0.95))
+        if score >= 0.75:
+            label = "high"
+        elif score >= 0.55:
+            label = "medium"
+        else:
+            label = "low"
+        return {"score": score, "label": label}

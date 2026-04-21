@@ -78,6 +78,8 @@ def test_answer_uses_draft_when_llm_not_configured(tmp_path: Path) -> None:
     assert result["answer_source"] == "draft"
     assert result["final_answer"]["source"] == "draft"
     assert result["final_answer"]["tier"] == "grounded_summary"
+    assert result["final_answer"]["confidence"]["label"] in {"medium", "high"}
+    assert result["final_answer"]["grounding"]["citations"]
     assert "AF_SAMPLE" in result["final_answer"]["text"]
 
 
@@ -90,6 +92,7 @@ def test_answer_uses_llm_when_available(tmp_path: Path) -> None:
     assert result["final_answer"]["text"] == "这是模型生成的最终答案。"
     assert result["final_answer"]["used_model"] == "stub-model"
     assert result["final_answer"]["tier"] == "llm_grounded"
+    assert result["final_answer"]["grounding"]["citations"]
 
 
 def test_answer_strategy_adds_profile_metadata(tmp_path: Path) -> None:

@@ -98,11 +98,29 @@ class CodebaseAnswerer:
     ) -> dict[str, object]:
         result = dict(qa_bundle)
         draft_answer = dict(qa_bundle.get("draft_answer") or {})
+        evidence = list(qa_bundle.get("evidence") or [])
+        citations = [
+            {
+                "rank": int(item["rank"]),
+                "procedure_name": str(item["procedure_name"]),
+                "file_path": str(item["file_path"]),
+                "line_start": int(item["line_start"]),
+                "line_end": int(item["line_end"]),
+                "matched_text": str(item["matched_text"]),
+            }
+            for item in evidence[:3]
+        ]
         result["answer_source"] = answer_source
         result["final_answer"] = {
             "text": answer_text,
             "source": answer_source,
             "tier": draft_answer.get("tier") if answer_source != "llm" else "llm_grounded",
+            "confidence": draft_answer.get("confidence"),
+            "grounding": {
+                "citations": citations,
+                "supporting_locations": list(draft_answer.get("supporting_locations") or []),
+                "uncertainties": list(draft_answer.get("uncertainties") or []),
+            },
             "used_model": model_response["model"] if model_response else None,
             "provider": model_response["provider"] if model_response else None,
             "error": error,
