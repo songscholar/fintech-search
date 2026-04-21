@@ -268,11 +268,13 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
                 "require_threshold_pass": True,
                 "blocked_latest_verdicts": ["possible_regression"],
                 "auto_promote": True,
+                "archive_dir": str(tmp_path / "workflow_archive"),
             }
         ).encode("utf-8"),
     )
     assert status == 200
     assert workflow["status"] == "promoted"
+    assert Path(workflow["archive"]["files"]["workflow"]).exists()
 
     status, trend = api.handle_request(
         "GET",

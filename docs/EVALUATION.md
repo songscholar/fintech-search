@@ -467,6 +467,19 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
   --markdown-output ./examples/release_workflow.md
 ```
 
+如果你希望把这次 workflow 作为正式 release 审计材料保留下来，可以再加：
+
+```bash
+  --archive-dir ./examples/release_workflow_archive
+```
+
+这样后面不仅能看最终 markdown，还能回头检查当时的：
+
+- latest baseline comparison
+- promotion gate checks
+- promote 结果
+- workflow summary
+
 这样做的价值是：
 
 - `eval-retrieval` 继续负责整体数值门槛

@@ -567,6 +567,31 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 - 如果 gate 通过，是否已经自动 promote
 - 一份适合 reviewer 直接看的 markdown 摘要
 
+如果你还希望把这次 workflow 整包留档，方便后面审计或复盘，可以再加 `--archive-dir`：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --tag active \
+  --gate-tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression \
+  --archive-dir ./examples/release_workflow_archive \
+  --markdown-output ./examples/release_workflow.md
+```
+
+这个 archive 里现在会包含：
+
+- `release_workflow.json`
+- `release_workflow.md`
+- `release_workflow_summary.json`
+- `promotion_gate.json`
+- `latest_comparison.json`
+- `promoted_baseline.json`
+
 如果你想看一组 baseline 的长期走势，而不是只做两两比较，可以直接看 trend：
 
 ```bash

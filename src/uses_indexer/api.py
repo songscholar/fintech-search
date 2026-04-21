@@ -368,6 +368,9 @@ class CodebaseApi:
             ):
                 raise ApiError(HTTPStatus.BAD_REQUEST, "blocked_latest_verdicts must be a list of strings")
             auto_promote = bool(payload.get("auto_promote", True))
+            archive_dir = payload.get("archive_dir")
+            if archive_dir is not None and not isinstance(archive_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "archive_dir must be a string")
             return HTTPStatus.OK, run_debug_bundle_regression_panel_release_workflow(
                 panel_path,
                 baseline_name,
@@ -378,6 +381,7 @@ class CodebaseApi:
                 require_threshold_pass=require_threshold_pass,
                 blocked_latest_verdicts=blocked_latest_verdicts,
                 auto_promote=auto_promote,
+                archive_dir=archive_dir,
             )
 
         if route == "/compare-debug-bundle-panel-baseline" and method == "POST":

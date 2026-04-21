@@ -381,12 +381,14 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
                     "require_threshold_pass": True,
                     "blocked_latest_verdicts": ["possible_regression"],
                     "auto_promote": True,
+                    "archive_dir": str(tmp_path / "workflow_archive"),
                 },
             },
         }
     )
     assert workflow_response is not None
     assert workflow_response["result"]["structuredContent"]["status"] == "promoted"
+    assert Path(workflow_response["result"]["structuredContent"]["archive"]["files"]["workflow"]).exists()
 
     trend_response = server.handle_message(
         {

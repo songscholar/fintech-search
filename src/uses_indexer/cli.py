@@ -167,6 +167,7 @@ def main() -> int:
     release_workflow_parser.add_argument("--require-threshold-pass", action="store_true", help="Require panel.thresholds.status=pass.")
     release_workflow_parser.add_argument("--block-latest-verdict", action="append", default=[], help="Verdict that should block promote. Can be provided multiple times.")
     release_workflow_parser.add_argument("--no-auto-promote", action="store_true", help="Only compute compare+gate without promoting.")
+    release_workflow_parser.add_argument("--archive-dir", help="Optional directory to archive workflow summary, gate result, latest comparison, and promotion output.")
     release_workflow_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
     release_workflow_parser.add_argument("--output", help="Optional JSON output path.")
 
@@ -428,6 +429,7 @@ def main() -> int:
             require_threshold_pass=args.require_threshold_pass,
             blocked_latest_verdicts=args.block_latest_verdict,
             auto_promote=not args.no_auto_promote,
+            archive_dir=args.archive_dir,
         )
     elif args.command == "list-debug-bundle-panel-baselines":
         data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir, baseline_tag=args.tag)

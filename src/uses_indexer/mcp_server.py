@@ -489,6 +489,7 @@ class CodebaseMcpServer:
                         "require_threshold_pass": {"type": "boolean"},
                         "blocked_latest_verdicts": {"type": "array", "items": {"type": "string"}},
                         "auto_promote": {"type": "boolean"},
+                        "archive_dir": {"type": "string"},
                     },
                     "required": ["panel_path", "baseline_name"],
                     "additionalProperties": False,
@@ -804,6 +805,7 @@ class CodebaseMcpServer:
         require_threshold_pass = self._optional_bool(arguments, "require_threshold_pass", default=False)
         blocked_latest_verdicts = self._optional_string_list(arguments, "blocked_latest_verdicts")
         auto_promote = self._optional_bool(arguments, "auto_promote", default=True)
+        archive_dir = self._optional_string(arguments, "archive_dir")
         return run_debug_bundle_regression_panel_release_workflow(
             panel_path,
             baseline_name,
@@ -814,6 +816,7 @@ class CodebaseMcpServer:
             require_threshold_pass=require_threshold_pass,
             blocked_latest_verdicts=blocked_latest_verdicts,
             auto_promote=auto_promote,
+            archive_dir=archive_dir,
         )
 
     def _tool_delete_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:

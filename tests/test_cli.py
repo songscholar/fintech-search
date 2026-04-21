@@ -634,8 +634,11 @@ def test_release_workflow_promotes_when_gate_passes(tmp_path: Path) -> None:
         require_threshold_pass=True,
         blocked_latest_verdicts=["possible_regression"],
         auto_promote=True,
+        archive_dir=tmp_path / "workflow_archive",
     )
     assert workflow["bundle_kind"] == "debug_bundle_regression_panel_release_workflow"
     assert workflow["status"] == "promoted"
     assert workflow["promoted"]["baseline_slug"] == "release-candidate"
     assert workflow["markdown_summary"].startswith("# Debug Bundle Panel Release Workflow")
+    assert Path(workflow["archive"]["files"]["workflow"]).exists()
+    assert Path(workflow["archive"]["files"]["gate"]).exists()

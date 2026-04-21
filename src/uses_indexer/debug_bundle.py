@@ -601,6 +601,7 @@ def run_debug_bundle_regression_panel_release_workflow(
     require_threshold_pass: bool = False,
     blocked_latest_verdicts: list[str] | None = None,
     auto_promote: bool = True,
+    archive_dir: str | Path | None = None,
 ) -> dict[str, object]:
     latest_comparison: dict[str, object] | None = None
     try:
@@ -649,7 +650,63 @@ def run_debug_bundle_regression_panel_release_workflow(
     }
     workflow["review_summary"] = _build_release_workflow_review_summary(workflow)
     workflow["markdown_summary"] = render_debug_bundle_regression_panel_release_workflow_markdown(workflow)
+    if archive_dir is not None:
+        workflow["archive"] = write_debug_bundle_regression_panel_release_workflow_archive(workflow, archive_dir)
     return workflow
+
+
+def write_debug_bundle_regression_panel_release_workflow_archive(
+    workflow: dict[str, object],
+    archive_dir: str | Path,
+) -> dict[str, object]:
+    root = Path(archive_dir)
+    root.mkdir(parents=True, exist_ok=True)
+
+    workflow_path = root / "release_workflow.json"
+    markdown_path = root / "release_workflow.md"
+    summary_path = root / "release_workflow_summary.json"
+    gate_path = root / "promotion_gate.json"
+    latest_path = root / "latest_comparison.json"
+    promoted_path = root / "promoted_baseline.json"
+
+    workflow_path.write_text(json.dumps(workflow, ensure_ascii=False, indent=2), encoding="utf-8")
+    markdown_path.write_text(str(workflow.get("markdown_summary") or ""), encoding="utf-8")
+    gate_payload = dict(workflow.get("promotion_gate") or {})
+    gate_path.write_text(json.dumps(gate_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    latest_payload = workflow.get("latest_comparison")
+    if latest_payload is not None:
+        latest_path.write_text(json.dumps(latest_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    promoted_payload = workflow.get("promoted")
+    if promoted_payload is not None:
+        promoted_path.write_text(json.dumps(promoted_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    summary = {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow_summary",
+        "status": workflow.get("status"),
+        "baseline_name": workflow.get("baseline_name"),
+        "baseline_dir": workflow.get("baseline_dir"),
+        "gate_baseline_tag": workflow.get("gate_baseline_tag"),
+        "auto_promote": workflow.get("auto_promote"),
+        "review_summary": workflow.get("review_summary"),
+    }
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    files = {
+        "workflow": str(workflow_path),
+        "markdown": str(markdown_path),
+        "summary": str(summary_path),
+        "gate": str(gate_path),
+    }
+    if latest_payload is not None:
+        files["latest_comparison"] = str(latest_path)
+    if promoted_payload is not None:
+        files["promoted"] = str(promoted_path)
+    return {
+        "archive_dir": str(root),
+        "files": files,
+    }
 
 
 def list_debug_bundle_regression_panel_baselines(
