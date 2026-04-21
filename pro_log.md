@@ -1860,3 +1860,58 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 增量建库现在已经把“重复解析同一 changed 文件”的成本收掉了
 - `build_stats` 也开始能量化构建阶段的缓存收益
+
+## [1.2.23] - 2026-04-21
+
+### Step 30: 增加评测门槛守门与一键 debug bundle
+
+### 本步目标
+
+- 让 `eval-retrieval` 不只是出报告，还能做质量守门
+- 让一次问题的 query/evidence/answer 能一键打包，方便线上排障和离线复盘
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/evaluation.py`
+   - 新增 `EvaluationThresholds`
+   - 新增 `evaluate_thresholds()`
+   - 支持检查：
+     - `pass_at_k`
+     - `evidence_coverage`
+     - `top_hit_expectation_coverage`
+     - `avg_feature_rerank_hit_count`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - `eval-retrieval` 新增：
+     - `--min-pass-at-k`
+     - `--min-evidence-coverage`
+     - `--min-top-hit-expectation-coverage`
+     - `--min-avg-feature-rerank-hit-count`
+     - `--fail-on-thresholds`
+   - 新增 `debug-bundle` 命令
+   - 新增 `_build_debug_bundle()`
+   - threshold fail 时 CLI 退出码为 `2`
+
+3. 更新测试
+   - `tests/test_evaluation.py`
+     - 新增 threshold fail 回归
+   - `tests/test_cli.py`
+     - 新增 threshold pair 解析测试
+     - 新增 debug bundle 组装测试
+
+4. 更新文档
+   - `docs/EVALUATION.md`
+     - 补充 threshold 用法
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 `debug-bundle` 命令入口
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evaluation.py src/uses_indexer/cli.py tests/test_evaluation.py tests/test_cli.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py tests/test_cli.py` 通过
+- 结果：`11 passed`
+
+### 结论
+
+- 评测层现在已经可以做简单的质量守门
+- 排障时不再需要手工拼 query/evidence/answer 三份输出，`debug-bundle` 可以直接复盘整条链路

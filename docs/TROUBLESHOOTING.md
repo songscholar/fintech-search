@@ -96,6 +96,21 @@ python3 -m uses_indexer assemble-evidence \
 - `ask-codebase` 的 `draft_answer` 已经不对：问题多半不在 LLM
 - 只有 `answer-codebase` 变差：再看 provider、prompt、timeout、fallback
 
+如果你想把一次问题完整打包下来，方便离线复盘，可以直接运行：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer debug-bundle \
+  --db ./examples/business_code_index.db \
+  --question "证券代码获取的逻辑在哪里" \
+  --output ./examples/debug_bundle.json
+```
+
+这个 bundle 会同时包含：
+
+- `query`
+- `evidence`
+- `answer`
+
 ## 5. 索引库选错怎么排
 
 常见误区是把下面几个库混掉：

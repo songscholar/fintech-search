@@ -8,7 +8,7 @@ from pathlib import Path
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .config import bootstrap_env
-from .evaluation import RetrievalEvaluator, compare_eval_reports
+from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
 from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
@@ -68,6 +68,11 @@ def main() -> int:
     eval_parser.add_argument("--cases", required=True, help="Evaluation cases JSON path.")
     eval_parser.add_argument("--limit", type=int, default=10, help="Maximum number of hits per case.")
     eval_parser.add_argument("--top-k", default="1,3,5,10", help="Comma-separated top-k cutoffs to report.")
+    eval_parser.add_argument("--min-pass-at-k", action="append", default=[], help="Threshold like 5=0.9; can be provided multiple times.")
+    eval_parser.add_argument("--min-evidence-coverage", type=float, help="Minimum summary.evidence_coverage.")
+    eval_parser.add_argument("--min-top-hit-expectation-coverage", type=float, help="Minimum summary.top_hit_expectation_coverage.")
+    eval_parser.add_argument("--min-avg-feature-rerank-hit-count", type=float, help="Minimum summary.avg_feature_rerank_hit_count.")
+    eval_parser.add_argument("--fail-on-thresholds", action="store_true", help="Exit with non-zero status when threshold checks fail.")
     eval_parser.add_argument("--output", help="Optional JSON report output path.")
 
     compare_eval_parser = subparsers.add_parser("compare-eval", help="Compare two retrieval evaluation reports.")
@@ -100,6 +105,14 @@ def main() -> int:
     answer_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
     answer_parser.add_argument("--no-draft-fallback", action="store_true", help="Fail instead of returning draft_answer when no LLM is configured.")
     answer_parser.add_argument("--output", help="Optional JSON output path.")
+
+    bundle_parser = subparsers.add_parser("debug-bundle", help="Bundle query, evidence, and answer output for a single question.")
+    bundle_parser.add_argument("--db", required=True, help="SQLite database path.")
+    bundle_parser.add_argument("--question", required=True, help="Natural language question about the codebase.")
+    bundle_parser.add_argument("--limit", type=int, default=6, help="Maximum number of query hits / evidence blocks.")
+    bundle_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
+    bundle_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    bundle_parser.add_argument("--output", help="Optional JSON output path.")
 
     serve_parser = subparsers.add_parser("serve-api", help="Run a local HTTP API around the index and QA package.")
     serve_parser.add_argument("--db", required=True, help="Default SQLite database path.")
@@ -202,6 +215,16 @@ def main() -> int:
             limit=args.limit,
             top_k=_parse_top_k(args.top_k),
         )
+        threshold_report = evaluate_thresholds(
+            data,
+            EvaluationThresholds(
+                min_pass_at_k=_parse_threshold_pairs(args.min_pass_at_k),
+                min_evidence_coverage=args.min_evidence_coverage,
+                min_top_hit_expectation_coverage=args.min_top_hit_expectation_coverage,
+                min_avg_feature_rerank_hit_count=args.min_avg_feature_rerank_hit_count,
+            ),
+        )
+        data["thresholds"] = threshold_report
     elif args.command == "compare-eval":
         data = compare_eval_reports(args.before, args.after)
     elif args.command == "assemble-evidence":
@@ -230,6 +253,16 @@ def main() -> int:
             related_limit=args.related_limit,
             allow_draft_fallback=not args.no_draft_fallback,
         )
+    elif args.command == "debug-bundle":
+        data = _build_debug_bundle(
+            indexer=indexer,
+            answerer=answerer,
+            db_path=args.db,
+            question=args.question,
+            limit=args.limit,
+            context_window=args.context_window,
+            related_limit=args.related_limit,
+        )
     else:
         data = indexer.summarize_db(args.db)
 
@@ -240,6 +273,9 @@ def main() -> int:
         output_path.write_text(rendered, encoding="utf-8")
     else:
         print(rendered)
+
+    if args.command == "eval-retrieval" and args.fail_on_thresholds and data["thresholds"]["status"] != "pass":
+        return 2
 
     return 0
 
@@ -287,3 +323,49 @@ def _parse_top_k(raw: str) -> tuple[int, ...]:
             continue
         values.append(int(stripped))
     return tuple(values)
+
+
+def _parse_threshold_pairs(raw_values: list[str]) -> dict[str, float]:
+    result: dict[str, float] = {}
+    for raw in raw_values:
+        key, sep, value = raw.partition("=")
+        if not sep:
+            raise ValueError(f"Invalid threshold pair: {raw!r}. Expected format like 5=0.9")
+        result[str(int(key.strip()))] = float(value.strip())
+    return result
+
+
+def _build_debug_bundle(
+    *,
+    indexer: SQLiteIndexer,
+    answerer: CodebaseAnswerer,
+    db_path: str,
+    question: str,
+    limit: int,
+    context_window: int,
+    related_limit: int,
+) -> dict[str, object]:
+    query_result = indexer.query_index(db_path, question, limit=limit, debug=True)
+    evidence_result = indexer.assemble_evidence(
+        db_path,
+        question,
+        limit=limit,
+        context_window=context_window,
+        related_limit=related_limit,
+        debug=True,
+    )
+    answer_result = answerer.answer(
+        db_path,
+        question,
+        evidence_limit=limit,
+        context_window=context_window,
+        related_limit=related_limit,
+    )
+    return {
+        "db_path": db_path,
+        "question": question,
+        "bundle_kind": "debug_bundle",
+        "query": query_result,
+        "evidence": evidence_result,
+        "answer": answer_result,
+    }

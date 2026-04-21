@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import DEFAULT_TOP_K
 from .indexer import SQLiteIndexer
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationThresholds:
+    min_pass_at_k: dict[str, float] | None = None
+    min_evidence_coverage: float | None = None
+    min_top_hit_expectation_coverage: float | None = None
+    min_avg_feature_rerank_hit_count: float | None = None
 
 
 class RetrievalEvaluator:
@@ -153,6 +162,63 @@ class RetrievalEvaluator:
         }
 
 
+def evaluate_thresholds(
+    report: dict[str, object],
+    thresholds: EvaluationThresholds,
+) -> dict[str, object]:
+    summary = dict(report.get("summary") or {})
+    checks: list[dict[str, object]] = []
+
+    for key, expected in sorted((thresholds.min_pass_at_k or {}).items()):
+        actual = _as_float((summary.get("pass_at_k") or {}).get(str(key)))
+        checks.append(
+            _threshold_check(
+                metric=f"pass_at_k.{key}",
+                actual=actual,
+                expected=expected,
+                comparator=">=",
+            )
+        )
+
+    if thresholds.min_evidence_coverage is not None:
+        checks.append(
+            _threshold_check(
+                metric="evidence_coverage",
+                actual=_as_float(summary.get("evidence_coverage")),
+                expected=thresholds.min_evidence_coverage,
+                comparator=">=",
+            )
+        )
+
+    if thresholds.min_top_hit_expectation_coverage is not None:
+        checks.append(
+            _threshold_check(
+                metric="top_hit_expectation_coverage",
+                actual=_as_float(summary.get("top_hit_expectation_coverage")),
+                expected=thresholds.min_top_hit_expectation_coverage,
+                comparator=">=",
+            )
+        )
+
+    if thresholds.min_avg_feature_rerank_hit_count is not None:
+        checks.append(
+            _threshold_check(
+                metric="avg_feature_rerank_hit_count",
+                actual=_as_float(summary.get("avg_feature_rerank_hit_count")),
+                expected=thresholds.min_avg_feature_rerank_hit_count,
+                comparator=">=",
+            )
+        )
+
+    return {
+        "status": "pass" if all(item["passed"] for item in checks) else "fail",
+        "check_count": len(checks),
+        "failed_count": sum(1 for item in checks if not item["passed"]),
+        "checks": checks,
+    }
+
+
+
 def compare_eval_reports(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
     before = _load_report(before_path)
     after = _load_report(after_path)
@@ -243,6 +309,23 @@ def _report_top_k(*reports: dict[str, object]) -> tuple[int, ...]:
                         if parsed is not None and parsed > 0:
                             values.add(parsed)
     return tuple(sorted(values)) or DEFAULT_TOP_K
+
+
+def _threshold_check(
+    *,
+    metric: str,
+    actual: float | None,
+    expected: float,
+    comparator: str,
+) -> dict[str, object]:
+    passed = actual is not None and actual >= expected
+    return {
+        "metric": metric,
+        "actual": actual,
+        "expected": expected,
+        "comparator": comparator,
+        "passed": passed,
+    }
 
 
 def _compare_summaries(before: object, after: object, *, top_k: tuple[int, ...]) -> dict[str, object]:

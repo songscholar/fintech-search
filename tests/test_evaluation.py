@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from tests.test_indexer import _build_sample_index
-from uses_indexer.evaluation import RetrievalEvaluator, compare_eval_reports
+from uses_indexer.evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
 
 
 def test_retrieval_evaluator_reports_pass_at_k_and_recall(tmp_path: Path) -> None:
@@ -243,3 +243,34 @@ def test_compare_eval_reports_tracks_quality_metric_deltas(tmp_path: Path) -> No
     assert comparison["summary_delta"]["evidence_coverage"]["delta"] == -0.5
     assert comparison["summary_delta"]["top_hit_expectation_coverage"]["delta"] == -0.75
     assert comparison["summary_delta"]["avg_candidate_count"]["delta"] == 3.0
+
+
+def test_evaluate_thresholds_reports_failures(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+    cases_path = tmp_path / "threshold_cases.json"
+    cases_path.write_text(
+        json.dumps(
+            [
+                {
+                    "question": "@deep_flag 在哪里赋值",
+                    "expected": {"procedures": ["AF_DEEP"], "texts": ["@deep_flag"]},
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    report = RetrievalEvaluator(indexer).evaluate(db_path, cases_path, limit=5, top_k=(1, 3, 5))
+
+    threshold_report = evaluate_thresholds(
+        report,
+        EvaluationThresholds(
+            min_pass_at_k={"1": 1.0},
+            min_evidence_coverage=1.1,
+            min_top_hit_expectation_coverage=1.0,
+        ),
+    )
+
+    assert threshold_report["status"] == "fail"
+    assert threshold_report["failed_count"] >= 1
+    assert any(item["metric"] == "evidence_coverage" and item["passed"] is False for item in threshold_report["checks"])

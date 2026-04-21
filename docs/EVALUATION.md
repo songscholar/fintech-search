@@ -65,6 +65,19 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
   --output examples/uses_codes_eval_report.json
 ```
 
+如果你希望评测直接作为质量门槛，还可以加 threshold：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
+  --db examples/uses_codes_index.db \
+  --cases eval/uses_codes_effect_cases.json \
+  --limit 10 \
+  --top-k 1,3,5,10 \
+  --min-pass-at-k 5=0.9 \
+  --min-evidence-coverage 0.8 \
+  --fail-on-thresholds
+```
+
 ## 报告字段
 
 报告会输出：
@@ -79,6 +92,7 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
 - `cases[].expectations`：每个期望项是否命中，以及命中的 hit。
 - `cases[].top_hits`：每个问题的前若干检索结果，方便人工审查。
 - `cases[].query_type`：问题类型分类结果。
+- `thresholds`：如果提供 threshold 参数，会返回逐项通过/失败检查。
 
 ## 对比报告
 
