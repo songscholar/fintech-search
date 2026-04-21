@@ -139,6 +139,7 @@ class IndexBuildService:
                 path: self._describe_index_scope(conn, path)
                 for path in [*changed_paths, *removed_paths]
             }
+            reusable_vectors = self._collect_reusable_chunk_vectors(conn, changed_paths)
             affected_units = self._build_incremental_impact_report(
                 conn,
                 added_paths=added_paths,
@@ -150,10 +151,14 @@ class IndexBuildService:
                 for path in [*removed_paths, *changed_paths]:
                     self._delete_indexed_path(conn, path)
                 counters = self._index_files(conn, changed_files)
+                reused_vector_stats = self._restore_reusable_chunk_vectors(conn, reusable_vectors)
                 self._upsert_indexed_file_state(conn, files, index_type=index_type)
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=self.owner.embedder.info)
 
             vector_stats = write_service.populate_missing_chunk_vectors(conn)
+            vector_stats["reused"] = int(reused_vector_stats["reused"])
+            vector_stats["reuse_candidates"] = int(reused_vector_stats["reuse_candidates"])
+            vector_stats["reused_chunk_count"] = int(reused_vector_stats["reused_chunk_count"])
             current_scope = {
                 path: self._describe_index_scope(conn, path)
                 for path in [*added_paths, *changed_paths]
@@ -201,6 +206,96 @@ class IndexBuildService:
         finally:
             conn.close()
             self.owner._vector_cache.clear()
+
+    def _collect_reusable_chunk_vectors(
+        self,
+        conn: sqlite3.Connection,
+        paths: list[str],
+    ) -> dict[str, dict[str, tuple[str, str, int, str]]]:
+        if not paths:
+            return {}
+        db_provider = read_metadata(conn, "embedding_provider")
+        db_model = read_metadata(conn, "embedding_model")
+        current_info = self.owner.embedder.info
+        if db_provider and current_info.provider != db_provider:
+            return {}
+        if db_model and current_info.model != db_model:
+            return {}
+
+        placeholders = ",".join("?" for _ in paths)
+        rows = conn.execute(
+            f"""
+            SELECT
+              f.path,
+              c.embedding_text,
+              cv.provider,
+              cv.model,
+              cv.dimension,
+              cv.vector_json
+            FROM files f
+            JOIN procedures p ON p.file_id = f.id
+            JOIN chunks c ON c.procedure_id = p.id
+            JOIN chunk_vectors cv ON cv.chunk_id = c.id
+            WHERE f.path IN ({placeholders})
+            """,
+            paths,
+        ).fetchall()
+        reusable: dict[str, dict[str, tuple[str, str, int, str]]] = {}
+        for path, embedding_text, provider, model, dimension, vector_json in rows:
+            normalized_path = str(path)
+            normalized_text = str(embedding_text or "").strip()
+            if not normalized_text:
+                continue
+            reusable.setdefault(normalized_path, {}).setdefault(
+                normalized_text,
+                (str(provider), str(model), int(dimension), str(vector_json)),
+            )
+        return reusable
+
+    def _restore_reusable_chunk_vectors(
+        self,
+        conn: sqlite3.Connection,
+        reusable_vectors: dict[str, dict[str, tuple[str, str, int, str]]],
+    ) -> dict[str, int]:
+        if not reusable_vectors:
+            return {"reused": 0, "reuse_candidates": 0, "reused_chunk_count": 0}
+
+        reused = 0
+        reuse_candidates = sum(len(items) for items in reusable_vectors.values())
+        reused_chunk_ids: set[int] = set()
+
+        for path, vector_map in reusable_vectors.items():
+            rows = conn.execute(
+                """
+                SELECT c.id, c.embedding_text
+                FROM files f
+                JOIN procedures p ON p.file_id = f.id
+                JOIN chunks c ON c.procedure_id = p.id
+                LEFT JOIN chunk_vectors cv ON cv.chunk_id = c.id
+                WHERE f.path = ? AND cv.chunk_id IS NULL
+                """,
+                (path,),
+            ).fetchall()
+            for chunk_id, embedding_text in rows:
+                normalized_text = str(embedding_text or "").strip()
+                if not normalized_text or normalized_text not in vector_map:
+                    continue
+                provider, model, dimension, vector_json = vector_map[normalized_text]
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO chunk_vectors(chunk_id, provider, model, dimension, vector_json)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    (int(chunk_id), provider, model, dimension, vector_json),
+                )
+                reused += 1
+                reused_chunk_ids.add(int(chunk_id))
+
+        return {
+            "reused": reused,
+            "reuse_candidates": reuse_candidates,
+            "reused_chunk_count": len(reused_chunk_ids),
+        }
 
     def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path, index_type: str = "all") -> dict[str, object]:
         root = Path(source_root)

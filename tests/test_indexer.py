@@ -419,6 +419,30 @@ def test_build_index_resume_vectors_preserves_known_db_dimension(tmp_path: Path)
     assert dimension == "2"
 
 
+def test_incremental_build_reuses_existing_chunk_vectors_when_embedding_text_matches(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "incremental_reuse.db"
+    initial_embedder = RecordingBatchEmbedder(batch_size=1000)
+    SQLiteIndexer(embedder=initial_embedder).build_index(source_dir, db_path, index_type="code")
+
+    sample_path = source_dir / "AF_SAMPLE.uftatomfunction"
+    sample_path.write_text(SAMPLE_XML.replace('objectId="1"', 'objectId="101"'), encoding="utf-8")
+
+    incremental_embedder = RecordingBatchEmbedder(batch_size=1000)
+    result = SQLiteIndexer(embedder=incremental_embedder).build_index(
+        source_dir,
+        db_path,
+        incremental=True,
+        index_type="code",
+    )
+
+    assert result["incremental"] is True
+    assert result["vector_stats"]["reused"] >= 1
+    assert result["vector_stats"]["reused_chunk_count"] >= 1
+    assert result["vector_stats"]["inserted"] == 0
+    assert incremental_embedder.calls == []
+
+
 def test_query_index_uses_fts_and_rerank(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

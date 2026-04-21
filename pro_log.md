@@ -1741,3 +1741,41 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 调用链类问题现在有了更明确的边关系召回，不再只靠文本摘要兜底
 - 对“被谁调用/调用了谁”这类检索，候选来源更可信、更可解释
+
+## [1.2.20] - 2026-04-21
+
+### Step 27: 为增量建库增加 chunk 级向量复用
+
+### 本步目标
+
+- 让 changed 文件在 chunk 语义未变化时复用旧向量
+- 减少增量建库的重新 embedding 成本
+- 让增量建库更接近真正的 chunk 级执行粒度
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 新增 `_collect_reusable_chunk_vectors()`
+   - 新增 `_restore_reusable_chunk_vectors()`
+   - 增量建库时会：
+     - 删除旧索引前收集 changed 文件旧 chunk 向量
+     - 重建后按 `embedding_text` 回填可复用向量
+   - `vector_stats` 新增：
+     - `reused`
+     - `reuse_candidates`
+     - `reused_chunk_count`
+
+2. 更新 `tests/test_indexer.py`
+   - 新增增量建库向量复用回归测试
+   - 覆盖“文件 fingerprint 变化，但 chunk 语义不变”的场景
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py -k "incremental_build_reuses_existing_chunk_vectors_when_embedding_text_matches or build_index_supports_incremental_updates"` 通过
+- 结果：`2 passed`
+
+### 结论
+
+- 增量建库现在已经从“文件级重算”往“chunk 级复用”迈了一步
+- 在大库场景下，这会直接减少 embedding 成本和更新时间
