@@ -14,6 +14,8 @@ class EvaluationThresholds:
     min_evidence_coverage: float | None = None
     min_top_hit_expectation_coverage: float | None = None
     min_avg_feature_rerank_hit_count: float | None = None
+    min_tag_pass_at_k: dict[str, dict[str, float]] | None = None
+    min_query_type_pass_at_k: dict[str, dict[str, float]] | None = None
 
 
 class RetrievalEvaluator:
@@ -209,6 +211,34 @@ def evaluate_thresholds(
                 comparator=">=",
             )
         )
+
+    by_tag = dict(summary.get("by_tag") or {})
+    for tag, per_k in sorted((thresholds.min_tag_pass_at_k or {}).items()):
+        tag_summary = dict(by_tag.get(tag) or {})
+        for key, expected in sorted(per_k.items()):
+            actual = _as_float((tag_summary.get("pass_at_k") or {}).get(str(key)))
+            checks.append(
+                _threshold_check(
+                    metric=f"by_tag.{tag}.pass_at_k.{key}",
+                    actual=actual,
+                    expected=expected,
+                    comparator=">=",
+                )
+            )
+
+    by_query_type = dict(summary.get("by_query_type") or {})
+    for query_type, per_k in sorted((thresholds.min_query_type_pass_at_k or {}).items()):
+        query_summary = dict(by_query_type.get(query_type) or {})
+        for key, expected in sorted(per_k.items()):
+            actual = _as_float((query_summary.get("pass_at_k") or {}).get(str(key)))
+            checks.append(
+                _threshold_check(
+                    metric=f"by_query_type.{query_type}.pass_at_k.{key}",
+                    actual=actual,
+                    expected=expected,
+                    comparator=">=",
+                )
+            )
 
     return {
         "status": "pass" if all(item["passed"] for item in checks) else "fail",

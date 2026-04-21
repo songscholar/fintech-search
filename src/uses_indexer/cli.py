@@ -8,7 +8,7 @@ from pathlib import Path
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .config import bootstrap_env
-from .debug_bundle import build_debug_bundle
+from .debug_bundle import build_debug_bundle, write_debug_bundle_archive
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
 from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
@@ -73,6 +73,8 @@ def main() -> int:
     eval_parser.add_argument("--min-evidence-coverage", type=float, help="Minimum summary.evidence_coverage.")
     eval_parser.add_argument("--min-top-hit-expectation-coverage", type=float, help="Minimum summary.top_hit_expectation_coverage.")
     eval_parser.add_argument("--min-avg-feature-rerank-hit-count", type=float, help="Minimum summary.avg_feature_rerank_hit_count.")
+    eval_parser.add_argument("--min-tag-pass-at-k", action="append", default=[], help="Threshold like variable:5=1.0; can be provided multiple times.")
+    eval_parser.add_argument("--min-query-type-pass-at-k", action="append", default=[], help="Threshold like callers:5=1.0; can be provided multiple times.")
     eval_parser.add_argument("--fail-on-thresholds", action="store_true", help="Exit with non-zero status when threshold checks fail.")
     eval_parser.add_argument("--output", help="Optional JSON report output path.")
 
@@ -113,6 +115,7 @@ def main() -> int:
     bundle_parser.add_argument("--limit", type=int, default=6, help="Maximum number of query hits / evidence blocks.")
     bundle_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
     bundle_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
+    bundle_parser.add_argument("--archive-dir", help="Optional directory to archive query/evidence/answer/bundle_summary as separate JSON files.")
     bundle_parser.add_argument("--output", help="Optional JSON output path.")
 
     serve_parser = subparsers.add_parser("serve-api", help="Run a local HTTP API around the index and QA package.")
@@ -223,6 +226,8 @@ def main() -> int:
                 min_evidence_coverage=args.min_evidence_coverage,
                 min_top_hit_expectation_coverage=args.min_top_hit_expectation_coverage,
                 min_avg_feature_rerank_hit_count=args.min_avg_feature_rerank_hit_count,
+                min_tag_pass_at_k=_parse_scoped_threshold_pairs(args.min_tag_pass_at_k),
+                min_query_type_pass_at_k=_parse_scoped_threshold_pairs(args.min_query_type_pass_at_k),
             ),
         )
         data["thresholds"] = threshold_report
@@ -264,6 +269,8 @@ def main() -> int:
             context_window=args.context_window,
             related_limit=args.related_limit,
         )
+        if args.archive_dir:
+            data["archive"] = write_debug_bundle_archive(data, args.archive_dir)
     else:
         data = indexer.summarize_db(args.db)
 
@@ -335,3 +342,15 @@ def _parse_threshold_pairs(raw_values: list[str]) -> dict[str, float]:
         result[str(int(key.strip()))] = float(value.strip())
     return result
 
+
+def _parse_scoped_threshold_pairs(raw_values: list[str]) -> dict[str, dict[str, float]]:
+    result: dict[str, dict[str, float]] = {}
+    for raw in raw_values:
+        scope, sep, remainder = raw.partition(":")
+        if not sep:
+            raise ValueError(f"Invalid scoped threshold pair: {raw!r}. Expected format like variable:5=1.0")
+        key, sep2, value = remainder.partition("=")
+        if not sep2:
+            raise ValueError(f"Invalid scoped threshold pair: {raw!r}. Expected format like variable:5=1.0")
+        result.setdefault(scope.strip(), {})[str(int(key.strip()))] = float(value.strip())
+    return result

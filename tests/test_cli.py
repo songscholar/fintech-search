@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tests.test_answering import StubLlm
 from uses_indexer.answering import CodebaseAnswerer
-from uses_indexer.cli import _discover_default_db, _parse_threshold_pairs
-from uses_indexer.debug_bundle import build_debug_bundle
+from uses_indexer.cli import _discover_default_db, _parse_scoped_threshold_pairs, _parse_threshold_pairs
+from uses_indexer.debug_bundle import build_debug_bundle, write_debug_bundle_archive
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
 
@@ -36,6 +37,13 @@ def test_discover_default_db_returns_none_when_missing(tmp_path: Path) -> None:
 
 def test_parse_threshold_pairs_parses_values() -> None:
     assert _parse_threshold_pairs(["1=0.8", "5=0.95"]) == {"1": 0.8, "5": 0.95}
+
+
+def test_parse_scoped_threshold_pairs_parses_values() -> None:
+    assert _parse_scoped_threshold_pairs(["variable:5=1.0", "callers:3=0.8"]) == {
+        "variable": {"5": 1.0},
+        "callers": {"3": 0.8},
+    }
 
 
 def test_build_debug_bundle_collects_query_evidence_and_answer(tmp_path: Path) -> None:
@@ -73,3 +81,14 @@ def test_build_debug_bundle_collects_query_evidence_and_answer(tmp_path: Path) -
     assert bundle["evidence"]["response_kind"] == "evidence"
     assert bundle["evidence"]["debug"]["schema"] == "uses_indexer.debug.evidence"
     assert bundle["answer"]["response_kind"] == "answer"
+
+    archive = write_debug_bundle_archive(bundle, tmp_path / "bundle_archive")
+    assert Path(archive["files"]["bundle"]).exists()
+    assert Path(archive["files"]["summary"]).exists()
+    assert Path(archive["files"]["query"]).exists()
+    assert Path(archive["files"]["evidence"]).exists()
+    assert Path(archive["files"]["answer"]).exists()
+    summary = json.loads(Path(archive["files"]["summary"]).read_text(encoding="utf-8"))
+    assert summary["bundle_kind"] == "debug_bundle_summary"
+    assert summary["question"] == "证券代码获取的逻辑在哪里"
+    assert summary["response_kinds"]["query"] == "query"

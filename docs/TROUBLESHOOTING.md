@@ -102,6 +102,7 @@ python3 -m uses_indexer assemble-evidence \
 PYTHONPATH=. python3 -m uses_indexer debug-bundle \
   --db ./examples/business_code_index.db \
   --question "证券代码获取的逻辑在哪里" \
+  --archive-dir ./examples/debug_bundle_archive \
   --output ./examples/debug_bundle.json
 ```
 
@@ -110,6 +111,20 @@ PYTHONPATH=. python3 -m uses_indexer debug-bundle \
 - `query`
 - `evidence`
 - `answer`
+
+如果传了 `--archive-dir`，还会额外落盘：
+
+- `bundle.json`
+- `bundle_summary.json`
+- `query.json`
+- `evidence.json`
+- `answer.json`
+
+这样更适合：
+
+- 把单次问题诊断包发给其他同事
+- 做线上问题留档
+- 对比同一问题在不同版本中的 query/evidence/answer 变化
 
 ## 5. 索引库选错怎么排
 
@@ -139,6 +154,8 @@ PYTHONPATH=. python3 -m uses_indexer debug-bundle \
 3. 跑 `assemble-evidence --debug`
 4. 必要时看 `ask-codebase`
 5. 必要时看 `incremental_trace`
+
+如果问题比较顽固，建议第 3 步和第 4 步之间直接补一遍 `debug-bundle --archive-dir`，把这次问题的整条链路先固化下来，再继续分析。
 
 ## 7. 相关文档
 

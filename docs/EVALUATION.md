@@ -74,9 +74,19 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
   --limit 10 \
   --top-k 1,3,5,10 \
   --min-pass-at-k 5=0.9 \
+  --min-tag-pass-at-k call_chain:5=1.0 \
+  --min-query-type-pass-at-k callers:5=1.0 \
   --min-evidence-coverage 0.8 \
   --fail-on-thresholds
 ```
+
+其中：
+
+- `--min-pass-at-k 5=0.9`：全局 `pass@5` 至少为 `0.9`
+- `--min-tag-pass-at-k call_chain:5=1.0`：`call_chain` 标签问题的 `pass@5` 必须为 `1.0`
+- `--min-query-type-pass-at-k callers:5=1.0`：`callers` 类型问题的 `pass@5` 必须为 `1.0`
+
+这样可以把“总体没退化，但某一类真实问题明显退化”的情况单独拦下来。
 
 ## 报告字段
 
@@ -93,6 +103,12 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
 - `cases[].top_hits`：每个问题的前若干检索结果，方便人工审查。
 - `cases[].query_type`：问题类型分类结果。
 - `thresholds`：如果提供 threshold 参数，会返回逐项通过/失败检查。
+
+典型 threshold metric 形态：
+
+- `pass_at_k.5`
+- `by_tag.call_chain.pass_at_k.5`
+- `by_query_type.callers.pass_at_k.5`
 
 ## 对比报告
 
@@ -124,6 +140,24 @@ PYTHONPATH=src python3 -m uses_indexer compare-eval \
 - `removed`
 
 判断规则优先看最大 top-k 下是否从未命中变为命中或反过来；其次看期望项召回率；最后看首个相关命中的排名是否提前或后移。
+
+## 分项守门建议
+
+如果你准备把 `eval-retrieval` 接到 CI，建议不要只配一个总门槛。更稳妥的做法是：
+
+- 配一个全局 `--min-pass-at-k`
+- 再给你最关心的标签配 `--min-tag-pass-at-k`
+- 再给最容易回退的问题类型配 `--min-query-type-pass-at-k`
+
+例如：
+
+- `call_chain`
+- `failure`
+- `table_write`
+- `callers`
+- `variable_write`
+
+这样后面即使整体平均值看起来还可以，也能更早发现某一类业务问法已经开始回退。
 
 ## 当前基准
 

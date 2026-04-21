@@ -1963,3 +1963,62 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在无论是命令行、HTTP 还是 MCP 工具，都能统一拿到完整 debug bundle
 - debug trace 的 JSON 序列化问题已经被收口，后续更适合直接落盘或透传给外部系统
+
+## [1.2.25] - 2026-04-21
+
+### Step 32: 增加分项评测守门与 debug bundle 归档导出
+
+### 本步目标
+
+- 让 `eval-retrieval` 不只看总体分数，还能对指定标签和问题类型单独设门槛
+- 让 `debug-bundle` 不只输出单个 JSON，还能按查询、证据、回答拆分归档，方便排障留档
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/evaluation.py`
+   - `EvaluationThresholds` 新增：
+     - `min_tag_pass_at_k`
+     - `min_query_type_pass_at_k`
+   - `evaluate_thresholds()` 现在支持检查：
+     - `by_tag.<tag>.pass_at_k.<k>`
+     - `by_query_type.<query_type>.pass_at_k.<k>`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - `eval-retrieval` 新增：
+     - `--min-tag-pass-at-k`
+     - `--min-query-type-pass-at-k`
+   - 新增 `_parse_scoped_threshold_pairs()`
+   - `debug-bundle` 新增：
+     - `--archive-dir`
+
+3. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `write_debug_bundle_archive()`
+   - 归档输出：
+     - `bundle.json`
+     - `bundle_summary.json`
+     - `query.json`
+     - `evidence.json`
+     - `answer.json`
+
+4. 更新测试
+   - `tests/test_evaluation.py`
+     - 新增 scoped threshold 守门回归
+   - `tests/test_cli.py`
+     - 新增 scoped threshold 解析测试
+     - 新增 archive summary 回归
+
+5. 更新文档
+   - `docs/EVALUATION.md`
+     - 补充分项 threshold 的用法和建议
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 `debug-bundle --archive-dir` 的排障方式
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evaluation.py src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py tests/test_evaluation.py tests/test_cli.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_evaluation.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- 评测现在已经可以对关键标签和 query type 做更细粒度的质量守门
+- `debug-bundle` 现在更适合做线上问题归档和跨版本复盘

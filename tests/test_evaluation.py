@@ -274,3 +274,36 @@ def test_evaluate_thresholds_reports_failures(tmp_path: Path) -> None:
     assert threshold_report["status"] == "fail"
     assert threshold_report["failed_count"] >= 1
     assert any(item["metric"] == "evidence_coverage" and item["passed"] is False for item in threshold_report["checks"])
+
+
+def test_evaluate_thresholds_supports_tag_and_query_type_guards(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+    cases_path = tmp_path / "scoped_threshold_cases.json"
+    cases_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "question": "AF_DEEP 被谁调用",
+                        "tags": ["call_chain"],
+                        "expected": {"procedures": ["AF_SAMPLE"], "texts": ["AF_DEEP"]},
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    report = RetrievalEvaluator(indexer).evaluate(db_path, cases_path, limit=5, top_k=(1, 3, 5))
+
+    threshold_report = evaluate_thresholds(
+        report,
+        EvaluationThresholds(
+            min_tag_pass_at_k={"call_chain": {"5": 1.0}},
+            min_query_type_pass_at_k={"callers": {"5": 1.0}},
+        ),
+    )
+
+    assert threshold_report["status"] == "pass"
+    assert any(item["metric"] == "by_tag.call_chain.pass_at_k.5" and item["passed"] is True for item in threshold_report["checks"])
+    assert any(item["metric"] == "by_query_type.callers.pass_at_k.5" and item["passed"] is True for item in threshold_report["checks"])
