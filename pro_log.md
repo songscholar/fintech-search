@@ -1820,3 +1820,43 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 回答结果现在已经带出置信度和前 3 条 grounded citation
 - 后续无论是 API、MCP 还是前端展示，都更容易做“可解释回答”
+
+## [1.2.22] - 2026-04-21
+
+### Step 29: 用 parse cache 降低增量建库重复解析成本
+
+### 本步目标
+
+- 避免 changed/added 文件在 impact report、scope estimate、indexing 阶段被反复 `parse_path()`
+- 让增量建库对大库更友好
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 新增 `_parse_unit()` 缓存入口
+   - `_index_files()` 改为使用 parse cache
+   - `_build_incremental_impact_report()`
+   - `_describe_source_unit()`
+   - `_estimate_source_scope()`
+     都改为复用同一份 parse cache
+   - `build_index()` / `incremental_build_index()` 新增 `build_stats`
+   - `build_stats` 现在包含：
+     - `parsed_unit_count`
+     - `parse_cache_hits`
+     - `parse_cache_misses`
+
+2. 更新 `tests/test_indexer.py`
+   - 新增 `CountingParser`
+   - 新增增量建库 parse cache 回归测试
+   - 校验 changed/added 文件在一次 incremental build 中只被解析一次
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py -k "incremental_build_reuses_parsed_units_with_cache or incremental_build_reuses_existing_chunk_vectors_when_embedding_text_matches"` 通过
+- 结果：`2 passed`
+
+### 结论
+
+- 增量建库现在已经把“重复解析同一 changed 文件”的成本收掉了
+- `build_stats` 也开始能量化构建阶段的缓存收益

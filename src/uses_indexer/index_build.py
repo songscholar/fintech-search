@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
 from .metadata_store import read_metadata, write_metadata_map
 from .observability import build_incremental_trace
+from .models import ParsedUnit
 from .parser import is_supported_path
 from .semantic_recovery import build_semantic_chunks, recover_blocks
 
@@ -64,11 +65,13 @@ class IndexBuildService:
 
         files = self._collect_files(root, index_type=index_type)
         initial_embedder_info = self.owner.embedder.info
+        parse_cache: dict[str, ParsedUnit] = {}
+        parse_stats = {"hits": 0, "misses": 0}
 
         try:
             with conn:
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=initial_embedder_info)
-                counters = self._index_files(conn, files)
+                counters = self._index_files(conn, files, parse_cache=parse_cache, parse_stats=parse_stats)
                 self._upsert_indexed_file_state(conn, files, index_type=index_type)
 
             vector_stats = write_service.populate_missing_chunk_vectors(conn)
@@ -85,6 +88,11 @@ class IndexBuildService:
             vector_stats=vector_stats,
             counters=counters,
             incremental=False,
+            build_stats={
+                "parsed_unit_count": len(parse_cache),
+                "parse_cache_hits": int(parse_stats["hits"]),
+                "parse_cache_misses": int(parse_stats["misses"]),
+            },
         )
 
     def incremental_build_index(
@@ -113,6 +121,8 @@ class IndexBuildService:
                 )
 
             files = self._collect_files(root, index_type=index_type)
+            parse_cache: dict[str, ParsedUnit] = {}
+            parse_stats = {"hits": 0, "misses": 0}
             current_state = {str(path): self._fingerprint_path(path) for path in files}
             stored_state = {
                 str(row[0]): {
@@ -145,12 +155,14 @@ class IndexBuildService:
                 added_paths=added_paths,
                 changed_paths=changed_paths,
                 removed_paths=removed_paths,
+                parse_cache=parse_cache,
+                parse_stats=parse_stats,
             )
 
             with conn:
                 for path in [*removed_paths, *changed_paths]:
                     self._delete_indexed_path(conn, path)
-                counters = self._index_files(conn, changed_files)
+                counters = self._index_files(conn, changed_files, parse_cache=parse_cache, parse_stats=parse_stats)
                 reused_vector_stats = self._restore_reusable_chunk_vectors(conn, reusable_vectors)
                 self._upsert_indexed_file_state(conn, files, index_type=index_type)
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=self.owner.embedder.info)
@@ -179,6 +191,11 @@ class IndexBuildService:
                 vector_stats=vector_stats,
                 counters=counters,
                 incremental=True,
+                build_stats={
+                    "parsed_unit_count": len(parse_cache),
+                    "parse_cache_hits": int(parse_stats["hits"]),
+                    "parse_cache_misses": int(parse_stats["misses"]),
+                },
             )
             payload["incremental_changes"] = {
                 "added": added_paths,
@@ -346,7 +363,31 @@ class IndexBuildService:
             ) and not any(excluded in str(path) for excluded in ["通用数据", "commondata", "tools"])
         )
 
-    def _index_files(self, conn: sqlite3.Connection, files: list[Path]) -> dict[str, Counter[str]]:
+    def _parse_unit(
+        self,
+        path: Path,
+        *,
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> ParsedUnit:
+        cache_key = str(path)
+        cached = parse_cache.get(cache_key)
+        if cached is not None:
+            parse_stats["hits"] += 1
+            return cached
+        parse_stats["misses"] += 1
+        parsed = self.owner.parser.parse_path(path)
+        parse_cache[cache_key] = parsed
+        return parsed
+
+    def _index_files(
+        self,
+        conn: sqlite3.Connection,
+        files: list[Path],
+        *,
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> dict[str, Counter[str]]:
         unit_kind_counter: Counter[str] = Counter()
         prefix_counter: Counter[str] = Counter()
         statement_counter: Counter[str] = Counter()
@@ -359,7 +400,7 @@ class IndexBuildService:
         block_edge_counter: Counter[str] = Counter()
 
         for path in files:
-            unit = self.owner.parser.parse_path(path)
+            unit = self._parse_unit(path, parse_cache=parse_cache, parse_stats=parse_stats)
             file_id, procedure_id = self.owner._index_write_service.insert_unit(conn, unit)
             unit_kind_counter[unit.unit_kind] += 1
             prefix_counter[unit.prefix] += 1
@@ -486,19 +527,21 @@ class IndexBuildService:
         added_paths: list[str],
         changed_paths: list[str],
         removed_paths: list[str],
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
     ) -> list[dict[str, object]]:
         affected_units: list[dict[str, object]] = []
         for path in added_paths:
-            estimated_scope = self._estimate_source_scope(Path(path))
+            estimated_scope = self._estimate_source_scope(Path(path), parse_cache=parse_cache, parse_stats=parse_stats)
             affected_units.append(
                 {
                     "change_type": "added",
-                    **self._describe_source_unit(Path(path)),
+                    **self._describe_source_unit(Path(path), parse_cache=parse_cache, parse_stats=parse_stats),
                     "rebuild_targets": self._scope_to_rebuild_targets(estimated_scope),
                 }
             )
         for path in changed_paths:
-            estimated_scope = self._estimate_source_scope(Path(path))
+            estimated_scope = self._estimate_source_scope(Path(path), parse_cache=parse_cache, parse_stats=parse_stats)
             affected_units.append(
                 {
                     "change_type": "changed",
@@ -525,8 +568,14 @@ class IndexBuildService:
         )
         return affected_units
 
-    def _describe_source_unit(self, path: Path) -> dict[str, object]:
-        unit = self.owner.parser.parse_path(path)
+    def _describe_source_unit(
+        self,
+        path: Path,
+        *,
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> dict[str, object]:
+        unit = self._parse_unit(path, parse_cache=parse_cache, parse_stats=parse_stats)
         return {
             "file_path": str(path),
             "procedure_name": unit.name,
@@ -536,8 +585,14 @@ class IndexBuildService:
             "object_id": unit.object_id,
         }
 
-    def _estimate_source_scope(self, path: Path) -> dict[str, object]:
-        unit = self.owner.parser.parse_path(path)
+    def _estimate_source_scope(
+        self,
+        path: Path,
+        *,
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> dict[str, object]:
+        unit = self._parse_unit(path, parse_cache=parse_cache, parse_stats=parse_stats)
         action_count = sum(1 for statement in unit.statements if statement.kind == "action")
         estimated_chunks = build_semantic_chunks(unit.name, unit.statements)
         estimated_blocks = recover_blocks(unit.statements)
@@ -835,6 +890,7 @@ class IndexBuildService:
         vector_stats: dict[str, object],
         counters: dict[str, Counter[str]],
         incremental: bool,
+        build_stats: dict[str, int] | None = None,
     ) -> dict[str, object]:
         payload = {
             "source_root": str(root),
@@ -858,6 +914,7 @@ class IndexBuildService:
                 "model": db_summary["embedding"]["model"],
                 "dimension": int(db_summary["embedding"]["dimension"] or 0),
             },
+            "build_stats": build_stats or {},
         }
         if incremental:
             payload["incremental"] = True

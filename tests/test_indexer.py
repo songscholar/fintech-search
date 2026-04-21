@@ -246,6 +246,17 @@ class FailingEmbedder:
         raise EmbeddingRequestError("boom")
 
 
+class CountingParser:
+    def __init__(self, delegate) -> None:
+        self.delegate = delegate
+        self.calls: dict[str, int] = {}
+
+    def parse_path(self, path):
+        key = str(path)
+        self.calls[key] = self.calls.get(key, 0) + 1
+        return self.delegate.parse_path(path)
+
+
 class RecordingBatchEmbedder:
     def __init__(self, batch_size: int = 1000, fail_after_batches: int | None = None, dimension: int = 2) -> None:
         self.config = SimpleNamespace(batch_size=batch_size)
@@ -441,6 +452,38 @@ def test_incremental_build_reuses_existing_chunk_vectors_when_embedding_text_mat
     assert result["vector_stats"]["reused_chunk_count"] >= 1
     assert result["vector_stats"]["inserted"] == 0
     assert incremental_embedder.calls == []
+
+
+def test_incremental_build_reuses_parsed_units_with_cache(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "incremental_parse_cache.db"
+    parser = CountingParser(SQLiteIndexer().parser)
+    indexer = SQLiteIndexer(parser=parser, embedder=RecordingBatchEmbedder(batch_size=1000))
+
+    indexer.build_index(source_dir, db_path, index_type="code")
+    before_calls = dict(parser.calls)
+
+    changed_source = source_dir / "AF_SAMPLE.uftatomfunction"
+    changed_source.write_text(SAMPLE_XML.replace('objectId="1"', 'objectId="111"'), encoding="utf-8")
+    added_source = source_dir / "LF_CACHE.uftfunction"
+    added_source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LF_缓存_测试" objectId="88">
+  <code><![CDATA[
+  [AF_SAMPLE][][]
+  ]]></code>
+</business:Function>
+""",
+        encoding="utf-8",
+    )
+
+    result = indexer.build_index(source_dir, db_path, incremental=True, index_type="code")
+
+    assert result["build_stats"]["parsed_unit_count"] >= 2
+    assert result["build_stats"]["parse_cache_hits"] >= 1
+    assert result["build_stats"]["parse_cache_misses"] >= 2
+    assert parser.calls[str(changed_source)] - before_calls.get(str(changed_source), 0) == 1
+    assert parser.calls[str(added_source)] == 1
 
 
 def test_query_index_uses_fts_and_rerank(tmp_path: Path) -> None:
