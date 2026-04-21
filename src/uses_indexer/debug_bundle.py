@@ -590,6 +590,68 @@ def guarded_promote_debug_bundle_regression_panel_baseline(
     return promoted
 
 
+def run_debug_bundle_regression_panel_release_workflow(
+    panel_path: str | Path,
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_notes: str | None = None,
+    baseline_tags: list[str] | None = None,
+    gate_baseline_tag: str | None = None,
+    require_threshold_pass: bool = False,
+    blocked_latest_verdicts: list[str] | None = None,
+    auto_promote: bool = True,
+) -> dict[str, object]:
+    latest_comparison: dict[str, object] | None = None
+    try:
+        latest_comparison = compare_debug_bundle_regression_panel_latest_baseline(
+            panel_path,
+            baseline_dir=baseline_dir,
+            baseline_tag=gate_baseline_tag,
+        )
+    except FileNotFoundError:
+        latest_comparison = None
+
+    gate = evaluate_debug_bundle_regression_panel_promotion_gate(
+        panel_path,
+        baseline_dir=baseline_dir,
+        baseline_tag=gate_baseline_tag,
+        require_threshold_pass=require_threshold_pass,
+        blocked_latest_verdicts=blocked_latest_verdicts,
+    )
+
+    promoted: dict[str, object] | None = None
+    status = "blocked"
+    if gate["status"] == "pass":
+        status = "ready_to_promote"
+        if auto_promote:
+            promoted = promote_debug_bundle_regression_panel_baseline(
+                panel_path,
+                baseline_name,
+                baseline_dir=baseline_dir,
+                baseline_notes=baseline_notes,
+                baseline_tags=baseline_tags,
+            )
+            promoted["promotion_gate"] = gate
+            status = "promoted"
+
+    workflow = {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow",
+        "panel_path": str(panel_path),
+        "baseline_name": baseline_name,
+        "baseline_dir": str(_resolve_panel_baseline_dir(baseline_dir)),
+        "gate_baseline_tag": gate_baseline_tag,
+        "auto_promote": auto_promote,
+        "status": status,
+        "latest_comparison": latest_comparison,
+        "promotion_gate": gate,
+        "promoted": promoted,
+    }
+    workflow["review_summary"] = _build_release_workflow_review_summary(workflow)
+    workflow["markdown_summary"] = render_debug_bundle_regression_panel_release_workflow_markdown(workflow)
+    return workflow
+
+
 def list_debug_bundle_regression_panel_baselines(
     *,
     baseline_dir: str | Path | None = None,
@@ -1050,6 +1112,96 @@ def render_debug_bundle_regression_panel_baseline_trend_markdown(trend: dict[str
                 + f"changed_delta={_render_delta(item.get('changed_case_delta'))} "
                 + f"possible_regression_delta={_render_delta(item.get('possible_regression_delta'))}"
             )
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_release_workflow_review_summary(workflow: dict[str, object]) -> dict[str, object]:
+    gate = dict(workflow.get("promotion_gate") or {})
+    latest = dict(workflow.get("latest_comparison") or {})
+    latest_review = dict(latest.get("review_summary") or {})
+    status = str(workflow.get("status") or "unknown")
+
+    findings: list[str] = []
+    if gate.get("status") != "pass":
+        findings.append(f"Promotion gate failed with {gate.get('failed_count', 0)} failed checks.")
+    if latest_review:
+        findings.append(
+            f"Latest baseline comparison verdict is {latest_review.get('verdict')} "
+            f"(focus={latest_review.get('focus_area')})."
+        )
+    if status == "promoted":
+        findings.append("Panel was promoted to the target baseline.")
+    elif status == "ready_to_promote":
+        findings.append("Panel passed gate checks and is ready to promote.")
+
+    next_steps: list[str] = []
+    if status == "blocked":
+        next_steps.append("Review the failed promotion gate checks before updating the baseline.")
+    elif status == "ready_to_promote":
+        next_steps.append("Run the workflow again with auto-promote enabled to update the baseline.")
+    else:
+        next_steps.append("Use the new baseline for subsequent regression comparisons.")
+
+    return {
+        "status": status,
+        "gate_status": gate.get("status"),
+        "latest_verdict": latest_review.get("verdict"),
+        "findings": findings,
+        "next_steps": next_steps,
+    }
+
+
+def render_debug_bundle_regression_panel_release_workflow_markdown(workflow: dict[str, object]) -> str:
+    review = dict(workflow.get("review_summary") or {})
+    gate = dict(workflow.get("promotion_gate") or {})
+    promoted = dict(workflow.get("promoted") or {})
+    latest = dict(workflow.get("latest_comparison") or {})
+    latest_review = dict(latest.get("review_summary") or {})
+
+    lines = [
+        "# Debug Bundle Panel Release Workflow",
+        "",
+        f"- Status: {workflow.get('status')}",
+        f"- Baseline name: {workflow.get('baseline_name')}",
+        f"- Auto promote: {bool(workflow.get('auto_promote'))}",
+        f"- Gate status: {gate.get('status')}",
+        f"- Latest baseline verdict: {latest_review.get('verdict') or 'n/a'}",
+        "",
+        "## Findings",
+    ]
+    findings = list(review.get("findings") or [])
+    if findings:
+        lines.extend(f"- {item}" for item in findings)
+    else:
+        lines.append("- No findings.")
+
+    lines.extend(["", "## Gate Checks"])
+    checks = list(gate.get("checks") or [])
+    if checks:
+        for check in checks:
+            lines.append(
+                f"- {check.get('metric')}: actual={check.get('actual')} expected={check.get('expected')} passed={check.get('passed')}"
+            )
+    else:
+        lines.append("- No gate checks configured.")
+
+    lines.extend(["", "## Next Steps"])
+    next_steps = list(review.get("next_steps") or [])
+    if next_steps:
+        lines.extend(f"- {item}" for item in next_steps)
+    else:
+        lines.append("- No follow-up needed.")
+
+    if promoted:
+        lines.extend(
+            [
+                "",
+                "## Promotion",
+                f"- Baseline slug: {promoted.get('baseline_slug')}",
+                f"- Saved at: {promoted.get('saved_at')}",
+            ]
+        )
+
     return "\n".join(lines).strip() + "\n"
 
 

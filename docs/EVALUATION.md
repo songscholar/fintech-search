@@ -452,6 +452,21 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
   --block-latest-verdict possible_regression
 ```
 
+如果你想把这三步完全收成一个发布动作，也可以直接跑 release workflow：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
+  --panel ./examples/debug_bundle_panel_next \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --tag active \
+  --gate-tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression \
+  --markdown-output ./examples/release_workflow.md
+```
+
 这样做的价值是：
 
 - `eval-retrieval` 继续负责整体数值门槛
@@ -461,6 +476,7 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 - `compare-debug-bundle-panel-latest-baseline` 则负责“和最近一份同类 baseline 比”
 - `promote-debug-bundle-panel-baseline` 则负责“把当前结果正式提升成标准答案”
 - `evaluate-debug-bundle-panel-promotion-gate` 则负责“在 promote 前把标准显式检查一遍”
+- `run-debug-bundle-panel-release-workflow` 则负责“一次跑完整个发布前后质量动作”
 
 如果你想看某一类 baseline 的长期变化趋势，而不只是做一次比较，可以再加一层 trend：
 
@@ -487,6 +503,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /promote-debug-bundle-panel-baseline`
   - `POST /evaluate-debug-bundle-panel-promotion-gate`
+  - `POST /run-debug-bundle-panel-release-workflow`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -498,6 +515,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `save_debug_bundle_panel_baseline`
   - `promote_debug_bundle_panel_baseline`
   - `evaluate_debug_bundle_panel_promotion_gate`
+  - `run_debug_bundle_panel_release_workflow`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

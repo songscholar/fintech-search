@@ -544,6 +544,29 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 
 这样 promote 在 gate 不通过时会直接拒绝，不会把一个明显有风险的 panel 提升成正式标准。
 
+如果你不想分三步手工跑 `latest compare -> gate -> promote`，现在也可以直接走一条 release workflow：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --tag active \
+  --gate-tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression \
+  --markdown-output ./examples/release_workflow.md \
+  --output ./examples/release_workflow.json
+```
+
+这个命令会一次性给你：
+
+- 和最近 baseline 的比较结果
+- promotion gate 检查结果
+- 如果 gate 通过，是否已经自动 promote
+- 一份适合 reviewer 直接看的 markdown 摘要
+
 如果你想看一组 baseline 的长期走势，而不是只做两两比较，可以直接看 trend：
 
 ```bash
@@ -581,6 +604,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /promote-debug-bundle-panel-baseline`
   - `POST /evaluate-debug-bundle-panel-promotion-gate`
+  - `POST /run-debug-bundle-panel-release-workflow`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -592,6 +616,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `save_debug_bundle_panel_baseline`
   - `promote_debug_bundle_panel_baseline`
   - `evaluate_debug_bundle_panel_promotion_gate`
+  - `run_debug_bundle_panel_release_workflow`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

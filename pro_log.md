@@ -2643,3 +2643,58 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在 promote 已经可以被 threshold 和 latest-baseline verdict 显式约束
 - 这一步让 baseline 流程从“可治理”进一步升级成了“具备真正发布门槛”的质量控制机制
+
+## [1.2.37] - 2026-04-21
+
+### Step 44: 增加一键 release workflow
+
+### 本步目标
+
+- 把 `latest compare -> promotion gate -> promote` 三步收成一个完整工作流
+- 让发布前后的质量动作可以一次执行并产出 reviewer 摘要
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `run_debug_bundle_regression_panel_release_workflow()`
+   - 新增 release workflow reviewer summary
+   - 新增 release workflow markdown 渲染
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `run-debug-bundle-panel-release-workflow`
+   - 支持：
+     - `--gate-tag`
+     - `--require-threshold-pass`
+     - `--block-latest-verdict`
+     - `--no-auto-promote`
+     - `--markdown-output`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /run-debug-bundle-panel-release-workflow`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `run_debug_bundle_panel_release_workflow`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 release workflow promote 回归
+   - `tests/test_api.py`
+     - 新增 release workflow API 回归
+   - `tests/test_mcp.py`
+     - 新增 release workflow MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充一键 release workflow 的使用方式
+   - `docs/EVALUATION.md`
+     - 补充“单命令完成 compare + gate + promote”的工作流
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `25 passed`
+
+### 结论
+
+- 现在发布前后的质量动作已经可以一条命令跑完
+- 这一步让 baseline 体系从“具备发布门槛”进一步升级成了“可直接执行的 release 质量工作流”

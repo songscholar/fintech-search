@@ -24,6 +24,7 @@ from .debug_bundle import (
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_promotion_gate,
+    run_debug_bundle_regression_panel_release_workflow,
     summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
 )
@@ -155,6 +156,19 @@ def main() -> int:
     promote_gate_parser.add_argument("--require-threshold-pass", action="store_true", help="Require panel.thresholds.status=pass.")
     promote_gate_parser.add_argument("--block-latest-verdict", action="append", default=[], help="Verdict that should fail the promotion gate. Can be provided multiple times.")
     promote_gate_parser.add_argument("--output", help="Optional JSON output path.")
+
+    release_workflow_parser = subparsers.add_parser("run-debug-bundle-panel-release-workflow", help="Run latest-baseline comparison, promotion gate, and optional promote as one release workflow.")
+    release_workflow_parser.add_argument("--panel", required=True, help="Panel archive directory or panel.json path.")
+    release_workflow_parser.add_argument("--name", required=True, help="Target baseline name.")
+    release_workflow_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    release_workflow_parser.add_argument("--note", help="Optional promotion note.")
+    release_workflow_parser.add_argument("--tag", action="append", default=[], help="Optional baseline tag. Can be provided multiple times.")
+    release_workflow_parser.add_argument("--gate-tag", help="Optional baseline tag to use when comparing against the latest baseline.")
+    release_workflow_parser.add_argument("--require-threshold-pass", action="store_true", help="Require panel.thresholds.status=pass.")
+    release_workflow_parser.add_argument("--block-latest-verdict", action="append", default=[], help="Verdict that should block promote. Can be provided multiple times.")
+    release_workflow_parser.add_argument("--no-auto-promote", action="store_true", help="Only compute compare+gate without promoting.")
+    release_workflow_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
+    release_workflow_parser.add_argument("--output", help="Optional JSON output path.")
 
     list_panel_baselines_parser = subparsers.add_parser("list-debug-bundle-panel-baselines", help="List saved debug bundle regression panel baselines.")
     list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
@@ -403,6 +417,18 @@ def main() -> int:
             require_threshold_pass=args.require_threshold_pass,
             blocked_latest_verdicts=args.block_latest_verdict,
         )
+    elif args.command == "run-debug-bundle-panel-release-workflow":
+        data = run_debug_bundle_regression_panel_release_workflow(
+            args.panel,
+            args.name,
+            baseline_dir=args.baseline_dir,
+            baseline_notes=args.note,
+            baseline_tags=args.tag,
+            gate_baseline_tag=args.gate_tag,
+            require_threshold_pass=args.require_threshold_pass,
+            blocked_latest_verdicts=args.block_latest_verdict,
+            auto_promote=not args.no_auto_promote,
+        )
     elif args.command == "list-debug-bundle-panel-baselines":
         data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir, baseline_tag=args.tag)
     elif args.command == "show-debug-bundle-panel-baseline-trend":
@@ -493,6 +519,10 @@ def main() -> int:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
     if args.command == "show-debug-bundle-panel-baseline-trend" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "run-debug-bundle-panel-release-workflow" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")

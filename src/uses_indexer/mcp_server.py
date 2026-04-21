@@ -23,6 +23,7 @@ from .debug_bundle import (
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_promotion_gate,
+    run_debug_bundle_regression_panel_release_workflow,
     summarize_debug_bundle_regression_panel_baseline_trend,
 )
 from .indexer import SQLiteIndexer
@@ -194,6 +195,7 @@ class CodebaseMcpServer:
             "show_debug_bundle_panel_baseline": self._tool_show_debug_bundle_panel_baseline,
             "evaluate_debug_bundle_panel_promotion_gate": self._tool_evaluate_debug_bundle_panel_promotion_gate,
             "promote_debug_bundle_panel_baseline": self._tool_promote_debug_bundle_panel_baseline,
+            "run_debug_bundle_panel_release_workflow": self._tool_run_debug_bundle_panel_release_workflow,
             "delete_debug_bundle_panel_baseline": self._tool_delete_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_latest_baseline": self._tool_compare_debug_bundle_panel_latest_baseline,
@@ -469,6 +471,26 @@ class CodebaseMcpServer:
                         "blocked_latest_verdicts": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": ["panel_path"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "run_debug_bundle_panel_release_workflow",
+                "description": "Run latest-baseline comparison, promotion gate, and optional promote as one release workflow.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "panel_path": {"type": "string"},
+                        "baseline_name": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                        "baseline_notes": {"type": "string"},
+                        "baseline_tags": {"type": "array", "items": {"type": "string"}},
+                        "gate_baseline_tag": {"type": "string"},
+                        "require_threshold_pass": {"type": "boolean"},
+                        "blocked_latest_verdicts": {"type": "array", "items": {"type": "string"}},
+                        "auto_promote": {"type": "boolean"},
+                    },
+                    "required": ["panel_path", "baseline_name"],
                     "additionalProperties": False,
                 },
             },
@@ -770,6 +792,28 @@ class CodebaseMcpServer:
             baseline_tag=baseline_tag,
             require_threshold_pass=require_threshold_pass,
             blocked_latest_verdicts=blocked_latest_verdicts,
+        )
+
+    def _tool_run_debug_bundle_panel_release_workflow(self, arguments: dict[str, object]) -> dict[str, object]:
+        panel_path = self._required_string(arguments, "panel_path")
+        baseline_name = self._required_string(arguments, "baseline_name")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        baseline_notes = self._optional_string(arguments, "baseline_notes")
+        baseline_tags = self._optional_string_list(arguments, "baseline_tags")
+        gate_baseline_tag = self._optional_string(arguments, "gate_baseline_tag")
+        require_threshold_pass = self._optional_bool(arguments, "require_threshold_pass", default=False)
+        blocked_latest_verdicts = self._optional_string_list(arguments, "blocked_latest_verdicts")
+        auto_promote = self._optional_bool(arguments, "auto_promote", default=True)
+        return run_debug_bundle_regression_panel_release_workflow(
+            panel_path,
+            baseline_name,
+            baseline_dir=baseline_dir,
+            baseline_notes=baseline_notes,
+            baseline_tags=baseline_tags,
+            gate_baseline_tag=gate_baseline_tag,
+            require_threshold_pass=require_threshold_pass,
+            blocked_latest_verdicts=blocked_latest_verdicts,
+            auto_promote=auto_promote,
         )
 
     def _tool_delete_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:

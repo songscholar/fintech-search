@@ -92,6 +92,7 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "show_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "evaluate_debug_bundle_panel_promotion_gate" for tool in tools)
     assert any(tool["name"] == "promote_debug_bundle_panel_baseline" for tool in tools)
+    assert any(tool["name"] == "run_debug_bundle_panel_release_workflow" for tool in tools)
     assert any(tool["name"] == "delete_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel_latest_baseline" for tool in tools)
@@ -363,10 +364,34 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     assert gate_response is not None
     assert gate_response["result"]["structuredContent"]["status"] == "fail"
 
-    trend_response = server.handle_message(
+    workflow_response = server.handle_message(
         {
             "jsonrpc": "2.0",
             "id": 13,
+            "method": "tools/call",
+            "params": {
+                "name": "run_debug_bundle_panel_release_workflow",
+                "arguments": {
+                    "panel_path": str(panel_dir),
+                    "baseline_name": "mcp workflow baseline",
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                    "baseline_notes": "workflow promotion",
+                    "baseline_tags": ["mcp", "workflow"],
+                    "gate_baseline_tag": "mcp",
+                    "require_threshold_pass": True,
+                    "blocked_latest_verdicts": ["possible_regression"],
+                    "auto_promote": True,
+                },
+            },
+        }
+    )
+    assert workflow_response is not None
+    assert workflow_response["result"]["structuredContent"]["status"] == "promoted"
+
+    trend_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 14,
             "method": "tools/call",
             "params": {
                 "name": "show_debug_bundle_panel_baseline_trend",
@@ -383,7 +408,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_saved_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 14,
+            "id": 15,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_baseline",
@@ -401,7 +426,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_latest_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 15,
+            "id": 16,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_latest_baseline",
@@ -419,7 +444,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_panels_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 16,
+            "id": 17,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panels",
@@ -436,7 +461,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     delete_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 17,
+            "id": 18,
             "method": "tools/call",
             "params": {
                 "name": "delete_debug_bundle_panel_baseline",

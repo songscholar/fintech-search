@@ -11,6 +11,7 @@ from uses_indexer.debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     evaluate_debug_bundle_regression_panel_promotion_gate,
+    run_debug_bundle_regression_panel_release_workflow,
     compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
@@ -602,3 +603,39 @@ def test_promotion_gate_blocks_missing_threshold_pass(tmp_path: Path) -> None:
         assert "Promotion gate failed" in str(exc)
     else:
         raise AssertionError("guarded promote should fail when threshold gate does not pass")
+
+
+def test_release_workflow_promotes_when_gate_passes(tmp_path: Path) -> None:
+    panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/a.db",
+        "after_db_path": "/tmp/b.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {"changed_case_count": 0, "stable_case_count": 1},
+        "cases": [],
+        "thresholds": {"status": "pass", "failed_count": 0, "checks": []},
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    panel_dir = tmp_path / "panel_archive"
+    baseline_dir = tmp_path / "baseline_store"
+    panel_dir.mkdir()
+    (panel_dir / "panel.json").write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_dir / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+    (panel_dir / "panel_summary.json").write_text(json.dumps({"summary": panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    workflow = run_debug_bundle_regression_panel_release_workflow(
+        panel_dir,
+        "release-candidate",
+        baseline_dir=baseline_dir,
+        baseline_notes="workflow promote",
+        baseline_tags=["release"],
+        gate_baseline_tag="release",
+        require_threshold_pass=True,
+        blocked_latest_verdicts=["possible_regression"],
+        auto_promote=True,
+    )
+    assert workflow["bundle_kind"] == "debug_bundle_regression_panel_release_workflow"
+    assert workflow["status"] == "promoted"
+    assert workflow["promoted"]["baseline_slug"] == "release-candidate"
+    assert workflow["markdown_summary"].startswith("# Debug Bundle Panel Release Workflow")
