@@ -2583,3 +2583,63 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在 baseline 不只支持保存和比较，还支持“正式提升为当前标准版本”
 - 这一步让回归资产从“可管理”进一步升级成了“可治理、可显式切换当前标准答案”的流程能力
+
+## [1.2.36] - 2026-04-21
+
+### Step 43: 增加 promotion gate
+
+### 本步目标
+
+- 让 promote 不再只是“一个保存动作”，而是能受明确 gate 约束
+- 让“当前 panel 有没有资格提升为正式 baseline”先变成可解释的检查结果
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `evaluate_debug_bundle_regression_panel_promotion_gate()`
+   - 新增 `guarded_promote_debug_bundle_regression_panel_baseline()`
+   - gate 现在支持：
+     - `require_threshold_pass`
+     - `blocked_latest_verdicts`
+     - `baseline_tag`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - `promote-debug-bundle-panel-baseline` 新增：
+     - `--require-threshold-pass`
+     - `--gate-tag`
+     - `--block-latest-verdict`
+   - 新增：
+     - `evaluate-debug-bundle-panel-promotion-gate`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /evaluate-debug-bundle-panel-promotion-gate`
+   - `POST /promote-debug-bundle-panel-baseline` 现在支持 gate 参数
+   - gate 失败时返回明确的 `400`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `evaluate_debug_bundle_panel_promotion_gate`
+   - `promote_debug_bundle_panel_baseline` 现在支持 gate 参数
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 threshold gate 拦截回归
+   - `tests/test_api.py`
+     - 新增 gate API 回归
+   - `tests/test_mcp.py`
+     - 新增 gate MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 gate 的使用方式和“阻止 promote”的意义
+   - `docs/EVALUATION.md`
+     - 补充 gate + promote 联动工作流
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `24 passed`
+
+### 结论
+
+- 现在 promote 已经可以被 threshold 和 latest-baseline verdict 显式约束
+- 这一步让 baseline 流程从“可治理”进一步升级成了“具备真正发布门槛”的质量控制机制

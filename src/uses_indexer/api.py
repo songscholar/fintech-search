@@ -20,8 +20,10 @@ from .debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
+    guarded_promote_debug_bundle_regression_panel_baseline,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
+    evaluate_debug_bundle_regression_panel_promotion_gate,
     summarize_debug_bundle_regression_panel_baseline_trend,
 )
 from .indexer import SQLiteIndexer
@@ -89,6 +91,7 @@ class CodebaseApi:
                     "GET /show-debug-bundle-panel-baseline",
                     "POST /save-debug-bundle-panel-baseline",
                     "POST /promote-debug-bundle-panel-baseline",
+                    "POST /evaluate-debug-bundle-panel-promotion-gate",
                     "POST /compare-debug-bundle-panel-baseline",
                     "POST /compare-debug-bundle-panel-latest-baseline",
                     "POST /delete-debug-bundle-panel-baseline",
@@ -283,12 +286,59 @@ class CodebaseApi:
                 not isinstance(baseline_tags, list) or any(not isinstance(tag, str) for tag in baseline_tags)
             ):
                 raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_tags must be a list of strings")
+            require_threshold_pass = bool(payload.get("require_threshold_pass", False))
+            gate_baseline_tag = payload.get("gate_baseline_tag")
+            if gate_baseline_tag is not None and not isinstance(gate_baseline_tag, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "gate_baseline_tag must be a string")
+            blocked_latest_verdicts = payload.get("blocked_latest_verdicts")
+            if blocked_latest_verdicts is not None and (
+                not isinstance(blocked_latest_verdicts, list) or any(not isinstance(item, str) for item in blocked_latest_verdicts)
+            ):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "blocked_latest_verdicts must be a list of strings")
+            if require_threshold_pass or blocked_latest_verdicts:
+                try:
+                    result = guarded_promote_debug_bundle_regression_panel_baseline(
+                        panel_path,
+                        baseline_name,
+                        baseline_dir=baseline_dir,
+                        baseline_notes=baseline_notes,
+                        baseline_tags=baseline_tags,
+                        gate_baseline_tag=gate_baseline_tag,
+                        require_threshold_pass=require_threshold_pass,
+                        blocked_latest_verdicts=blocked_latest_verdicts,
+                    )
+                except ValueError as exc:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+                return HTTPStatus.OK, result
             return HTTPStatus.OK, promote_debug_bundle_regression_panel_baseline(
                 panel_path,
                 baseline_name,
                 baseline_dir=baseline_dir,
                 baseline_notes=baseline_notes,
                 baseline_tags=baseline_tags,
+            )
+
+        if route == "/evaluate-debug-bundle-panel-promotion-gate" and method == "POST":
+            payload = self._parse_json_body(body)
+            panel_path = self._require_string(payload, "panel_path")
+            baseline_dir = payload.get("baseline_dir")
+            if baseline_dir is not None and not isinstance(baseline_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_dir must be a string")
+            baseline_tag = payload.get("baseline_tag")
+            if baseline_tag is not None and not isinstance(baseline_tag, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_tag must be a string")
+            require_threshold_pass = bool(payload.get("require_threshold_pass", False))
+            blocked_latest_verdicts = payload.get("blocked_latest_verdicts")
+            if blocked_latest_verdicts is not None and (
+                not isinstance(blocked_latest_verdicts, list) or any(not isinstance(item, str) for item in blocked_latest_verdicts)
+            ):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "blocked_latest_verdicts must be a list of strings")
+            return HTTPStatus.OK, evaluate_debug_bundle_regression_panel_promotion_gate(
+                panel_path,
+                baseline_dir=baseline_dir,
+                baseline_tag=baseline_tag,
+                require_threshold_pass=require_threshold_pass,
+                blocked_latest_verdicts=blocked_latest_verdicts,
             )
 
         if route == "/compare-debug-bundle-panel-baseline" and method == "POST":
@@ -330,7 +380,7 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
+        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
         if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend"} and method != "GET":

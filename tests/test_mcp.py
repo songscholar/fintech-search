@@ -90,6 +90,7 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "list_debug_bundle_panel_baselines" for tool in tools)
     assert any(tool["name"] == "show_debug_bundle_panel_baseline_trend" for tool in tools)
     assert any(tool["name"] == "show_debug_bundle_panel_baseline" for tool in tools)
+    assert any(tool["name"] == "evaluate_debug_bundle_panel_promotion_gate" for tool in tools)
     assert any(tool["name"] == "promote_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "delete_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel_baseline" for tool in tools)
@@ -336,10 +337,36 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     assert promote_response is not None
     assert promote_response["result"]["structuredContent"]["bundle_kind"] == "debug_bundle_regression_panel_baseline_promoted"
 
-    trend_response = server.handle_message(
+    failed_panel_dir = tmp_path / "failed_panel_archive"
+    failed_panel_dir.mkdir()
+    failed_panel = json.loads(json.dumps(panel, ensure_ascii=False))
+    failed_panel["thresholds"] = {"status": "fail", "failed_count": 1, "checks": []}
+    (failed_panel_dir / "panel.json").write_text(json.dumps(failed_panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (failed_panel_dir / "panel.md").write_text(str(failed_panel.get("markdown_summary") or ""), encoding="utf-8")
+    (failed_panel_dir / "panel_summary.json").write_text(json.dumps({"summary": failed_panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    gate_response = server.handle_message(
         {
             "jsonrpc": "2.0",
             "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "evaluate_debug_bundle_panel_promotion_gate",
+                "arguments": {
+                    "panel_path": str(failed_panel_dir),
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                    "require_threshold_pass": True,
+                },
+            },
+        }
+    )
+    assert gate_response is not None
+    assert gate_response["result"]["structuredContent"]["status"] == "fail"
+
+    trend_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 13,
             "method": "tools/call",
             "params": {
                 "name": "show_debug_bundle_panel_baseline_trend",
@@ -356,7 +383,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_saved_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 13,
+            "id": 14,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_baseline",
@@ -374,7 +401,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_latest_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 14,
+            "id": 15,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_latest_baseline",
@@ -392,7 +419,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_panels_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 15,
+            "id": 16,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panels",
@@ -409,7 +436,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     delete_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 16,
+            "id": 17,
             "method": "tools/call",
             "params": {
                 "name": "delete_debug_bundle_panel_baseline",

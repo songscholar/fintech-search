@@ -494,6 +494,102 @@ def promote_debug_bundle_regression_panel_baseline(
     }
 
 
+def evaluate_debug_bundle_regression_panel_promotion_gate(
+    panel_path: str | Path,
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_tag: str | None = None,
+    require_threshold_pass: bool = False,
+    blocked_latest_verdicts: list[str] | None = None,
+) -> dict[str, object]:
+    panel = _load_debug_bundle_regression_panel(panel_path)
+    threshold_payload = dict(panel.get("thresholds") or {})
+    checks: list[dict[str, object]] = []
+
+    if require_threshold_pass:
+        threshold_status = str(threshold_payload.get("status") or "missing")
+        checks.append(
+            {
+                "metric": "panel.thresholds.status",
+                "actual": threshold_status,
+                "expected": "pass",
+                "passed": threshold_status == "pass",
+            }
+        )
+
+    latest_comparison: dict[str, object] | None = None
+    blocked = [item.strip() for item in (blocked_latest_verdicts or []) if item.strip()]
+    if blocked:
+        try:
+            latest_comparison = compare_debug_bundle_regression_panel_latest_baseline(
+                panel_path,
+                baseline_dir=baseline_dir,
+                baseline_tag=baseline_tag,
+            )
+            latest_verdict = str((latest_comparison.get("review_summary") or {}).get("verdict") or "unknown")
+            checks.append(
+                {
+                    "metric": "latest_baseline.review_summary.verdict",
+                    "actual": latest_verdict,
+                    "expected": {"not_in": blocked},
+                    "passed": latest_verdict not in blocked,
+                }
+            )
+        except FileNotFoundError:
+            checks.append(
+                {
+                    "metric": "latest_baseline.review_summary.verdict",
+                    "actual": None,
+                    "expected": {"not_in": blocked},
+                    "passed": True,
+                    "note": "no_matching_latest_baseline",
+                }
+            )
+
+    return {
+        "bundle_kind": "debug_bundle_regression_panel_promotion_gate",
+        "panel_path": str(panel_path),
+        "baseline_dir": str(_resolve_panel_baseline_dir(baseline_dir)),
+        "baseline_tag": baseline_tag,
+        "check_count": len(checks),
+        "failed_count": sum(1 for item in checks if not item["passed"]),
+        "status": "pass" if all(item["passed"] for item in checks) else "fail",
+        "checks": checks,
+        "latest_comparison": latest_comparison,
+    }
+
+
+def guarded_promote_debug_bundle_regression_panel_baseline(
+    panel_path: str | Path,
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_notes: str | None = None,
+    baseline_tags: list[str] | None = None,
+    gate_baseline_tag: str | None = None,
+    require_threshold_pass: bool = False,
+    blocked_latest_verdicts: list[str] | None = None,
+) -> dict[str, object]:
+    gate = evaluate_debug_bundle_regression_panel_promotion_gate(
+        panel_path,
+        baseline_dir=baseline_dir,
+        baseline_tag=gate_baseline_tag,
+        require_threshold_pass=require_threshold_pass,
+        blocked_latest_verdicts=blocked_latest_verdicts,
+    )
+    if gate["status"] != "pass":
+        raise ValueError("Promotion gate failed; refusing to promote debug bundle panel baseline.")
+    promoted = promote_debug_bundle_regression_panel_baseline(
+        panel_path,
+        baseline_name,
+        baseline_dir=baseline_dir,
+        baseline_notes=baseline_notes,
+        baseline_tags=baseline_tags,
+    )
+    promoted["promotion_gate"] = gate
+    return promoted
+
+
 def list_debug_bundle_regression_panel_baselines(
     *,
     baseline_dir: str | Path | None = None,

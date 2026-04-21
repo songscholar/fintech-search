@@ -512,6 +512,38 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 
 `promote` 更适合 release / smoke gate 通过后的“正式提升”动作；`save` 更适合普通留档。
 
+如果你希望 promote 本身带门槛，而不是人工先判断，可以直接先跑 gate：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer evaluate-debug-bundle-panel-promotion-gate \
+  --panel ./examples/debug_bundle_panel_current \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression
+```
+
+这个 gate 会重点检查：
+
+- 当前 panel 自己的 `thresholds.status` 是否为 `pass`
+- 和最近一份同类 baseline 比较时，`review_summary.verdict` 是否落入禁止列表
+
+如果你已经确认这就是你想要的规则，也可以直接把 gate 合到 promote 里：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --tag active \
+  --gate-tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression
+```
+
+这样 promote 在 gate 不通过时会直接拒绝，不会把一个明显有风险的 panel 提升成正式标准。
+
 如果你想看一组 baseline 的长期走势，而不是只做两两比较，可以直接看 trend：
 
 ```bash
@@ -548,6 +580,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /promote-debug-bundle-panel-baseline`
+  - `POST /evaluate-debug-bundle-panel-promotion-gate`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -558,6 +591,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
   - `promote_debug_bundle_panel_baseline`
+  - `evaluate_debug_bundle_panel_promotion_gate`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

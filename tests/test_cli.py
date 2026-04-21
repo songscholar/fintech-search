@@ -10,12 +10,14 @@ from uses_indexer.debug_bundle import (
     DebugBundlePanelThresholds,
     build_debug_bundle,
     build_debug_bundle_regression_panel,
+    evaluate_debug_bundle_regression_panel_promotion_gate,
     compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
     compare_debug_bundles,
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
+    guarded_promote_debug_bundle_regression_panel_baseline,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     promote_debug_bundle_regression_panel_baseline,
@@ -562,3 +564,41 @@ def test_promote_baseline_records_promotion_source(tmp_path: Path) -> None:
     assert promoted["bundle_kind"] == "debug_bundle_regression_panel_baseline_promoted"
     assert promoted["promotion_source"] == str(panel_dir)
     assert promoted["baseline_tags"] == ["active", "release"]
+
+
+def test_promotion_gate_blocks_missing_threshold_pass(tmp_path: Path) -> None:
+    panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/a.db",
+        "after_db_path": "/tmp/b.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {"changed_case_count": 0, "stable_case_count": 1},
+        "cases": [],
+        "thresholds": {"status": "fail", "failed_count": 1, "checks": []},
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    panel_dir = tmp_path / "panel_archive"
+    panel_dir.mkdir()
+    (panel_dir / "panel.json").write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_dir / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+    (panel_dir / "panel_summary.json").write_text(json.dumps({"summary": panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    gate = evaluate_debug_bundle_regression_panel_promotion_gate(
+        panel_dir,
+        require_threshold_pass=True,
+    )
+    assert gate["status"] == "fail"
+    assert gate["failed_count"] == 1
+
+    try:
+        guarded_promote_debug_bundle_regression_panel_baseline(
+            panel_dir,
+            "blocked baseline",
+            baseline_dir=tmp_path / "baseline_store",
+            require_threshold_pass=True,
+        )
+    except ValueError as exc:
+        assert "Promotion gate failed" in str(exc)
+    else:
+        raise AssertionError("guarded promote should fail when threshold gate does not pass")

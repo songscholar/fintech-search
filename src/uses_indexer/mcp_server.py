@@ -19,8 +19,10 @@ from .debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
+    guarded_promote_debug_bundle_regression_panel_baseline,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
+    evaluate_debug_bundle_regression_panel_promotion_gate,
     summarize_debug_bundle_regression_panel_baseline_trend,
 )
 from .indexer import SQLiteIndexer
@@ -190,6 +192,7 @@ class CodebaseMcpServer:
             "list_debug_bundle_panel_baselines": self._tool_list_debug_bundle_panel_baselines,
             "show_debug_bundle_panel_baseline_trend": self._tool_show_debug_bundle_panel_baseline_trend,
             "show_debug_bundle_panel_baseline": self._tool_show_debug_bundle_panel_baseline,
+            "evaluate_debug_bundle_panel_promotion_gate": self._tool_evaluate_debug_bundle_panel_promotion_gate,
             "promote_debug_bundle_panel_baseline": self._tool_promote_debug_bundle_panel_baseline,
             "delete_debug_bundle_panel_baseline": self._tool_delete_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
@@ -445,8 +448,27 @@ class CodebaseMcpServer:
                         "baseline_dir": {"type": "string"},
                         "baseline_notes": {"type": "string"},
                         "baseline_tags": {"type": "array", "items": {"type": "string"}},
+                        "gate_baseline_tag": {"type": "string"},
+                        "require_threshold_pass": {"type": "boolean"},
+                        "blocked_latest_verdicts": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": ["panel_path", "baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "evaluate_debug_bundle_panel_promotion_gate",
+                "description": "Evaluate whether a panel can be safely promoted to a named debug bundle regression panel baseline.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "panel_path": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                        "baseline_tag": {"type": "string"},
+                        "require_threshold_pass": {"type": "boolean"},
+                        "blocked_latest_verdicts": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["panel_path"],
                     "additionalProperties": False,
                 },
             },
@@ -714,12 +736,40 @@ class CodebaseMcpServer:
         baseline_dir = self._optional_string(arguments, "baseline_dir")
         baseline_notes = self._optional_string(arguments, "baseline_notes")
         baseline_tags = self._optional_string_list(arguments, "baseline_tags")
+        gate_baseline_tag = self._optional_string(arguments, "gate_baseline_tag")
+        require_threshold_pass = self._optional_bool(arguments, "require_threshold_pass", default=False)
+        blocked_latest_verdicts = self._optional_string_list(arguments, "blocked_latest_verdicts")
+        if require_threshold_pass or blocked_latest_verdicts:
+            return guarded_promote_debug_bundle_regression_panel_baseline(
+                panel_path,
+                baseline_name,
+                baseline_dir=baseline_dir,
+                baseline_notes=baseline_notes,
+                baseline_tags=baseline_tags,
+                gate_baseline_tag=gate_baseline_tag,
+                require_threshold_pass=require_threshold_pass,
+                blocked_latest_verdicts=blocked_latest_verdicts,
+            )
         return promote_debug_bundle_regression_panel_baseline(
             panel_path,
             baseline_name,
             baseline_dir=baseline_dir,
             baseline_notes=baseline_notes,
             baseline_tags=baseline_tags,
+        )
+
+    def _tool_evaluate_debug_bundle_panel_promotion_gate(self, arguments: dict[str, object]) -> dict[str, object]:
+        panel_path = self._required_string(arguments, "panel_path")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        baseline_tag = self._optional_string(arguments, "baseline_tag")
+        require_threshold_pass = self._optional_bool(arguments, "require_threshold_pass", default=False)
+        blocked_latest_verdicts = self._optional_string_list(arguments, "blocked_latest_verdicts")
+        return evaluate_debug_bundle_regression_panel_promotion_gate(
+            panel_path,
+            baseline_dir=baseline_dir,
+            baseline_tag=baseline_tag,
+            require_threshold_pass=require_threshold_pass,
+            blocked_latest_verdicts=blocked_latest_verdicts,
         )
 
     def _tool_delete_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:

@@ -6,7 +6,9 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 
-from uses_indexer.api import CodebaseApi, make_handler_class
+import pytest
+
+from uses_indexer.api import ApiError, CodebaseApi, make_handler_class
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
@@ -214,6 +216,43 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert status == 200
     assert promoted["bundle_kind"] == "debug_bundle_regression_panel_baseline_promoted"
     assert promoted["promotion_source"] == str(panel_archive)
+
+    failed_panel_archive = tmp_path / "failed_panel_archive"
+    failed_panel_archive.mkdir()
+    failed_panel = json.loads(json.dumps(panel, ensure_ascii=False))
+    failed_panel["thresholds"] = {"status": "fail", "failed_count": 1, "checks": []}
+    (failed_panel_archive / "panel.json").write_text(json.dumps(failed_panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (failed_panel_archive / "panel.md").write_text(str(failed_panel.get("markdown_summary") or ""), encoding="utf-8")
+    (failed_panel_archive / "panel_summary.json").write_text(json.dumps({"summary": failed_panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with pytest.raises(ApiError) as exc_info:
+        api.handle_request(
+            "POST",
+            "/promote-debug-bundle-panel-baseline",
+            json.dumps(
+                {
+                    "panel_path": str(failed_panel_archive),
+                    "baseline_name": "blocked smoke",
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                    "require_threshold_pass": True,
+                }
+            ).encode("utf-8"),
+        )
+    assert exc_info.value.status_code == 400
+
+    status, gate = api.handle_request(
+        "POST",
+        "/evaluate-debug-bundle-panel-promotion-gate",
+        json.dumps(
+            {
+                "panel_path": str(failed_panel_archive),
+                "baseline_dir": str(tmp_path / "baseline_store"),
+                "require_threshold_pass": True,
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert gate["status"] == "fail"
 
     status, trend = api.handle_request(
         "GET",

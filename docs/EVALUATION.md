@@ -427,6 +427,31 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
   --tag active
 ```
 
+如果你想把“通过 gate 才允许 promote”也固定下来，可以先单独跑：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer evaluate-debug-bundle-panel-promotion-gate \
+  --panel ./examples/debug_bundle_panel_next \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression
+```
+
+或者直接把 gate 规则合进 promote：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_next \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --tag active \
+  --gate-tag release \
+  --require-threshold-pass \
+  --block-latest-verdict possible_regression
+```
+
 这样做的价值是：
 
 - `eval-retrieval` 继续负责整体数值门槛
@@ -435,6 +460,7 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 - `compare-debug-bundle-panel-baseline` 则负责“和固定标准答案比”
 - `compare-debug-bundle-panel-latest-baseline` 则负责“和最近一份同类 baseline 比”
 - `promote-debug-bundle-panel-baseline` 则负责“把当前结果正式提升成标准答案”
+- `evaluate-debug-bundle-panel-promotion-gate` 则负责“在 promote 前把标准显式检查一遍”
 
 如果你想看某一类 baseline 的长期变化趋势，而不只是做一次比较，可以再加一层 trend：
 
@@ -460,6 +486,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /promote-debug-bundle-panel-baseline`
+  - `POST /evaluate-debug-bundle-panel-promotion-gate`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -470,6 +497,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
   - `promote_debug_bundle_panel_baseline`
+  - `evaluate_debug_bundle_panel_promotion_gate`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

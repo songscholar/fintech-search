@@ -20,8 +20,10 @@ from .debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
+    guarded_promote_debug_bundle_regression_panel_baseline,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
+    evaluate_debug_bundle_regression_panel_promotion_gate,
     summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
 )
@@ -141,7 +143,18 @@ def main() -> int:
     promote_panel_baseline_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
     promote_panel_baseline_parser.add_argument("--note", help="Optional promotion note.")
     promote_panel_baseline_parser.add_argument("--tag", action="append", default=[], help="Optional baseline tag. Can be provided multiple times.")
+    promote_panel_baseline_parser.add_argument("--require-threshold-pass", action="store_true", help="Only allow promote when panel.thresholds.status=pass.")
+    promote_panel_baseline_parser.add_argument("--gate-tag", help="Optional baseline tag to use when comparing against the latest baseline before promote.")
+    promote_panel_baseline_parser.add_argument("--block-latest-verdict", action="append", default=[], help="Verdict that should block promote when comparing against the latest baseline. Can be provided multiple times.")
     promote_panel_baseline_parser.add_argument("--output", help="Optional JSON output path.")
+
+    promote_gate_parser = subparsers.add_parser("evaluate-debug-bundle-panel-promotion-gate", help="Evaluate whether a panel can be safely promoted to a named baseline.")
+    promote_gate_parser.add_argument("--panel", required=True, help="Panel archive directory or panel.json path.")
+    promote_gate_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    promote_gate_parser.add_argument("--tag", help="Optional baseline tag for latest-baseline comparison.")
+    promote_gate_parser.add_argument("--require-threshold-pass", action="store_true", help="Require panel.thresholds.status=pass.")
+    promote_gate_parser.add_argument("--block-latest-verdict", action="append", default=[], help="Verdict that should fail the promotion gate. Can be provided multiple times.")
+    promote_gate_parser.add_argument("--output", help="Optional JSON output path.")
 
     list_panel_baselines_parser = subparsers.add_parser("list-debug-bundle-panel-baselines", help="List saved debug bundle regression panel baselines.")
     list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
@@ -363,12 +376,32 @@ def main() -> int:
             baseline_tags=args.tag,
         )
     elif args.command == "promote-debug-bundle-panel-baseline":
-        data = promote_debug_bundle_regression_panel_baseline(
+        if args.require_threshold_pass or args.block_latest_verdict:
+            data = guarded_promote_debug_bundle_regression_panel_baseline(
+                args.panel,
+                args.name,
+                baseline_dir=args.baseline_dir,
+                baseline_notes=args.note,
+                baseline_tags=args.tag,
+                gate_baseline_tag=args.gate_tag,
+                require_threshold_pass=args.require_threshold_pass,
+                blocked_latest_verdicts=args.block_latest_verdict,
+            )
+        else:
+            data = promote_debug_bundle_regression_panel_baseline(
+                args.panel,
+                args.name,
+                baseline_dir=args.baseline_dir,
+                baseline_notes=args.note,
+                baseline_tags=args.tag,
+            )
+    elif args.command == "evaluate-debug-bundle-panel-promotion-gate":
+        data = evaluate_debug_bundle_regression_panel_promotion_gate(
             args.panel,
-            args.name,
             baseline_dir=args.baseline_dir,
-            baseline_notes=args.note,
-            baseline_tags=args.tag,
+            baseline_tag=args.tag,
+            require_threshold_pass=args.require_threshold_pass,
+            blocked_latest_verdicts=args.block_latest_verdict,
         )
     elif args.command == "list-debug-bundle-panel-baselines":
         data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir, baseline_tag=args.tag)
