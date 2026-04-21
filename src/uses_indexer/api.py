@@ -16,6 +16,7 @@ from .debug_bundle import (
     compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
+    compare_debug_bundle_regression_panel_release_workflows,
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
@@ -98,6 +99,7 @@ class CodebaseApi:
                     "POST /promote-debug-bundle-panel-baseline",
                     "POST /evaluate-debug-bundle-panel-promotion-gate",
                     "POST /run-debug-bundle-panel-release-workflow",
+                    "POST /compare-debug-bundle-panel-release-workflows",
                     "POST /compare-debug-bundle-panel-baseline",
                     "POST /compare-debug-bundle-panel-latest-baseline",
                     "POST /delete-debug-bundle-panel-baseline",
@@ -404,6 +406,12 @@ class CodebaseApi:
                 archive_dir=archive_dir,
             )
 
+        if route == "/compare-debug-bundle-panel-release-workflows" and method == "POST":
+            payload = self._parse_json_body(body)
+            before_path = self._require_string(payload, "before_path")
+            after_path = self._require_string(payload, "after_path")
+            return HTTPStatus.OK, compare_debug_bundle_regression_panel_release_workflows(before_path, after_path)
+
         if route == "/compare-debug-bundle-panel-baseline" and method == "POST":
             payload = self._parse_json_body(body)
             panel_path = self._require_string(payload, "panel_path")
@@ -443,7 +451,7 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
+        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
         if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow"} and method != "GET":

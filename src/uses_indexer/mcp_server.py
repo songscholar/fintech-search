@@ -15,6 +15,7 @@ from .debug_bundle import (
     compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
+    compare_debug_bundle_regression_panel_release_workflows,
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
@@ -200,6 +201,7 @@ class CodebaseMcpServer:
             "evaluate_debug_bundle_panel_promotion_gate": self._tool_evaluate_debug_bundle_panel_promotion_gate,
             "promote_debug_bundle_panel_baseline": self._tool_promote_debug_bundle_panel_baseline,
             "run_debug_bundle_panel_release_workflow": self._tool_run_debug_bundle_panel_release_workflow,
+            "compare_debug_bundle_panel_release_workflows": self._tool_compare_debug_bundle_panel_release_workflows,
             "delete_debug_bundle_panel_baseline": self._tool_delete_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_latest_baseline": self._tool_compare_debug_bundle_panel_latest_baseline,
@@ -521,6 +523,19 @@ class CodebaseMcpServer:
                         "archive_dir": {"type": "string"},
                     },
                     "required": ["panel_path", "baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "compare_debug_bundle_panel_release_workflows",
+                "description": "Compare two saved debug bundle panel release workflow archives.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "before_path": {"type": "string"},
+                        "after_path": {"type": "string"},
+                    },
+                    "required": ["before_path", "after_path"],
                     "additionalProperties": False,
                 },
             },
@@ -861,6 +876,11 @@ class CodebaseMcpServer:
             auto_promote=auto_promote,
             archive_dir=archive_dir,
         )
+
+    def _tool_compare_debug_bundle_panel_release_workflows(self, arguments: dict[str, object]) -> dict[str, object]:
+        before_path = self._required_string(arguments, "before_path")
+        after_path = self._required_string(arguments, "after_path")
+        return compare_debug_bundle_regression_panel_release_workflows(before_path, after_path)
 
     def _tool_delete_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
         baseline_name = self._required_string(arguments, "baseline_name")

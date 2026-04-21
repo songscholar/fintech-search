@@ -15,6 +15,7 @@ from uses_indexer.debug_bundle import (
     compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
+    compare_debug_bundle_regression_panel_release_workflows,
     compare_debug_bundles,
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
@@ -645,12 +646,65 @@ def test_release_workflow_promotes_when_gate_passes(tmp_path: Path) -> None:
     assert Path(workflow["archive"]["files"]["workflow"]).exists()
     assert Path(workflow["archive"]["files"]["gate"]).exists()
 
+
+def test_compare_release_workflows_reports_changes(tmp_path: Path) -> None:
+    before_workflow = {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow",
+        "status": "blocked",
+        "baseline_name": "release-candidate",
+        "promotion_gate": {"status": "fail", "failed_count": 1, "checks": []},
+        "latest_comparison": {"review_summary": {"verdict": "possible_regression"}},
+        "promoted": None,
+        "review_summary": {"status": "blocked"},
+        "markdown_summary": "# Debug Bundle Panel Release Workflow\n",
+    }
+    after_workflow = {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow",
+        "status": "promoted",
+        "baseline_name": "release-candidate",
+        "promotion_gate": {"status": "pass", "failed_count": 0, "checks": []},
+        "latest_comparison": {"review_summary": {"verdict": "stable"}},
+        "promoted": {"baseline_slug": "release-candidate", "saved_at": "2026-04-21T00:00:00+00:00"},
+        "review_summary": {"status": "promoted"},
+        "markdown_summary": "# Debug Bundle Panel Release Workflow\n",
+    }
+    before_dir = tmp_path / "before_workflow"
+    after_dir = tmp_path / "after_workflow"
+    before_dir.mkdir()
+    after_dir.mkdir()
+    (before_dir / "release_workflow.json").write_text(json.dumps(before_workflow, ensure_ascii=False, indent=2), encoding="utf-8")
+    (after_dir / "release_workflow.json").write_text(json.dumps(after_workflow, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    comparison = compare_debug_bundle_regression_panel_release_workflows(before_dir, after_dir)
+    assert comparison["bundle_kind"] == "debug_bundle_regression_panel_release_workflow_comparison"
+    assert comparison["summary"]["status"]["changed"] is True
+    assert comparison["summary"]["gate_status"]["changed"] is True
+    assert comparison["markdown_summary"].startswith("# Debug Bundle Panel Release Workflow Comparison")
+
     listed = list_debug_bundle_regression_panel_release_workflows(
         workflow_dir=tmp_path / "workflow_archive_root",
         baseline_tag="release",
         status="promoted",
     )
     assert listed["count"] == 0
+
+    panel_payload = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/a.db",
+        "after_db_path": "/tmp/b.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {"changed_case_count": 0, "stable_case_count": 1},
+        "cases": [],
+        "thresholds": {"status": "pass", "failed_count": 0, "checks": []},
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    panel_dir = tmp_path / "panel_archive"
+    baseline_dir = tmp_path / "baseline_store"
+    panel_dir.mkdir()
+    (panel_dir / "panel.json").write_text(json.dumps(panel_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_dir / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+    (panel_dir / "panel_summary.json").write_text(json.dumps({"summary": panel_payload["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
 
     archived_workflow = run_debug_bundle_regression_panel_release_workflow(
         panel_dir,

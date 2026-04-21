@@ -2756,6 +2756,55 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 ## [1.2.39] - 2026-04-21
 
+### Step 46: 增加 release workflow compare
+
+### 本步目标
+
+- 让 release workflow 不只可查看，还能直接比较两次运行结果
+- 让“发布动作本身”的变化可以被 reviewer 快速感知
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `compare_debug_bundle_regression_panel_release_workflows()`
+   - 新增 release workflow comparison reviewer summary
+   - 新增 release workflow comparison markdown 渲染
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `compare-debug-bundle-panel-release-workflows`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /compare-debug-bundle-panel-release-workflows`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `compare_debug_bundle_panel_release_workflows`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 release workflow compare 回归
+   - `tests/test_api.py`
+     - 新增 release workflow compare API 回归
+   - `tests/test_mcp.py`
+     - 新增 release workflow compare MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 release workflow compare 的使用方式和适用场景
+   - `docs/EVALUATION.md`
+     - 补充“比较两次发布动作”的评测工作流
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `26 passed`
+
+### 结论
+
+- 现在 release workflow 已经能直接做历史比较，不再只能单次查看
+- 这一步让发布流程从“可审计”进一步升级成了“可对比、可长期复盘”的质量资产
+
+## [1.2.39] - 2026-04-21
+
 ### Step 46: 增加 release workflow index / show
 
 ### 本步目标

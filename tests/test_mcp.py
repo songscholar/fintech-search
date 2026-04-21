@@ -95,6 +95,7 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "evaluate_debug_bundle_panel_promotion_gate" for tool in tools)
     assert any(tool["name"] == "promote_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "run_debug_bundle_panel_release_workflow" for tool in tools)
+    assert any(tool["name"] == "compare_debug_bundle_panel_release_workflows" for tool in tools)
     assert any(tool["name"] == "delete_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel_latest_baseline" for tool in tools)
@@ -426,10 +427,27 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     assert workflow_show_response is not None
     assert workflow_show_response["result"]["structuredContent"]["status"] == "promoted"
 
-    trend_response = server.handle_message(
+    workflow_compare_response = server.handle_message(
         {
             "jsonrpc": "2.0",
             "id": 16,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_debug_bundle_panel_release_workflows",
+                "arguments": {
+                    "before_path": str(tmp_path / "workflow_archive"),
+                    "after_path": str(tmp_path / "workflow_archive"),
+                },
+            },
+        }
+    )
+    assert workflow_compare_response is not None
+    assert workflow_compare_response["result"]["structuredContent"]["bundle_kind"] == "debug_bundle_regression_panel_release_workflow_comparison"
+
+    trend_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 17,
             "method": "tools/call",
             "params": {
                 "name": "show_debug_bundle_panel_baseline_trend",
@@ -446,7 +464,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_saved_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 17,
+            "id": 18,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_baseline",
@@ -464,7 +482,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_latest_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 18,
+            "id": 19,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_latest_baseline",
@@ -482,7 +500,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_panels_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 19,
+            "id": 20,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panels",

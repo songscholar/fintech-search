@@ -16,6 +16,7 @@ from .debug_bundle import (
     compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
+    compare_debug_bundle_regression_panel_release_workflows,
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
@@ -183,6 +184,12 @@ def main() -> int:
     show_release_workflow_parser.add_argument("--workflow", required=True, help="Workflow archive directory or release_workflow.json path.")
     show_release_workflow_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
     show_release_workflow_parser.add_argument("--output", help="Optional JSON output path.")
+
+    compare_release_workflows_parser = subparsers.add_parser("compare-debug-bundle-panel-release-workflows", help="Compare two saved debug bundle panel release workflow archives.")
+    compare_release_workflows_parser.add_argument("--before", required=True, help="Baseline workflow archive directory or release_workflow.json path.")
+    compare_release_workflows_parser.add_argument("--after", required=True, help="New workflow archive directory or release_workflow.json path.")
+    compare_release_workflows_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
+    compare_release_workflows_parser.add_argument("--output", help="Optional JSON output path.")
 
     list_panel_baselines_parser = subparsers.add_parser("list-debug-bundle-panel-baselines", help="List saved debug bundle regression panel baselines.")
     list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
@@ -452,6 +459,8 @@ def main() -> int:
         )
     elif args.command == "show-debug-bundle-panel-release-workflow":
         data = load_debug_bundle_regression_panel_release_workflow(args.workflow)
+    elif args.command == "compare-debug-bundle-panel-release-workflows":
+        data = compare_debug_bundle_regression_panel_release_workflows(args.before, args.after)
     elif args.command == "list-debug-bundle-panel-baselines":
         data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir, baseline_tag=args.tag)
     elif args.command == "show-debug-bundle-panel-baseline-trend":
@@ -546,6 +555,10 @@ def main() -> int:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
     if args.command == "run-debug-bundle-panel-release-workflow" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "compare-debug-bundle-panel-release-workflows" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")

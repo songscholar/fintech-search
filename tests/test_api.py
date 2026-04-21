@@ -290,6 +290,19 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert status == 200
     assert shown_workflow["status"] == "promoted"
 
+    status, workflow_compare = api.handle_request(
+        "POST",
+        "/compare-debug-bundle-panel-release-workflows",
+        json.dumps(
+            {
+                "before_path": str(tmp_path / "workflow_archive"),
+                "after_path": str(tmp_path / "workflow_archive"),
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert workflow_compare["bundle_kind"] == "debug_bundle_regression_panel_release_workflow_comparison"
+
     status, trend = api.handle_request(
         "GET",
         f"/show-debug-bundle-panel-baseline-trend?baseline_dir={tmp_path / 'baseline_store'}&baseline_tag=smoke",

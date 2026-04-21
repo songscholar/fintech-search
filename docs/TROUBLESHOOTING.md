@@ -592,6 +592,22 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 - `latest_comparison.json`
 - `promoted_baseline.json`
 
+如果你后面想比较两次 release workflow，到底是 gate 变了、latest verdict 变了，还是 promote 结果变了，可以直接跑：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-release-workflows \
+  --before ./examples/release_workflow_archive_before \
+  --after ./examples/release_workflow_archive_after \
+  --markdown-output ./examples/release_workflow_compare.md \
+  --output ./examples/release_workflow_compare.json
+```
+
+这个结果特别适合回答：
+
+- 为什么上一次是 `blocked`，这一次变成了 `promoted`
+- 为什么 gate 从 `pass` 变成了 `fail`
+- 为什么 latest baseline verdict 从 `stable` 又回到了 `possible_regression`
+
 如果你后面积累了多次 workflow archive，不想再靠手工翻目录，也可以直接列出来：
 
 ```bash
@@ -651,6 +667,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `POST /promote-debug-bundle-panel-baseline`
   - `POST /evaluate-debug-bundle-panel-promotion-gate`
   - `POST /run-debug-bundle-panel-release-workflow`
+  - `POST /compare-debug-bundle-panel-release-workflows`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -663,6 +680,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `promote_debug_bundle_panel_baseline`
   - `evaluate_debug_bundle_panel_promotion_gate`
   - `run_debug_bundle_panel_release_workflow`
+  - `compare_debug_bundle_panel_release_workflows`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

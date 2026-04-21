@@ -480,6 +480,23 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 - promote 结果
 - workflow summary
 
+如果你要复盘两次 release workflow 的差异，也可以直接比较两份 workflow archive：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-release-workflows \
+  --before ./examples/release_workflow_archive_before \
+  --after ./examples/release_workflow_archive_after \
+  --markdown-output ./examples/release_workflow_compare.md
+```
+
+它比直接看两份 JSON 更适合 reviewer，因为会直接把下面几类变化挑出来：
+
+- workflow `status`
+- `promotion_gate.status`
+- `promotion_gate.failed_count`
+- latest baseline `verdict`
+- promote 是否发生变化
+
 如果 release workflow archive 越积越多，建议再配合列表入口统一管理：
 
 ```bash
@@ -506,6 +523,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
 - `promote-debug-bundle-panel-baseline` 则负责“把当前结果正式提升成标准答案”
 - `evaluate-debug-bundle-panel-promotion-gate` 则负责“在 promote 前把标准显式检查一遍”
 - `run-debug-bundle-panel-release-workflow` 则负责“一次跑完整个发布前后质量动作”
+- `compare-debug-bundle-panel-release-workflows` 则负责“比较两次发布动作到底哪里变了”
 
 如果你想看某一类 baseline 的长期变化趋势，而不只是做一次比较，可以再加一层 trend：
 
@@ -533,6 +551,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `POST /promote-debug-bundle-panel-baseline`
   - `POST /evaluate-debug-bundle-panel-promotion-gate`
   - `POST /run-debug-bundle-panel-release-workflow`
+  - `POST /compare-debug-bundle-panel-release-workflows`
   - `POST /compare-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-latest-baseline`
   - `POST /delete-debug-bundle-panel-baseline`
@@ -545,6 +564,7 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
   - `promote_debug_bundle_panel_baseline`
   - `evaluate_debug_bundle_panel_promotion_gate`
   - `run_debug_bundle_panel_release_workflow`
+  - `compare_debug_bundle_panel_release_workflows`
   - `compare_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_latest_baseline`
   - `delete_debug_bundle_panel_baseline`

@@ -769,6 +769,55 @@ def load_debug_bundle_regression_panel_release_workflow(
     return workflow
 
 
+def compare_debug_bundle_regression_panel_release_workflows(
+    before_path: str | Path,
+    after_path: str | Path,
+) -> dict[str, object]:
+    before_workflow = load_debug_bundle_regression_panel_release_workflow(before_path)
+    after_workflow = load_debug_bundle_regression_panel_release_workflow(after_path)
+
+    before_review = dict(before_workflow.get("review_summary") or {})
+    after_review = dict(after_workflow.get("review_summary") or {})
+    before_gate = dict(before_workflow.get("promotion_gate") or {})
+    after_gate = dict(after_workflow.get("promotion_gate") or {})
+    before_latest = dict((before_workflow.get("latest_comparison") or {}).get("review_summary") or {})
+    after_latest = dict((after_workflow.get("latest_comparison") or {}).get("review_summary") or {})
+
+    comparison = {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow_comparison",
+        "before_path": str(before_path),
+        "after_path": str(after_path),
+        "summary": {
+            "status": {
+                "before": before_workflow.get("status"),
+                "after": after_workflow.get("status"),
+                "changed": before_workflow.get("status") != after_workflow.get("status"),
+            },
+            "gate_status": {
+                "before": before_gate.get("status"),
+                "after": after_gate.get("status"),
+                "changed": before_gate.get("status") != after_gate.get("status"),
+            },
+            "gate_failed_count": _numeric_delta(before_gate.get("failed_count"), after_gate.get("failed_count")),
+            "latest_verdict": {
+                "before": before_latest.get("verdict"),
+                "after": after_latest.get("verdict"),
+                "changed": before_latest.get("verdict") != after_latest.get("verdict"),
+            },
+            "promoted_changed": bool(before_workflow.get("promoted")) != bool(after_workflow.get("promoted")),
+        },
+        "promotion": {
+            "before_baseline_slug": (before_workflow.get("promoted") or {}).get("baseline_slug"),
+            "after_baseline_slug": (after_workflow.get("promoted") or {}).get("baseline_slug"),
+            "before_saved_at": (before_workflow.get("promoted") or {}).get("saved_at"),
+            "after_saved_at": (after_workflow.get("promoted") or {}).get("saved_at"),
+        },
+    }
+    comparison["review_summary"] = _build_release_workflow_comparison_review_summary(comparison)
+    comparison["markdown_summary"] = render_debug_bundle_regression_panel_release_workflow_comparison_markdown(comparison)
+    return comparison
+
+
 def list_debug_bundle_regression_panel_baselines(
     *,
     baseline_dir: str | Path | None = None,
@@ -1370,6 +1419,62 @@ def render_debug_bundle_regression_panel_release_workflow_markdown(workflow: dic
             ]
         )
 
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_release_workflow_comparison_review_summary(comparison: dict[str, object]) -> dict[str, object]:
+    summary = dict(comparison.get("summary") or {})
+    findings: list[str] = []
+    if (summary.get("status") or {}).get("changed"):
+        findings.append(
+            f"Workflow status changed from {(summary.get('status') or {}).get('before')} "
+            f"to {(summary.get('status') or {}).get('after')}."
+        )
+    if (summary.get("gate_status") or {}).get("changed"):
+        findings.append(
+            f"Gate status changed from {(summary.get('gate_status') or {}).get('before')} "
+            f"to {(summary.get('gate_status') or {}).get('after')}."
+        )
+    if (summary.get("latest_verdict") or {}).get("changed"):
+        findings.append(
+            f"Latest baseline verdict changed from {(summary.get('latest_verdict') or {}).get('before')} "
+            f"to {(summary.get('latest_verdict') or {}).get('after')}."
+        )
+    if summary.get("promoted_changed"):
+        findings.append("Promotion outcome changed between the two workflow runs.")
+    if not findings:
+        findings.append("No material workflow differences detected.")
+
+    next_steps: list[str] = []
+    if (summary.get("gate_status") or {}).get("after") == "fail":
+        next_steps.append("Inspect the failed promotion gate checks before promoting again.")
+    elif (summary.get("status") or {}).get("after") == "ready_to_promote":
+        next_steps.append("Run the workflow with auto-promote enabled if this result is expected.")
+    else:
+        next_steps.append("Use the newer workflow archive as the current audit reference.")
+
+    return {
+        "findings": findings,
+        "next_steps": next_steps,
+    }
+
+
+def render_debug_bundle_regression_panel_release_workflow_comparison_markdown(comparison: dict[str, object]) -> str:
+    summary = dict(comparison.get("summary") or {})
+    review = dict(comparison.get("review_summary") or {})
+    lines = [
+        "# Debug Bundle Panel Release Workflow Comparison",
+        "",
+        f"- Status changed: {bool((summary.get('status') or {}).get('changed'))}",
+        f"- Gate status changed: {bool((summary.get('gate_status') or {}).get('changed'))}",
+        f"- Latest verdict changed: {bool((summary.get('latest_verdict') or {}).get('changed'))}",
+        f"- Promoted changed: {bool(summary.get('promoted_changed'))}",
+        "",
+        "## Findings",
+    ]
+    lines.extend(f"- {item}" for item in list(review.get("findings") or []))
+    lines.extend(["", "## Next Steps"])
+    lines.extend(f"- {item}" for item in list(review.get("next_steps") or []))
     return "\n".join(lines).strip() + "\n"
 
 
