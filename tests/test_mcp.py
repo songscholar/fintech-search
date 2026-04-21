@@ -88,7 +88,10 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "compare_debug_bundle_panels" for tool in tools)
     assert any(tool["name"] == "save_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "list_debug_bundle_panel_baselines" for tool in tools)
+    assert any(tool["name"] == "show_debug_bundle_panel_baseline" for tool in tools)
+    assert any(tool["name"] == "delete_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel_baseline" for tool in tools)
+    assert any(tool["name"] == "compare_debug_bundle_panel_latest_baseline" for tool in tools)
 
 
 def test_tool_call_returns_grounded_answer(tmp_path: Path) -> None:
@@ -270,12 +273,15 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
                     "panel_path": str(panel_dir),
                     "baseline_name": "mcp baseline",
                     "baseline_dir": str(tmp_path / "baseline_store"),
+                    "baseline_notes": "mcp smoke baseline",
+                    "baseline_tags": ["mcp", "smoke"],
                 },
             },
         }
     )
     assert save_response is not None
     assert save_response["result"]["structuredContent"]["baseline_slug"] == "mcp-baseline"
+    assert save_response["result"]["structuredContent"]["baseline_tags"] == ["mcp", "smoke"]
 
     list_response = server.handle_message(
         {
@@ -284,17 +290,34 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
             "method": "tools/call",
             "params": {
                 "name": "list_debug_bundle_panel_baselines",
-                "arguments": {"baseline_dir": str(tmp_path / "baseline_store")},
+                "arguments": {"baseline_dir": str(tmp_path / "baseline_store"), "baseline_tag": "mcp"},
             },
         }
     )
     assert list_response is not None
     assert list_response["result"]["structuredContent"]["count"] == 1
 
-    compare_saved_response = server.handle_message(
+    show_response = server.handle_message(
         {
             "jsonrpc": "2.0",
             "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "show_debug_bundle_panel_baseline",
+                "arguments": {
+                    "baseline_name": "mcp baseline",
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                },
+            },
+        }
+    )
+    assert show_response is not None
+    assert show_response["result"]["structuredContent"]["baseline_notes"] == "mcp smoke baseline"
+
+    compare_saved_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_baseline",
@@ -309,10 +332,28 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     assert compare_saved_response is not None
     assert compare_saved_response["result"]["structuredContent"]["baseline"]["baseline_slug"] == "mcp-baseline"
 
+    compare_latest_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_debug_bundle_panel_latest_baseline",
+                "arguments": {
+                    "panel_path": str(panel_dir),
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                    "baseline_tag": "mcp",
+                },
+            },
+        }
+    )
+    assert compare_latest_response is not None
+    assert compare_latest_response["result"]["structuredContent"]["baseline"]["selection"] == "latest"
+
     compare_panels_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 11,
+            "id": 13,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panels",
@@ -325,6 +366,23 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     )
     assert compare_panels_response is not None
     assert compare_panels_response["result"]["structuredContent"]["bundle_kind"] == "debug_bundle_regression_panel_comparison"
+
+    delete_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 14,
+            "method": "tools/call",
+            "params": {
+                "name": "delete_debug_bundle_panel_baseline",
+                "arguments": {
+                    "baseline_name": "mcp baseline",
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                },
+            },
+        }
+    )
+    assert delete_response is not None
+    assert delete_response["result"]["structuredContent"]["deleted"] is True
 
 
 def test_stdio_serve_writes_jsonrpc_lines(tmp_path: Path) -> None:

@@ -12,9 +12,12 @@ from .debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
+    delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
+    load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
 )
@@ -183,7 +186,10 @@ class CodebaseMcpServer:
             "compare_debug_bundle_panels": self._tool_compare_debug_bundle_panels,
             "save_debug_bundle_panel_baseline": self._tool_save_debug_bundle_panel_baseline,
             "list_debug_bundle_panel_baselines": self._tool_list_debug_bundle_panel_baselines,
+            "show_debug_bundle_panel_baseline": self._tool_show_debug_bundle_panel_baseline,
+            "delete_debug_bundle_panel_baseline": self._tool_delete_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
+            "compare_debug_bundle_panel_latest_baseline": self._tool_compare_debug_bundle_panel_latest_baseline,
             "query_metadata": self._tool_query_metadata,
             "query_table": self._tool_query_table,
         }
@@ -379,6 +385,8 @@ class CodebaseMcpServer:
                         "panel_path": {"type": "string"},
                         "baseline_name": {"type": "string"},
                         "baseline_dir": {"type": "string"},
+                        "baseline_notes": {"type": "string"},
+                        "baseline_tags": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": ["panel_path", "baseline_name"],
                     "additionalProperties": False,
@@ -391,7 +399,34 @@ class CodebaseMcpServer:
                     "type": "object",
                     "properties": {
                         "baseline_dir": {"type": "string"},
+                        "baseline_tag": {"type": "string"},
                     },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "show_debug_bundle_panel_baseline",
+                "description": "Show full metadata for a saved debug bundle regression panel baseline.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "baseline_name": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                    },
+                    "required": ["baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "delete_debug_bundle_panel_baseline",
+                "description": "Delete a saved debug bundle regression panel baseline.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "baseline_name": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                    },
+                    "required": ["baseline_name"],
                     "additionalProperties": False,
                 },
             },
@@ -406,6 +441,20 @@ class CodebaseMcpServer:
                         "baseline_dir": {"type": "string"},
                     },
                     "required": ["panel_path", "baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "compare_debug_bundle_panel_latest_baseline",
+                "description": "Compare a panel archive against the most recently saved debug bundle regression panel baseline, optionally filtered by tag.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "panel_path": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                        "baseline_tag": {"type": "string"},
+                    },
+                    "required": ["panel_path"],
                     "additionalProperties": False,
                 },
             },
@@ -594,17 +643,46 @@ class CodebaseMcpServer:
         panel_path = self._required_string(arguments, "panel_path")
         baseline_name = self._required_string(arguments, "baseline_name")
         baseline_dir = self._optional_string(arguments, "baseline_dir")
-        return save_debug_bundle_regression_panel_baseline(panel_path, baseline_name, baseline_dir=baseline_dir)
+        baseline_notes = self._optional_string(arguments, "baseline_notes")
+        baseline_tags = self._optional_string_list(arguments, "baseline_tags")
+        return save_debug_bundle_regression_panel_baseline(
+            panel_path,
+            baseline_name,
+            baseline_dir=baseline_dir,
+            baseline_notes=baseline_notes,
+            baseline_tags=baseline_tags,
+        )
 
     def _tool_list_debug_bundle_panel_baselines(self, arguments: dict[str, object]) -> dict[str, object]:
         baseline_dir = self._optional_string(arguments, "baseline_dir")
-        return list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir)
+        baseline_tag = self._optional_string(arguments, "baseline_tag")
+        return list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir, baseline_tag=baseline_tag)
+
+    def _tool_show_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
+        baseline_name = self._required_string(arguments, "baseline_name")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        return load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
+
+    def _tool_delete_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
+        baseline_name = self._required_string(arguments, "baseline_name")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        return delete_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
 
     def _tool_compare_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
         panel_path = self._required_string(arguments, "panel_path")
         baseline_name = self._required_string(arguments, "baseline_name")
         baseline_dir = self._optional_string(arguments, "baseline_dir")
         return compare_debug_bundle_regression_panel_baseline(panel_path, baseline_name, baseline_dir=baseline_dir)
+
+    def _tool_compare_debug_bundle_panel_latest_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
+        panel_path = self._required_string(arguments, "panel_path")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        baseline_tag = self._optional_string(arguments, "baseline_tag")
+        return compare_debug_bundle_regression_panel_latest_baseline(
+            panel_path,
+            baseline_dir=baseline_dir,
+            baseline_tag=baseline_tag,
+        )
 
     def _resolve_db_path(self, arguments: dict[str, object]) -> str:
         db_path = self._optional_string(arguments, "db_path")
@@ -632,10 +710,22 @@ class CodebaseMcpServer:
     def _optional_string(self, arguments: dict[str, object], name: str) -> str | None:
         value = arguments.get(name)
         if value is None:
+            value = arguments.get(self._camel_name(name))
+        if value is None:
             return None
         if not isinstance(value, str):
             raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} must be a string."})
         return value
+
+    def _optional_string_list(self, arguments: dict[str, object], name: str) -> list[str] | None:
+        value = arguments.get(name)
+        if value is None:
+            value = arguments.get(self._camel_name(name))
+        if value is None:
+            return None
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} must be a list of strings."})
+        return list(value)
 
     def _optional_int(self, arguments: dict[str, object], name: str, *, default: int) -> int:
         value = arguments.get(name)

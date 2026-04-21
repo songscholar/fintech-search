@@ -13,9 +13,12 @@ from .debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
+    delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
+    load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
 )
@@ -80,8 +83,11 @@ class CodebaseApi:
                     "POST /compare-debug-bundle-panel",
                     "POST /compare-debug-bundle-panels",
                     "GET /list-debug-bundle-panel-baselines",
+                    "GET /show-debug-bundle-panel-baseline",
                     "POST /save-debug-bundle-panel-baseline",
                     "POST /compare-debug-bundle-panel-baseline",
+                    "POST /compare-debug-bundle-panel-latest-baseline",
+                    "POST /delete-debug-bundle-panel-baseline",
                 ],
             }
 
@@ -214,7 +220,15 @@ class CodebaseApi:
 
         if route == "/list-debug-bundle-panel-baselines" and method == "GET":
             baseline_dir = query_params.get("baseline_dir", [None])[0]
-            return HTTPStatus.OK, list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir)
+            baseline_tag = query_params.get("baseline_tag", [None])[0]
+            return HTTPStatus.OK, list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir, baseline_tag=baseline_tag)
+
+        if route == "/show-debug-bundle-panel-baseline" and method == "GET":
+            baseline_name = query_params.get("baseline_name", [None])[0]
+            if not baseline_name:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_name is required")
+            baseline_dir = query_params.get("baseline_dir", [None])[0]
+            return HTTPStatus.OK, load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
 
         if route == "/save-debug-bundle-panel-baseline" and method == "POST":
             payload = self._parse_json_body(body)
@@ -223,10 +237,20 @@ class CodebaseApi:
             baseline_dir = payload.get("baseline_dir")
             if baseline_dir is not None and not isinstance(baseline_dir, str):
                 raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_dir must be a string")
+            baseline_notes = payload.get("baseline_notes")
+            if baseline_notes is not None and not isinstance(baseline_notes, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_notes must be a string")
+            baseline_tags = payload.get("baseline_tags")
+            if baseline_tags is not None and (
+                not isinstance(baseline_tags, list) or any(not isinstance(tag, str) for tag in baseline_tags)
+            ):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_tags must be a list of strings")
             return HTTPStatus.OK, save_debug_bundle_regression_panel_baseline(
                 panel_path,
                 baseline_name,
                 baseline_dir=baseline_dir,
+                baseline_notes=baseline_notes,
+                baseline_tags=baseline_tags,
             )
 
         if route == "/compare-debug-bundle-panel-baseline" and method == "POST":
@@ -242,10 +266,36 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-baseline"} and method != "POST":
+        if route == "/compare-debug-bundle-panel-latest-baseline" and method == "POST":
+            payload = self._parse_json_body(body)
+            panel_path = self._require_string(payload, "panel_path")
+            baseline_dir = payload.get("baseline_dir")
+            if baseline_dir is not None and not isinstance(baseline_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_dir must be a string")
+            baseline_tag = payload.get("baseline_tag")
+            if baseline_tag is not None and not isinstance(baseline_tag, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_tag must be a string")
+            return HTTPStatus.OK, compare_debug_bundle_regression_panel_latest_baseline(
+                panel_path,
+                baseline_dir=baseline_dir,
+                baseline_tag=baseline_tag,
+            )
+
+        if route == "/delete-debug-bundle-panel-baseline" and method == "POST":
+            payload = self._parse_json_body(body)
+            baseline_name = self._require_string(payload, "baseline_name")
+            baseline_dir = payload.get("baseline_dir")
+            if baseline_dir is not None and not isinstance(baseline_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_dir must be a string")
+            return HTTPStatus.OK, delete_debug_bundle_regression_panel_baseline(
+                baseline_name,
+                baseline_dir=baseline_dir,
+            )
+
+        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
-        if route == "/list-debug-bundle-panel-baselines" and method != "GET":
+        if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline"} and method != "GET":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")

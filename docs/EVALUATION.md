@@ -392,7 +392,10 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
   --panel ./examples/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines
+  --baseline-dir ./examples/panel_baselines \
+  --note "2026-04-21 发布候选版本" \
+  --tag release \
+  --tag smoke
 
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
   --panel ./examples/debug_bundle_panel_next \
@@ -402,22 +405,39 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
   --output ./examples/release_candidate_compare.json
 ```
 
+如果你不想每次写 baseline 名称，也可以直接和“最近一份 release baseline”比较：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline \
+  --panel ./examples/debug_bundle_panel_next \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --markdown-output ./examples/release_candidate_latest_compare.md
+```
+
 这样做的价值是：
 
 - `eval-retrieval` 继续负责整体数值门槛
 - `compare-debug-bundle-panel` 继续负责生成典型问题链路视图
 - `compare-debug-bundle-panels` 负责任意两个 archive 的历史对比
 - `compare-debug-bundle-panel-baseline` 则负责“和固定标准答案比”
+- `compare-debug-bundle-panel-latest-baseline` 则负责“和最近一份同类 baseline 比”
 
 如果你是通过服务接口跑评测，也可以直接走：
 
 - HTTP API
   - `POST /compare-debug-bundle-panels`
   - `GET /list-debug-bundle-panel-baselines`
+  - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-baseline`
+  - `POST /compare-debug-bundle-panel-latest-baseline`
+  - `POST /delete-debug-bundle-panel-baseline`
 - MCP tool
   - `compare_debug_bundle_panels`
   - `list_debug_bundle_panel_baselines`
+  - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_baseline`
+  - `compare_debug_bundle_panel_latest_baseline`
+  - `delete_debug_bundle_panel_baseline`

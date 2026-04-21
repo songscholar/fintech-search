@@ -2388,3 +2388,85 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在 panel 不只支持“历史 archive 对比”，还支持“固定命名 baseline”
 - 这一步让回归流程从临时产物管理进一步升级成了可复用的长期基线体系
+
+## [1.2.33] - 2026-04-21
+
+### Step 40: 增加 baseline 元数据、最近基线比较和清理能力
+
+### 本步目标
+
+- 让 panel baseline 不只是“能保存”，而是能作为长期仓库来管理
+- 让基线比较不再强依赖人工记住 baseline 名称
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - `save_debug_bundle_regression_panel_baseline()` 现在支持：
+     - `baseline_notes`
+     - `baseline_tags`
+   - `list_debug_bundle_regression_panel_baselines()` 现在支持：
+     - `baseline_tag` 过滤
+     - 返回更完整的 baseline 元数据
+   - 新增 `resolve_latest_debug_bundle_regression_panel_baseline()`
+   - 新增 `delete_debug_bundle_regression_panel_baseline()`
+   - 新增 `compare_debug_bundle_regression_panel_latest_baseline()`
+   - baseline compare 结果现在会带：
+     - `saved_at`
+     - `baseline_notes`
+     - `baseline_tags`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - `save-debug-bundle-panel-baseline` 新增：
+     - `--note`
+     - `--tag`
+   - `list-debug-bundle-panel-baselines` 新增：
+     - `--tag`
+   - 新增：
+     - `show-debug-bundle-panel-baseline`
+     - `delete-debug-bundle-panel-baseline`
+     - `compare-debug-bundle-panel-latest-baseline`
+
+3. 更新 `src/uses_indexer/api.py`
+   - `GET /list-debug-bundle-panel-baselines` 新增 `baseline_tag`
+   - 新增：
+     - `GET /show-debug-bundle-panel-baseline`
+     - `POST /compare-debug-bundle-panel-latest-baseline`
+     - `POST /delete-debug-bundle-panel-baseline`
+   - `POST /save-debug-bundle-panel-baseline` 现在支持：
+     - `baseline_notes`
+     - `baseline_tags`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - `save_debug_bundle_panel_baseline` 新增：
+     - `baseline_notes`
+     - `baseline_tags`
+   - `list_debug_bundle_panel_baselines` 新增：
+     - `baseline_tag`
+   - 新增：
+     - `show_debug_bundle_panel_baseline`
+     - `delete_debug_bundle_panel_baseline`
+     - `compare_debug_bundle_panel_latest_baseline`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 baseline 元数据 / 最近基线比较 / 删除回归
+   - `tests/test_api.py`
+     - 新增 show / latest compare / delete API 回归
+   - `tests/test_mcp.py`
+     - 新增 show / latest compare / delete MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 baseline 备注、标签、最近基线比较和删除方式
+   - `docs/EVALUATION.md`
+     - 补充“最近一份同类 baseline”评测工作流
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `21 passed`
+
+### 结论
+
+- 现在 baseline 已经具备“保存、筛选、查看、比较最近版本、删除”的完整管理闭环
+- 这一步让 panel baseline 从“可复用”进一步升级成了“可运营、可长期维护”的回归资产

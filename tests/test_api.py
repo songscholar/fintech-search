@@ -174,18 +174,29 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
                 "panel_path": str(panel_archive),
                 "baseline_name": "smoke baseline",
                 "baseline_dir": str(tmp_path / "baseline_store"),
+                "baseline_notes": "smoke compare baseline",
+                "baseline_tags": ["smoke", "nightly"],
             }
         ).encode("utf-8"),
     )
     assert status == 200
     assert saved["baseline_slug"] == "smoke-baseline"
+    assert saved["baseline_tags"] == ["nightly", "smoke"]
 
     status, baselines = api.handle_request(
         "GET",
-        f"/list-debug-bundle-panel-baselines?baseline_dir={tmp_path / 'baseline_store'}",
+        f"/list-debug-bundle-panel-baselines?baseline_dir={tmp_path / 'baseline_store'}&baseline_tag=smoke",
     )
     assert status == 200
     assert baselines["count"] == 1
+    assert baselines["items"][0]["baseline_notes"] == "smoke compare baseline"
+
+    status, shown = api.handle_request(
+        "GET",
+        f"/show-debug-bundle-panel-baseline?baseline_dir={tmp_path / 'baseline_store'}&baseline_name=smoke baseline",
+    )
+    assert status == 200
+    assert shown["baseline_tags"] == ["nightly", "smoke"]
 
     status, compared = api.handle_request(
         "POST",
@@ -208,6 +219,33 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     )
     assert status == 200
     assert baseline_compare["baseline"]["baseline_slug"] == "smoke-baseline"
+
+    status, latest_compare = api.handle_request(
+        "POST",
+        "/compare-debug-bundle-panel-latest-baseline",
+        json.dumps(
+            {
+                "panel_path": str(panel_archive),
+                "baseline_dir": str(tmp_path / "baseline_store"),
+                "baseline_tag": "smoke",
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert latest_compare["baseline"]["selection"] == "latest"
+
+    status, deleted = api.handle_request(
+        "POST",
+        "/delete-debug-bundle-panel-baseline",
+        json.dumps(
+            {
+                "baseline_name": "smoke baseline",
+                "baseline_dir": str(tmp_path / "baseline_store"),
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert deleted["deleted"] is True
 
 
 def test_http_server_serves_json(tmp_path: Path) -> None:

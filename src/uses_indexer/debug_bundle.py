@@ -414,6 +414,8 @@ def save_debug_bundle_regression_panel_baseline(
     baseline_name: str,
     *,
     baseline_dir: str | Path | None = None,
+    baseline_notes: str | None = None,
+    baseline_tags: list[str] | None = None,
 ) -> dict[str, object]:
     panel = _load_debug_bundle_regression_panel(panel_path)
     source_archive = _normalize_panel_archive_path(panel_path)
@@ -441,6 +443,11 @@ def save_debug_bundle_regression_panel_baseline(
         "source_path": str(panel_path),
         "replaced": replaced,
         "case_count": panel.get("case_count"),
+        "cases_path": panel.get("cases_path"),
+        "before_db_path": panel.get("before_db_path"),
+        "after_db_path": panel.get("after_db_path"),
+        "baseline_notes": baseline_notes,
+        "baseline_tags": sorted({str(tag).strip() for tag in (baseline_tags or []) if str(tag).strip()}),
         "summary": panel.get("summary"),
     }
     baseline_record_path = target_dir / "baseline.json"
@@ -457,6 +464,7 @@ def save_debug_bundle_regression_panel_baseline(
 def list_debug_bundle_regression_panel_baselines(
     *,
     baseline_dir: str | Path | None = None,
+    baseline_tag: str | None = None,
 ) -> dict[str, object]:
     root = _resolve_panel_baseline_dir(baseline_dir)
     items: list[dict[str, object]] = []
@@ -473,8 +481,15 @@ def list_debug_bundle_regression_panel_baselines(
                     "saved_at": None,
                     "archive_dir": str(entry),
                     "case_count": panel.get("case_count"),
+                    "cases_path": panel.get("cases_path"),
+                    "before_db_path": panel.get("before_db_path"),
+                    "after_db_path": panel.get("after_db_path"),
+                    "baseline_notes": None,
+                    "baseline_tags": [],
                     "summary": panel.get("summary"),
                 }
+            if baseline_tag and not _baseline_record_matches_tag(record, baseline_tag):
+                continue
             summary = dict(record.get("summary") or {})
             verdict_counts = dict(summary.get("verdict_counts") or {})
             items.append(
@@ -484,13 +499,20 @@ def list_debug_bundle_regression_panel_baselines(
                     "saved_at": record.get("saved_at"),
                     "archive_dir": record.get("archive_dir"),
                     "case_count": record.get("case_count"),
+                    "cases_path": record.get("cases_path"),
+                    "before_db_path": record.get("before_db_path"),
+                    "after_db_path": record.get("after_db_path"),
+                    "baseline_notes": record.get("baseline_notes"),
+                    "baseline_tags": list(record.get("baseline_tags") or []),
                     "changed_case_count": summary.get("changed_case_count"),
                     "possible_regression_count": verdict_counts.get("possible_regression", 0),
                 }
             )
+    items.sort(key=_baseline_sort_key, reverse=True)
     return {
         "bundle_kind": "debug_bundle_regression_panel_baseline_index",
         "baseline_dir": str(root),
+        "baseline_tag": baseline_tag,
         "count": len(items),
         "items": items,
     }
@@ -520,10 +542,53 @@ def load_debug_bundle_regression_panel_baseline(
             "source_path": str(target_dir),
             "replaced": False,
             "case_count": panel.get("case_count"),
+            "cases_path": panel.get("cases_path"),
+            "before_db_path": panel.get("before_db_path"),
+            "after_db_path": panel.get("after_db_path"),
+            "baseline_notes": None,
+            "baseline_tags": [],
             "summary": panel.get("summary"),
         }
     record["archive_dir"] = str(target_dir)
+    record["files"] = {
+        "baseline": str(record_path),
+        "panel": str(target_dir / "panel.json"),
+        "markdown": str(target_dir / "panel.md"),
+        "summary": str(target_dir / "panel_summary.json"),
+    }
     return record
+
+
+def resolve_latest_debug_bundle_regression_panel_baseline(
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_tag: str | None = None,
+) -> dict[str, object]:
+    listing = list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir, baseline_tag=baseline_tag)
+    items = list(listing.get("items") or [])
+    if not items:
+        raise FileNotFoundError("No debug bundle panel baselines are available for the requested filter.")
+    latest = dict(items[0])
+    return load_debug_bundle_regression_panel_baseline(str(latest["baseline_slug"]), baseline_dir=baseline_dir)
+
+
+def delete_debug_bundle_regression_panel_baseline(
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+) -> dict[str, object]:
+    baseline = load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
+    target_dir = Path(str(baseline["archive_dir"]))
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    return {
+        "bundle_kind": "debug_bundle_regression_panel_baseline_deleted",
+        "baseline_name": baseline.get("baseline_name"),
+        "baseline_slug": baseline.get("baseline_slug"),
+        "baseline_dir": str(target_dir),
+        "deleted": True,
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def compare_debug_bundle_regression_panel_baseline(
@@ -538,6 +603,33 @@ def compare_debug_bundle_regression_panel_baseline(
         "baseline_name": baseline["baseline_name"],
         "baseline_slug": baseline["baseline_slug"],
         "baseline_dir": baseline["archive_dir"],
+        "saved_at": baseline.get("saved_at"),
+        "baseline_notes": baseline.get("baseline_notes"),
+        "baseline_tags": list(baseline.get("baseline_tags") or []),
+    }
+    return comparison
+
+
+def compare_debug_bundle_regression_panel_latest_baseline(
+    panel_path: str | Path,
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_tag: str | None = None,
+) -> dict[str, object]:
+    baseline = resolve_latest_debug_bundle_regression_panel_baseline(
+        baseline_dir=baseline_dir,
+        baseline_tag=baseline_tag,
+    )
+    comparison = compare_debug_bundle_regression_panels(baseline["archive_dir"], panel_path)
+    comparison["baseline"] = {
+        "baseline_name": baseline["baseline_name"],
+        "baseline_slug": baseline["baseline_slug"],
+        "baseline_dir": baseline["archive_dir"],
+        "saved_at": baseline.get("saved_at"),
+        "baseline_notes": baseline.get("baseline_notes"),
+        "baseline_tags": list(baseline.get("baseline_tags") or []),
+        "selection": "latest",
+        "baseline_tag": baseline_tag,
     }
     return comparison
 
@@ -684,6 +776,21 @@ def _resolve_panel_baseline_dir(baseline_dir: str | Path | None) -> Path:
     if baseline_dir is None:
         return (Path.cwd() / DEFAULT_DEBUG_BUNDLE_PANEL_BASELINE_DIR).resolve()
     return Path(baseline_dir).resolve()
+
+
+def _baseline_record_matches_tag(record: dict[str, object], baseline_tag: str) -> bool:
+    expected = baseline_tag.strip()
+    if not expected:
+        return True
+    tags = {str(tag).strip() for tag in list(record.get("baseline_tags") or []) if str(tag).strip()}
+    return expected in tags
+
+
+def _baseline_sort_key(record: dict[str, object]) -> tuple[int, str]:
+    saved_at = record.get("saved_at")
+    if isinstance(saved_at, str) and saved_at:
+        return (1, saved_at)
+    return (0, str(record.get("baseline_slug") or record.get("baseline_name") or ""))
 
 
 def _query_type(query_payload: dict[str, object]) -> str:

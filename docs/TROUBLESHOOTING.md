@@ -452,6 +452,52 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
 - 同名 baseline 可以直接覆盖，适合“当前状态就是新的标准答案”
 - 很适合 release review、固定 smoke case 和长期回归
 
+如果你准备长期维护一批 baseline，建议保存时就附带备注和标签：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --note "2026-04-21 发布候选版本" \
+  --tag release \
+  --tag smoke
+```
+
+这样后面列举时就能直接筛：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-baselines \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release
+```
+
+如果你想看某个 baseline 的完整元数据，而不是只看列表摘要：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines
+```
+
+如果你只想和“最近一份 release baseline”比较，而不想手写 baseline 名称，可以直接用：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --markdown-output ./examples/release_candidate_latest_compare.md
+```
+
+最后，如果某个 baseline 已经过时，也可以直接删掉：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer delete-debug-bundle-panel-baseline \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines
+```
+
 ### baseline 管理也开放到了 API / MCP
 
 现在除了 CLI，还可以直接通过服务接口做这些事：
@@ -459,13 +505,19 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
 - HTTP API
   - `POST /compare-debug-bundle-panels`
   - `GET /list-debug-bundle-panel-baselines`
+  - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-baseline`
+  - `POST /compare-debug-bundle-panel-latest-baseline`
+  - `POST /delete-debug-bundle-panel-baseline`
 - MCP tool
   - `compare_debug_bundle_panels`
   - `list_debug_bundle_panel_baselines`
+  - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_baseline`
+  - `compare_debug_bundle_panel_latest_baseline`
+  - `delete_debug_bundle_panel_baseline`
 
 ## 9. 相关文档
 

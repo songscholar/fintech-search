@@ -10,10 +10,13 @@ from uses_indexer.debug_bundle import (
     DebugBundlePanelThresholds,
     build_debug_bundle,
     build_debug_bundle_regression_panel,
+    compare_debug_bundle_regression_panel_latest_baseline,
     compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
     compare_debug_bundles,
+    delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
+    load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
     write_debug_bundle_archive,
@@ -416,3 +419,63 @@ def test_save_list_and_compare_debug_bundle_panel_baselines(tmp_path: Path) -> N
     assert comparison["bundle_kind"] == "debug_bundle_regression_panel_comparison"
     assert comparison["baseline"]["baseline_slug"] == "release-candidate"
     assert comparison["review_summary"]["verdict"] == "possible_regression"
+
+
+def test_baseline_metadata_latest_compare_and_delete(tmp_path: Path) -> None:
+    panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/a.db",
+        "after_db_path": "/tmp/b.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {
+            "changed_case_count": 0,
+            "stable_case_count": 1,
+            "verdict_counts": {"stable": 1},
+            "priority_counts": {"low": 1},
+            "focus_area_counts": {"stable": 1},
+            "high_priority_cases": [],
+        },
+        "cases": [
+            {"case_id": "c1", "question_text": "q1", "review_summary": {"verdict": "stable", "priority": "low", "focus_area": "stable"}},
+        ],
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    panel_dir = tmp_path / "panel_archive"
+    baseline_dir = tmp_path / "baseline_store"
+    current_dir = tmp_path / "current_panel"
+    panel_dir.mkdir()
+    current_dir.mkdir()
+    for target in (panel_dir, current_dir):
+        (target / "panel.json").write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+        (target / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+        (target / "panel_summary.json").write_text(json.dumps({"summary": panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    saved = save_debug_bundle_regression_panel_baseline(
+        panel_dir,
+        "nightly stable",
+        baseline_dir=baseline_dir,
+        baseline_notes="nightly smoke baseline",
+        baseline_tags=["nightly", "smoke"],
+    )
+    assert saved["baseline_tags"] == ["nightly", "smoke"]
+
+    listed = list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir, baseline_tag="nightly")
+    assert listed["count"] == 1
+    assert listed["items"][0]["baseline_notes"] == "nightly smoke baseline"
+
+    loaded = load_debug_bundle_regression_panel_baseline("nightly stable", baseline_dir=baseline_dir)
+    assert loaded["baseline_notes"] == "nightly smoke baseline"
+    assert loaded["baseline_tags"] == ["nightly", "smoke"]
+
+    latest_comparison = compare_debug_bundle_regression_panel_latest_baseline(
+        current_dir,
+        baseline_dir=baseline_dir,
+        baseline_tag="nightly",
+    )
+    assert latest_comparison["baseline"]["selection"] == "latest"
+    assert latest_comparison["baseline"]["baseline_slug"] == "nightly-stable"
+
+    deleted = delete_debug_bundle_regression_panel_baseline("nightly stable", baseline_dir=baseline_dir)
+    assert deleted["deleted"] is True
+    assert not (baseline_dir / "nightly-stable").exists()
