@@ -18,7 +18,9 @@ from .debug_bundle import (
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
+    load_debug_bundle_regression_panel_release_workflow,
     list_debug_bundle_regression_panel_baselines,
+    list_debug_bundle_regression_panel_release_workflows,
     guarded_promote_debug_bundle_regression_panel_baseline,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
@@ -193,6 +195,8 @@ class CodebaseMcpServer:
             "list_debug_bundle_panel_baselines": self._tool_list_debug_bundle_panel_baselines,
             "show_debug_bundle_panel_baseline_trend": self._tool_show_debug_bundle_panel_baseline_trend,
             "show_debug_bundle_panel_baseline": self._tool_show_debug_bundle_panel_baseline,
+            "list_debug_bundle_panel_release_workflows": self._tool_list_debug_bundle_panel_release_workflows,
+            "show_debug_bundle_panel_release_workflow": self._tool_show_debug_bundle_panel_release_workflow,
             "evaluate_debug_bundle_panel_promotion_gate": self._tool_evaluate_debug_bundle_panel_promotion_gate,
             "promote_debug_bundle_panel_baseline": self._tool_promote_debug_bundle_panel_baseline,
             "run_debug_bundle_panel_release_workflow": self._tool_run_debug_bundle_panel_release_workflow,
@@ -436,6 +440,31 @@ class CodebaseMcpServer:
                         "baseline_dir": {"type": "string"},
                     },
                     "required": ["baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "list_debug_bundle_panel_release_workflows",
+                "description": "List saved debug bundle panel release workflow archives.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workflow_dir": {"type": "string"},
+                        "baseline_tag": {"type": "string"},
+                        "status": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "show_debug_bundle_panel_release_workflow",
+                "description": "Show a saved debug bundle panel release workflow archive.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workflow_path": {"type": "string"},
+                    },
+                    "required": ["workflow_path"],
                     "additionalProperties": False,
                 },
             },
@@ -752,6 +781,20 @@ class CodebaseMcpServer:
         baseline_name = self._required_string(arguments, "baseline_name")
         baseline_dir = self._optional_string(arguments, "baseline_dir")
         return load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
+
+    def _tool_list_debug_bundle_panel_release_workflows(self, arguments: dict[str, object]) -> dict[str, object]:
+        workflow_dir = self._optional_string(arguments, "workflow_dir")
+        baseline_tag = self._optional_string(arguments, "baseline_tag")
+        status = self._optional_string(arguments, "status")
+        return list_debug_bundle_regression_panel_release_workflows(
+            workflow_dir=workflow_dir,
+            baseline_tag=baseline_tag,
+            status=status,
+        )
+
+    def _tool_show_debug_bundle_panel_release_workflow(self, arguments: dict[str, object]) -> dict[str, object]:
+        workflow_path = self._required_string(arguments, "workflow_path")
+        return load_debug_bundle_regression_panel_release_workflow(workflow_path)
 
     def _tool_promote_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
         panel_path = self._required_string(arguments, "panel_path")

@@ -2753,3 +2753,57 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在 release workflow 已经具备完整归档能力，不再只是一次即时执行
 - 这一步让质量工作流从“可执行”进一步升级成了“可审计、可长期留存”的流程资产
+
+## [1.2.39] - 2026-04-21
+
+### Step 46: 增加 release workflow index / show
+
+### 本步目标
+
+- 让历史 release workflow archive 不只是目录产物，还能被统一列出和查看
+- 让 release 工作流开始具备真正的“可索引、可运营”属性
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `list_debug_bundle_regression_panel_release_workflows()`
+   - 新增 `load_debug_bundle_regression_panel_release_workflow()`
+   - 支持两种路径模式：
+     - 传 workflow archive 根目录
+     - 传单个 workflow archive 目录
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `list-debug-bundle-panel-release-workflows`
+   - 新增 `show-debug-bundle-panel-release-workflow`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `GET /list-debug-bundle-panel-release-workflows`
+   - 新增 `GET /show-debug-bundle-panel-release-workflow`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `list_debug_bundle_panel_release_workflows`
+   - 新增 `show_debug_bundle_panel_release_workflow`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 workflow list / show 回归
+   - `tests/test_api.py`
+     - 新增 workflow list / show API 回归
+   - `tests/test_mcp.py`
+     - 新增 workflow list / show MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 workflow archive 的 list / show 用法
+   - `docs/EVALUATION.md`
+     - 补充 workflow archive 统一管理方式
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `25 passed`
+
+### 结论
+
+- 现在 release workflow archive 已经可以被统一列出和查看，不再只是散落目录
+- 这一步让 release 工作流从“可审计”进一步升级成了“可索引、可持续运营”的质量资产

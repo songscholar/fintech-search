@@ -20,7 +20,9 @@ from uses_indexer.debug_bundle import (
     evaluate_debug_bundle_regression_panel_thresholds,
     guarded_promote_debug_bundle_regression_panel_baseline,
     load_debug_bundle_regression_panel_baseline,
+    load_debug_bundle_regression_panel_release_workflow,
     list_debug_bundle_regression_panel_baselines,
+    list_debug_bundle_regression_panel_release_workflows,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
     summarize_debug_bundle_regression_panel_baseline_trend,
@@ -642,3 +644,34 @@ def test_release_workflow_promotes_when_gate_passes(tmp_path: Path) -> None:
     assert workflow["markdown_summary"].startswith("# Debug Bundle Panel Release Workflow")
     assert Path(workflow["archive"]["files"]["workflow"]).exists()
     assert Path(workflow["archive"]["files"]["gate"]).exists()
+
+    listed = list_debug_bundle_regression_panel_release_workflows(
+        workflow_dir=tmp_path / "workflow_archive_root",
+        baseline_tag="release",
+        status="promoted",
+    )
+    assert listed["count"] == 0
+
+    archived_workflow = run_debug_bundle_regression_panel_release_workflow(
+        panel_dir,
+        "release-candidate-archived",
+        baseline_dir=baseline_dir,
+        baseline_notes="workflow promote archived",
+        baseline_tags=["release"],
+        gate_baseline_tag="release",
+        require_threshold_pass=True,
+        blocked_latest_verdicts=["possible_regression"],
+        auto_promote=True,
+        archive_dir=tmp_path / "workflow_archive_root" / "release_candidate_archived",
+    )
+    listed = list_debug_bundle_regression_panel_release_workflows(
+        workflow_dir=tmp_path / "workflow_archive_root",
+        baseline_tag="release",
+        status="promoted",
+    )
+    assert listed["count"] == 1
+    loaded = load_debug_bundle_regression_panel_release_workflow(
+        tmp_path / "workflow_archive_root" / "release_candidate_archived"
+    )
+    assert loaded["status"] == "promoted"
+    assert loaded["baseline_name"] == archived_workflow["baseline_name"]

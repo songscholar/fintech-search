@@ -19,7 +19,9 @@ from .debug_bundle import (
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
+    load_debug_bundle_regression_panel_release_workflow,
     list_debug_bundle_regression_panel_baselines,
+    list_debug_bundle_regression_panel_release_workflows,
     guarded_promote_debug_bundle_regression_panel_baseline,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
@@ -170,6 +172,17 @@ def main() -> int:
     release_workflow_parser.add_argument("--archive-dir", help="Optional directory to archive workflow summary, gate result, latest comparison, and promotion output.")
     release_workflow_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
     release_workflow_parser.add_argument("--output", help="Optional JSON output path.")
+
+    list_release_workflows_parser = subparsers.add_parser("list-debug-bundle-panel-release-workflows", help="List saved debug bundle panel release workflow archives.")
+    list_release_workflows_parser.add_argument("--workflow-dir", help="Optional workflow archive root directory.")
+    list_release_workflows_parser.add_argument("--tag", help="Optional baseline tag filter.")
+    list_release_workflows_parser.add_argument("--status", help="Optional status filter such as promoted or blocked.")
+    list_release_workflows_parser.add_argument("--output", help="Optional JSON output path.")
+
+    show_release_workflow_parser = subparsers.add_parser("show-debug-bundle-panel-release-workflow", help="Show a saved debug bundle panel release workflow archive.")
+    show_release_workflow_parser.add_argument("--workflow", required=True, help="Workflow archive directory or release_workflow.json path.")
+    show_release_workflow_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
+    show_release_workflow_parser.add_argument("--output", help="Optional JSON output path.")
 
     list_panel_baselines_parser = subparsers.add_parser("list-debug-bundle-panel-baselines", help="List saved debug bundle regression panel baselines.")
     list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
@@ -431,6 +444,14 @@ def main() -> int:
             auto_promote=not args.no_auto_promote,
             archive_dir=args.archive_dir,
         )
+    elif args.command == "list-debug-bundle-panel-release-workflows":
+        data = list_debug_bundle_regression_panel_release_workflows(
+            workflow_dir=args.workflow_dir,
+            baseline_tag=args.tag,
+            status=args.status,
+        )
+    elif args.command == "show-debug-bundle-panel-release-workflow":
+        data = load_debug_bundle_regression_panel_release_workflow(args.workflow)
     elif args.command == "list-debug-bundle-panel-baselines":
         data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir, baseline_tag=args.tag)
     elif args.command == "show-debug-bundle-panel-baseline-trend":
@@ -525,6 +546,10 @@ def main() -> int:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
     if args.command == "run-debug-bundle-panel-release-workflow" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "show-debug-bundle-panel-release-workflow" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")

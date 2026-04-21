@@ -21,6 +21,7 @@ class DebugBundlePanelThresholds:
 
 
 DEFAULT_DEBUG_BUNDLE_PANEL_BASELINE_DIR = Path(".uses_indexer") / "debug_bundle_panel_baselines"
+DEFAULT_DEBUG_BUNDLE_RELEASE_WORKFLOW_DIR = Path(".uses_indexer") / "release_workflows"
 
 
 def build_debug_bundle(
@@ -709,6 +710,65 @@ def write_debug_bundle_regression_panel_release_workflow_archive(
     }
 
 
+def list_debug_bundle_regression_panel_release_workflows(
+    *,
+    workflow_dir: str | Path | None = None,
+    baseline_tag: str | None = None,
+    status: str | None = None,
+) -> dict[str, object]:
+    root = _resolve_release_workflow_dir(workflow_dir)
+    items: list[dict[str, object]] = []
+    if root.exists():
+        candidates: list[Path]
+        if (root / "release_workflow_summary.json").exists() or (root / "release_workflow.json").exists():
+            candidates = [root]
+        else:
+            candidates = [path for path in root.iterdir() if path.is_dir()]
+        for entry in sorted(candidates):
+            summary_path = entry / "release_workflow_summary.json"
+            workflow_path = entry / "release_workflow.json"
+            if not summary_path.exists() and not workflow_path.exists():
+                continue
+            if summary_path.exists():
+                record = json.loads(summary_path.read_text(encoding="utf-8"))
+            else:
+                workflow = _load_debug_bundle_regression_panel_release_workflow(entry)
+                record = _release_workflow_summary_from_workflow(workflow)
+            if baseline_tag and not _release_workflow_matches_tag(record, baseline_tag):
+                continue
+            if status and str(record.get("status") or "") != status:
+                continue
+            items.append(
+                {
+                    "baseline_name": record.get("baseline_name"),
+                    "baseline_dir": record.get("baseline_dir"),
+                    "gate_baseline_tag": record.get("gate_baseline_tag"),
+                    "status": record.get("status"),
+                    "auto_promote": record.get("auto_promote"),
+                    "archive_dir": str(entry),
+                    "baseline_tags": list(record.get("baseline_tags") or []),
+                    "saved_at": record.get("saved_at"),
+                }
+            )
+    items.sort(key=_release_workflow_sort_key, reverse=True)
+    return {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow_index",
+        "workflow_dir": str(root),
+        "baseline_tag": baseline_tag,
+        "status_filter": status,
+        "count": len(items),
+        "items": items,
+    }
+
+
+def load_debug_bundle_regression_panel_release_workflow(
+    workflow_path: str | Path,
+) -> dict[str, object]:
+    workflow = _load_debug_bundle_regression_panel_release_workflow(workflow_path)
+    workflow["archive_dir"] = str(_normalize_release_workflow_archive_path(workflow_path))
+    return workflow
+
+
 def list_debug_bundle_regression_panel_baselines(
     *,
     baseline_dir: str | Path | None = None,
@@ -1084,6 +1144,12 @@ def _resolve_panel_baseline_dir(baseline_dir: str | Path | None) -> Path:
     return Path(baseline_dir).resolve()
 
 
+def _resolve_release_workflow_dir(workflow_dir: str | Path | None) -> Path:
+    if workflow_dir is None:
+        return (Path.cwd() / DEFAULT_DEBUG_BUNDLE_RELEASE_WORKFLOW_DIR).resolve()
+    return Path(workflow_dir).resolve()
+
+
 def _baseline_record_matches_tag(record: dict[str, object], baseline_tag: str) -> bool:
     expected = baseline_tag.strip()
     if not expected:
@@ -1104,6 +1170,51 @@ def _baseline_trend_sort_key(record: dict[str, object]) -> tuple[int, str]:
     if isinstance(saved_at, str) and saved_at:
         return (1, saved_at)
     return (0, str(record.get("baseline_slug") or record.get("baseline_name") or ""))
+
+
+def _release_workflow_sort_key(record: dict[str, object]) -> tuple[int, str]:
+    saved_at = record.get("saved_at")
+    if isinstance(saved_at, str) and saved_at:
+        return (1, saved_at)
+    return (0, str(record.get("baseline_name") or record.get("archive_dir") or ""))
+
+
+def _release_workflow_matches_tag(record: dict[str, object], baseline_tag: str) -> bool:
+    expected = baseline_tag.strip()
+    if not expected:
+        return True
+    tags = {str(tag).strip() for tag in list(record.get("baseline_tags") or []) if str(tag).strip()}
+    return expected in tags or str(record.get("gate_baseline_tag") or "").strip() == expected
+
+
+def _normalize_release_workflow_archive_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_dir() else candidate.parent
+
+
+def _load_debug_bundle_regression_panel_release_workflow(path: str | Path) -> dict[str, object]:
+    candidate = Path(path)
+    if candidate.is_dir():
+        candidate = candidate / "release_workflow.json"
+    payload = json.loads(candidate.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Debug bundle regression panel release workflow must be a JSON object: {candidate}")
+    return payload
+
+
+def _release_workflow_summary_from_workflow(workflow: dict[str, object]) -> dict[str, object]:
+    promoted = dict(workflow.get("promoted") or {})
+    return {
+        "bundle_kind": "debug_bundle_regression_panel_release_workflow_summary",
+        "status": workflow.get("status"),
+        "baseline_name": workflow.get("baseline_name"),
+        "baseline_dir": workflow.get("baseline_dir"),
+        "gate_baseline_tag": workflow.get("gate_baseline_tag"),
+        "auto_promote": workflow.get("auto_promote"),
+        "review_summary": workflow.get("review_summary"),
+        "baseline_tags": list(promoted.get("baseline_tags") or []),
+        "saved_at": promoted.get("saved_at"),
+    }
 
 
 def _summarize_baseline_trend(

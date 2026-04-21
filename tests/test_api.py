@@ -276,6 +276,20 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert workflow["status"] == "promoted"
     assert Path(workflow["archive"]["files"]["workflow"]).exists()
 
+    status, workflow_list = api.handle_request(
+        "GET",
+        f"/list-debug-bundle-panel-release-workflows?workflow_dir={tmp_path / 'workflow_archive'}&baseline_tag=smoke&status=promoted",
+    )
+    assert status == 200
+    assert workflow_list["count"] == 1
+
+    status, shown_workflow = api.handle_request(
+        "GET",
+        f"/show-debug-bundle-panel-release-workflow?workflow_path={tmp_path / 'workflow_archive'}",
+    )
+    assert status == 200
+    assert shown_workflow["status"] == "promoted"
+
     status, trend = api.handle_request(
         "GET",
         f"/show-debug-bundle-panel-baseline-trend?baseline_dir={tmp_path / 'baseline_store'}&baseline_tag=smoke",

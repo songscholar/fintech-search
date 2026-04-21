@@ -592,6 +592,27 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 - `latest_comparison.json`
 - `promoted_baseline.json`
 
+如果你后面积累了多次 workflow archive，不想再靠手工翻目录，也可以直接列出来：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-release-workflows \
+  --workflow-dir ./examples/release_workflows \
+  --tag release \
+  --status promoted
+```
+
+如果想看某一份 workflow 的完整内容，可以直接：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
+  --workflow ./examples/release_workflows/release_candidate_20260421
+```
+
+这个 `--workflow` 既可以传：
+
+- 单个 workflow archive 目录
+- `release_workflow.json` 文件路径
+
 如果你想看一组 baseline 的长期走势，而不是只做两两比较，可以直接看 trend：
 
 ```bash

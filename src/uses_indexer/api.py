@@ -19,7 +19,9 @@ from .debug_bundle import (
     delete_debug_bundle_regression_panel_baseline,
     evaluate_debug_bundle_regression_panel_thresholds,
     load_debug_bundle_regression_panel_baseline,
+    load_debug_bundle_regression_panel_release_workflow,
     list_debug_bundle_regression_panel_baselines,
+    list_debug_bundle_regression_panel_release_workflows,
     guarded_promote_debug_bundle_regression_panel_baseline,
     promote_debug_bundle_regression_panel_baseline,
     save_debug_bundle_regression_panel_baseline,
@@ -90,6 +92,8 @@ class CodebaseApi:
                     "GET /list-debug-bundle-panel-baselines",
                     "GET /show-debug-bundle-panel-baseline-trend",
                     "GET /show-debug-bundle-panel-baseline",
+                    "GET /list-debug-bundle-panel-release-workflows",
+                    "GET /show-debug-bundle-panel-release-workflow",
                     "POST /save-debug-bundle-panel-baseline",
                     "POST /promote-debug-bundle-panel-baseline",
                     "POST /evaluate-debug-bundle-panel-promotion-gate",
@@ -249,6 +253,22 @@ class CodebaseApi:
                 baseline_tag=baseline_tag,
                 limit=limit,
             )
+
+        if route == "/list-debug-bundle-panel-release-workflows" and method == "GET":
+            workflow_dir = query_params.get("workflow_dir", [None])[0]
+            baseline_tag = query_params.get("baseline_tag", [None])[0]
+            status_filter = query_params.get("status", [None])[0]
+            return HTTPStatus.OK, list_debug_bundle_regression_panel_release_workflows(
+                workflow_dir=workflow_dir,
+                baseline_tag=baseline_tag,
+                status=status_filter,
+            )
+
+        if route == "/show-debug-bundle-panel-release-workflow" and method == "GET":
+            workflow_path = query_params.get("workflow_path", [None])[0]
+            if not workflow_path:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "workflow_path is required")
+            return HTTPStatus.OK, load_debug_bundle_regression_panel_release_workflow(workflow_path)
 
         if route == "/save-debug-bundle-panel-baseline" and method == "POST":
             payload = self._parse_json_body(body)
@@ -426,7 +446,7 @@ class CodebaseApi:
         if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
-        if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend"} and method != "GET":
+        if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow"} and method != "GET":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")

@@ -90,6 +90,8 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "list_debug_bundle_panel_baselines" for tool in tools)
     assert any(tool["name"] == "show_debug_bundle_panel_baseline_trend" for tool in tools)
     assert any(tool["name"] == "show_debug_bundle_panel_baseline" for tool in tools)
+    assert any(tool["name"] == "list_debug_bundle_panel_release_workflows" for tool in tools)
+    assert any(tool["name"] == "show_debug_bundle_panel_release_workflow" for tool in tools)
     assert any(tool["name"] == "evaluate_debug_bundle_panel_promotion_gate" for tool in tools)
     assert any(tool["name"] == "promote_debug_bundle_panel_baseline" for tool in tools)
     assert any(tool["name"] == "run_debug_bundle_panel_release_workflow" for tool in tools)
@@ -390,10 +392,44 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     assert workflow_response["result"]["structuredContent"]["status"] == "promoted"
     assert Path(workflow_response["result"]["structuredContent"]["archive"]["files"]["workflow"]).exists()
 
-    trend_response = server.handle_message(
+    workflow_list_response = server.handle_message(
         {
             "jsonrpc": "2.0",
             "id": 14,
+            "method": "tools/call",
+            "params": {
+                "name": "list_debug_bundle_panel_release_workflows",
+                "arguments": {
+                    "workflow_dir": str(tmp_path / "workflow_archive"),
+                    "baseline_tag": "mcp",
+                    "status": "promoted",
+                },
+            },
+        }
+    )
+    assert workflow_list_response is not None
+    assert workflow_list_response["result"]["structuredContent"]["count"] == 1
+
+    workflow_show_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 15,
+            "method": "tools/call",
+            "params": {
+                "name": "show_debug_bundle_panel_release_workflow",
+                "arguments": {
+                    "workflow_path": str(tmp_path / "workflow_archive"),
+                },
+            },
+        }
+    )
+    assert workflow_show_response is not None
+    assert workflow_show_response["result"]["structuredContent"]["status"] == "promoted"
+
+    trend_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 16,
             "method": "tools/call",
             "params": {
                 "name": "show_debug_bundle_panel_baseline_trend",
@@ -410,7 +446,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_saved_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 15,
+            "id": 17,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_baseline",
@@ -428,7 +464,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_latest_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 16,
+            "id": 18,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panel_latest_baseline",
@@ -446,7 +482,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     compare_panels_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 17,
+            "id": 19,
             "method": "tools/call",
             "params": {
                 "name": "compare_debug_bundle_panels",
@@ -463,7 +499,7 @@ def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
     delete_response = server.handle_message(
         {
             "jsonrpc": "2.0",
-            "id": 18,
+            "id": 20,
             "method": "tools/call",
             "params": {
                 "name": "delete_debug_bundle_panel_baseline",

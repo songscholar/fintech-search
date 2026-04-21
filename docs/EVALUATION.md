@@ -480,6 +480,22 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 - promote 结果
 - workflow summary
 
+如果 release workflow archive 越积越多，建议再配合列表入口统一管理：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-release-workflows \
+  --workflow-dir ./examples/release_workflows \
+  --tag release \
+  --status promoted
+```
+
+需要查看某一份完整 workflow 时，再用：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
+  --workflow ./examples/release_workflows/release_candidate_20260421
+```
+
 这样做的价值是：
 
 - `eval-retrieval` 继续负责整体数值门槛
