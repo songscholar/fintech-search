@@ -1706,3 +1706,38 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 增量建库现在已经不仅能看文件变化，还能看语义结构变化
 - 后续调 chunk/block/feature 规则时，可以直接借助 delta 做更细的线上诊断
 - 评测样例开始更贴近真实业务问法，而不只是最早那批基础覆盖
+
+## [1.2.19] - 2026-04-21
+
+### Step 26: 强化调用链定向关系检索
+
+### 本步目标
+
+- 让“谁调用了谁”这类问题不只依赖 procedure summary 或 chunk 命中
+- 直接利用 `calls_procedure` 边扩展 caller/callee 候选，提高调用链类问题稳定性
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 在 `_run_relation_queries()` 中新增 `relation_call_edge`
+   - 对 `wants_call_chain` 问题：
+     - `被谁调用` 直接按 `target_name` 反查 callers
+     - 其他调用链问题按 `source_name` 查 callees
+   - relation hit 会透传：
+     - `match_source=caller_relation/callee_relation`
+     - `matched_text=caller -> callee`
+     - `feature_flags`
+
+2. 更新 `tests/test_indexer.py`
+   - 新增针对 `AF_DEEP 被谁调用` 的 direct call-edge relation 回归测试
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/retrieval.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_indexer.py -k "query_index_uses_direct_call_edge_relation_for_callers or query_index_applies_intent_aware_rerank or query_index_debug_includes_retrieval_trace"` 通过
+- 结果：`3 passed`
+
+### 结论
+
+- 调用链类问题现在有了更明确的边关系召回，不再只靠文本摘要兜底
+- 对“被谁调用/调用了谁”这类检索，候选来源更可信、更可解释

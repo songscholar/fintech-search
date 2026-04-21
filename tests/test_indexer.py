@@ -653,6 +653,17 @@ def test_query_index_uses_relation_expansion_and_feature_rerank(tmp_path: Path) 
     )
 
 
+def test_query_index_uses_direct_call_edge_relation_for_callers(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "AF_DEEP 被谁调用", limit=10)
+
+    edge_relation_hits = [hit for hit in result["hits"] if hit["retrieval_source"] == "relation_call_edge"]
+    assert edge_relation_hits
+    assert any(hit["procedure_name"] == "AF_SAMPLE" for hit in edge_relation_hits)
+    assert any("caller_relation=af_deep" in " ".join(hit["reasons"]).lower() for hit in edge_relation_hits)
+
+
 def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

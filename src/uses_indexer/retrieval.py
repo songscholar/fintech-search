@@ -879,6 +879,95 @@ class RetrievalService:
                     }
                 )
 
+        def add_call_edge_candidates(term: str, *, callers: bool) -> None:
+            if callers:
+                rows = conn.execute(
+                    """
+                    SELECT
+                      pf.procedure_id,
+                      pf.file_id,
+                      pf.procedure_name,
+                      pf.summary_text,
+                      pf.feature_flags_json,
+                      p.chinese_name,
+                      p.object_id,
+                      f.path,
+                      e.source_name,
+                      e.target_name
+                    FROM edges e
+                    JOIN procedures p ON p.name = e.source_name
+                    JOIN files f ON f.id = p.file_id
+                    JOIN procedure_features pf ON pf.procedure_id = p.id
+                    WHERE e.edge_type = 'calls_procedure'
+                      AND lower(e.target_name) = lower(?)
+                    LIMIT ?
+                    """,
+                    (term, limit),
+                ).fetchall()
+                field_name = "caller_relation"
+                reason = "caller_relation"
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT
+                      pf.procedure_id,
+                      pf.file_id,
+                      pf.procedure_name,
+                      pf.summary_text,
+                      pf.feature_flags_json,
+                      p.chinese_name,
+                      p.object_id,
+                      f.path,
+                      e.source_name,
+                      e.target_name
+                    FROM edges e
+                    JOIN procedures p ON p.name = e.target_name
+                    JOIN files f ON f.id = p.file_id
+                    JOIN procedure_features pf ON pf.procedure_id = p.id
+                    WHERE e.edge_type = 'calls_procedure'
+                      AND lower(e.source_name) = lower(?)
+                    LIMIT ?
+                    """,
+                    (term, limit),
+                ).fetchall()
+                field_name = "callee_relation"
+                reason = "callee_relation"
+
+            for row in rows:
+                key = (int(row[0]), field_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                edge_path = f"{row[8]} -> {row[9]}"
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[7]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[5] if row[5] else None,
+                        "object_id": row[6] if row[6] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": edge_path,
+                        "match_source": field_name,
+                        "retrieval_source": "relation_call_edge",
+                        "base_score": 97.0 if callers else 95.0,
+                        "source_rank": 9.7 if callers else 9.5,
+                        "search_text": f"{edge_path} {row[3]}",
+                        "procedure_summary": str(row[3]),
+                        "feature_flags": json.loads(str(row[4] or "{}")),
+                        "reasons": [f"{reason}={term}"],
+                    }
+                )
+
+        if query_analysis.get("wants_call_chain"):
+            for term in query_analysis.get("procedure_terms", []):
+                add_call_edge_candidates(str(term), callers=bool(query_analysis.get("wants_callers")))
+
         for term in query_analysis.get("procedure_terms", []):
             lowered = f"%{str(term).lower()}%"
             add_procedure_candidates(
