@@ -2022,3 +2022,69 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 评测现在已经可以对关键标签和 query type 做更细粒度的质量守门
 - `debug-bundle` 现在更适合做线上问题归档和跨版本复盘
+
+## [1.2.26] - 2026-04-21
+
+### Step 33: 增加 debug bundle 自动对比能力
+
+### 本步目标
+
+- 让两次 `debug-bundle` 结果可以直接自动 diff
+- 把对比能力统一接到 CLI / API / MCP，减少各入口能力分叉
+- 补详细文档，让问题复盘不只“能做”，而是“知道怎么做、怎么读结果”
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `compare_debug_bundles()`
+   - 支持直接比较：
+     - 单个 `bundle.json`
+     - `debug-bundle --archive-dir` 输出目录
+   - 输出：
+     - `summary.query_hit_count`
+     - `summary.candidate_count`
+     - `summary.evidence_count`
+     - `summary.query_type`
+     - `summary.answer_source`
+     - `summary.final_answer_changed`
+     - `query.top_hit_changed`
+     - `evidence.top_evidence_changed`
+     - `answer.before_final_answer_excerpt`
+     - `answer.after_final_answer_excerpt`
+   - 增加 `warnings`：
+     - `question_changed`
+     - `db_path_changed`
+     - `query_type_changed`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `compare-debug-bundles`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /compare-debug-bundles`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `compare_debug_bundles` 工具
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 debug bundle compare 回归
+   - `tests/test_api.py`
+     - 新增 compare API 回归
+   - `tests/test_mcp.py`
+     - 新增 compare MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 新增 compare-debug-bundles 的使用方式、字段解释和诊断顺序
+   - `docs/EVALUATION.md`
+     - 新增“用 debug bundle 做 case 级复盘”流程
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- 现在不仅能保存单次问题的完整诊断包，还能直接比较两个版本的 query / evidence / answer 差异
+- 这让排障和效果复盘从“手工看两份 JSON”升级成了“结构化 diff”

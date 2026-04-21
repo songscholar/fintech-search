@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .answering import CodebaseAnswerer
-from .debug_bundle import build_debug_bundle
+from .debug_bundle import build_debug_bundle, compare_debug_bundles
 from .indexer import SQLiteIndexer
 from .llm import LlmConfigError, LlmRequestError
 from .qa import CodebaseQA
@@ -66,6 +66,7 @@ class CodebaseApi:
                     "POST /ask",
                     "POST /answer",
                     "POST /debug-bundle",
+                    "POST /compare-debug-bundles",
                 ],
             }
 
@@ -151,7 +152,13 @@ class CodebaseApi:
                 related_limit=related_limit,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle"} and method != "POST":
+        if route == "/compare-debug-bundles" and method == "POST":
+            payload = self._parse_json_body(body)
+            before_path = self._require_string(payload, "before_path")
+            after_path = self._require_string(payload, "after_path")
+            return HTTPStatus.OK, compare_debug_bundles(before_path, after_path)
+
+        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")

@@ -159,6 +159,43 @@ PYTHONPATH=src python3 -m uses_indexer compare-eval \
 
 这样后面即使整体平均值看起来还可以，也能更早发现某一类业务问法已经开始回退。
 
+## 用 debug bundle 做 case 级复盘
+
+`eval-retrieval` 更适合看“整体趋势”，但如果你想复盘某一个具体问题，建议配合 `debug-bundle` 和 `compare-debug-bundles` 一起用。
+
+推荐流程：
+
+1. 在改动前跑一次：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer debug-bundle \
+  --db examples/business_code_index.db \
+  --question "AF_DEEP 被谁调用" \
+  --archive-dir examples/debug_callers_before
+```
+
+2. 在改动后再跑一次：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer debug-bundle \
+  --db examples/business_code_index.db \
+  --question "AF_DEEP 被谁调用" \
+  --archive-dir examples/debug_callers_after
+```
+
+3. 最后直接比较：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
+  --before examples/debug_callers_before \
+  --after examples/debug_callers_after
+```
+
+这样你就能把“总体指标变化”和“单题链路变化”连起来看：
+
+- `eval-retrieval` 负责告诉你“整体有没有退化”
+- `compare-debug-bundles` 负责告诉你“到底是哪一段链路变了”
+
 ## 当前基准
 
 当前初始评测集有 5 个 case，覆盖：

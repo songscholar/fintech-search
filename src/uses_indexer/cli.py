@@ -8,7 +8,7 @@ from pathlib import Path
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .config import bootstrap_env
-from .debug_bundle import build_debug_bundle, write_debug_bundle_archive
+from .debug_bundle import build_debug_bundle, compare_debug_bundles, write_debug_bundle_archive
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
 from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
@@ -82,6 +82,11 @@ def main() -> int:
     compare_eval_parser.add_argument("--before", required=True, help="Baseline evaluation report JSON path.")
     compare_eval_parser.add_argument("--after", required=True, help="New evaluation report JSON path.")
     compare_eval_parser.add_argument("--output", help="Optional JSON comparison output path.")
+
+    compare_bundle_parser = subparsers.add_parser("compare-debug-bundles", help="Compare two debug bundle archives or bundle.json files.")
+    compare_bundle_parser.add_argument("--before", required=True, help="Baseline debug bundle path or archive directory.")
+    compare_bundle_parser.add_argument("--after", required=True, help="New debug bundle path or archive directory.")
+    compare_bundle_parser.add_argument("--output", help="Optional JSON comparison output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
     evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -233,6 +238,8 @@ def main() -> int:
         data["thresholds"] = threshold_report
     elif args.command == "compare-eval":
         data = compare_eval_reports(args.before, args.after)
+    elif args.command == "compare-debug-bundles":
+        data = compare_debug_bundles(args.before, args.after)
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,

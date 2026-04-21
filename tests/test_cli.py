@@ -6,7 +6,7 @@ from pathlib import Path
 from tests.test_answering import StubLlm
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.cli import _discover_default_db, _parse_scoped_threshold_pairs, _parse_threshold_pairs
-from uses_indexer.debug_bundle import build_debug_bundle, write_debug_bundle_archive
+from uses_indexer.debug_bundle import build_debug_bundle, compare_debug_bundles, write_debug_bundle_archive
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
 
@@ -92,3 +92,104 @@ def test_build_debug_bundle_collects_query_evidence_and_answer(tmp_path: Path) -
     assert summary["bundle_kind"] == "debug_bundle_summary"
     assert summary["question"] == "证券代码获取的逻辑在哪里"
     assert summary["response_kinds"]["query"] == "query"
+
+
+def test_compare_debug_bundles_reports_differences(tmp_path: Path) -> None:
+    before_bundle = {
+        "db_path": "/tmp/before.db",
+        "question": "证券代码获取的逻辑在哪里",
+        "bundle_kind": "debug_bundle",
+        "query": {
+            "hit_count": 1,
+            "candidate_count": 2,
+            "hits": [
+                {
+                    "rank": 1,
+                    "procedure_name": "AF_BEFORE",
+                    "file_path": "/tmp/AF_BEFORE.uftatomfunction",
+                    "line_start": 10,
+                    "line_end": 12,
+                    "match_source": "fts_chunk",
+                    "retrieval_source": "fts_chunk",
+                    "matched_text": "before hit",
+                }
+            ],
+            "debug": {"query_analysis": {"query_type": "callers"}, "metadata": {"trace_id": "trace-before"}},
+        },
+        "evidence": {
+            "evidence_count": 1,
+            "evidence": [
+                {
+                    "rank": 1,
+                    "procedure_name": "AF_BEFORE",
+                    "file_path": "/tmp/AF_BEFORE.uftatomfunction",
+                    "line_start": 10,
+                    "line_end": 12,
+                    "matched_text": "before evidence",
+                }
+            ],
+            "debug": {"metadata": {"trace_id": "evidence-before"}},
+        },
+        "answer": {
+            "answer_source": "draft",
+            "draft_answer": {"text": "before draft"},
+            "final_answer": {"text": "before final"},
+        },
+    }
+    after_bundle = {
+        "db_path": "/tmp/after.db",
+        "question": "证券代码获取的逻辑在哪里",
+        "bundle_kind": "debug_bundle",
+        "query": {
+            "hit_count": 2,
+            "candidate_count": 4,
+            "hits": [
+                {
+                    "rank": 1,
+                    "procedure_name": "AF_AFTER",
+                    "file_path": "/tmp/AF_AFTER.uftatomfunction",
+                    "line_start": 20,
+                    "line_end": 24,
+                    "match_source": "relation_procedure_feature",
+                    "retrieval_source": "relation_procedure_feature",
+                    "matched_text": "after hit",
+                }
+            ],
+            "debug": {"query_analysis": {"query_type": "callers"}, "metadata": {"trace_id": "trace-after"}},
+        },
+        "evidence": {
+            "evidence_count": 2,
+            "evidence": [
+                {
+                    "rank": 1,
+                    "procedure_name": "AF_AFTER",
+                    "file_path": "/tmp/AF_AFTER.uftatomfunction",
+                    "line_start": 20,
+                    "line_end": 24,
+                    "matched_text": "after evidence",
+                }
+            ],
+            "debug": {"metadata": {"trace_id": "evidence-after"}},
+        },
+        "answer": {
+            "answer_source": "llm",
+            "draft_answer": {"text": "after draft"},
+            "final_answer": {"text": "after final"},
+        },
+    }
+
+    before_path = tmp_path / "before_bundle.json"
+    after_dir = tmp_path / "after_archive"
+    before_path.write_text(json.dumps(before_bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_debug_bundle_archive(after_bundle, after_dir)
+
+    comparison = compare_debug_bundles(before_path, after_dir)
+
+    assert comparison["bundle_kind"] == "debug_bundle_comparison"
+    assert comparison["summary"]["query_hit_count"]["delta"] == 1
+    assert comparison["summary"]["candidate_count"]["delta"] == 2
+    assert comparison["summary"]["answer_source"]["changed"] is True
+    assert comparison["query"]["top_hit_changed"] is True
+    assert comparison["evidence"]["top_evidence_changed"] is True
+    assert comparison["answer"]["final_answer_changed"] is True
+    assert "db_path_changed" in comparison["warnings"]

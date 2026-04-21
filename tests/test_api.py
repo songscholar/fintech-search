@@ -109,6 +109,24 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert bundle["evidence"]["response_kind"] == "evidence"
     assert bundle["answer"]["response_kind"] == "answer"
 
+    before_path = tmp_path / "before_bundle.json"
+    after_path = tmp_path / "after_bundle.json"
+    before_path.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    mutated_bundle = json.loads(json.dumps(bundle, ensure_ascii=False))
+    mutated_bundle["query"]["hit_count"] = bundle["query"]["hit_count"] + 1
+    mutated_bundle["answer"]["final_answer"]["text"] = "changed answer"
+    after_path.write_text(json.dumps(mutated_bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    status, comparison = api.handle_request(
+        "POST",
+        "/compare-debug-bundles",
+        json.dumps({"before_path": str(before_path), "after_path": str(after_path)}).encode("utf-8"),
+    )
+    assert status == 200
+    assert comparison["bundle_kind"] == "debug_bundle_comparison"
+    assert comparison["summary"]["query_hit_count"]["delta"] == 1
+    assert comparison["answer"]["final_answer_changed"] is True
+
 
 def test_http_server_serves_json(tmp_path: Path) -> None:
     api, _ = _build_api(tmp_path)

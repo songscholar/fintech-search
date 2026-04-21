@@ -7,7 +7,7 @@ from typing import Any, TextIO
 
 from .answering import CodebaseAnswerer
 from .constants import JSON_RPC_VERSION, MCP_PROTOCOL_VERSION
-from .debug_bundle import build_debug_bundle
+from .debug_bundle import build_debug_bundle, compare_debug_bundles
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
 from .table_indexer import TableIndexer
@@ -168,6 +168,7 @@ class CodebaseMcpServer:
             "ask_codebase": self._tool_ask_codebase,
             "answer_codebase": self._tool_answer_codebase,
             "debug_bundle": self._tool_debug_bundle,
+            "compare_debug_bundles": self._tool_compare_debug_bundles,
             "query_metadata": self._tool_query_metadata,
             "query_table": self._tool_query_table,
         }
@@ -297,6 +298,19 @@ class CodebaseMcpServer:
                         "related_limit": {"type": "integer", "minimum": 0, "maximum": 20}
                     },
                     "required": ["question"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "compare_debug_bundles",
+                "description": "Compare two debug bundle archives or bundle.json files and summarize query/evidence/answer differences.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "before_path": {"type": "string"},
+                        "after_path": {"type": "string"},
+                    },
+                    "required": ["before_path", "after_path"],
                     "additionalProperties": False,
                 },
             },
@@ -440,6 +454,11 @@ class CodebaseMcpServer:
             context_window=context_window,
             related_limit=related_limit,
         )
+
+    def _tool_compare_debug_bundles(self, arguments: dict[str, object]) -> dict[str, object]:
+        before_path = self._required_string(arguments, "before_path")
+        after_path = self._required_string(arguments, "after_path")
+        return compare_debug_bundles(before_path, after_path)
 
     def _resolve_db_path(self, arguments: dict[str, object]) -> str:
         db_path = self._optional_string(arguments, "db_path")
