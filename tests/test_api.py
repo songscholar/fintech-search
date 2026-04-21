@@ -127,6 +127,39 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert comparison["summary"]["query_hit_count"]["delta"] == 1
     assert comparison["answer"]["final_answer_changed"] is True
 
+    cases_path = tmp_path / "panel_cases.json"
+    cases_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "id": "stock-code",
+                        "question": "证券代码获取的逻辑在哪里",
+                        "tags": ["call_chain"],
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    status, panel = api.handle_request(
+        "POST",
+        "/compare-debug-bundle-panel",
+        json.dumps(
+            {
+                "before_db_path": str(api.default_db_path),
+                "after_db_path": str(api.default_db_path),
+                "cases_path": str(cases_path),
+                "max_changed_cases": 0,
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert panel["bundle_kind"] == "debug_bundle_regression_panel"
+    assert panel["case_count"] == 1
+    assert panel["thresholds"]["status"] == "pass"
+
 
 def test_http_server_serves_json(tmp_path: Path) -> None:
     api, _ = _build_api(tmp_path)
@@ -157,6 +190,24 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         body = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert "final_answer" in body
+
+        panel_cases = tmp_path / "http_panel_cases.json"
+        panel_cases.write_text(
+            json.dumps({"cases": [{"question": "证券代码获取的逻辑在哪里"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        panel_payload = json.dumps(
+            {
+                "before_db_path": str(api.default_db_path),
+                "after_db_path": str(api.default_db_path),
+                "cases_path": str(panel_cases),
+            }
+        )
+        conn.request("POST", "/compare-debug-bundle-panel", body=panel_payload, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        body = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert body["bundle_kind"] == "debug_bundle_regression_panel"
     finally:
         server.shutdown()
         thread.join(timeout=5)

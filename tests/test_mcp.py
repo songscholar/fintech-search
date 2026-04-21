@@ -84,6 +84,7 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "answer_codebase" for tool in tools)
     assert any(tool["name"] == "debug_bundle" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundles" for tool in tools)
+    assert any(tool["name"] == "compare_debug_bundle_panel" for tool in tools)
 
 
 def test_tool_call_returns_grounded_answer(tmp_path: Path) -> None:
@@ -186,6 +187,40 @@ def test_tool_call_compares_debug_bundles(tmp_path: Path) -> None:
     assert structured["bundle_kind"] == "debug_bundle_comparison"
     assert structured["summary"]["query_hit_count"]["delta"] == 2
     assert structured["summary"]["answer_source"]["changed"] is True
+
+
+def test_tool_call_builds_debug_bundle_panel(tmp_path: Path) -> None:
+    server, db_path = _build_server(tmp_path)
+    cases_path = tmp_path / "panel_cases.json"
+    cases_path.write_text(
+        json.dumps({"cases": [{"question": "证券代码获取的逻辑在哪里"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_debug_bundle_panel",
+                "arguments": {
+                    "before_db_path": str(db_path),
+                    "after_db_path": str(db_path),
+                    "cases_path": str(cases_path),
+                    "max_changed_cases": 0,
+                },
+            },
+        }
+    )
+
+    assert response is not None
+    result = response["result"]
+    assert result["isError"] is False
+    structured = result["structuredContent"]
+    assert structured["bundle_kind"] == "debug_bundle_regression_panel"
+    assert structured["case_count"] == 1
+    assert structured["thresholds"]["status"] == "pass"
 
 
 def test_stdio_serve_writes_jsonrpc_lines(tmp_path: Path) -> None:

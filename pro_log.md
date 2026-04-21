@@ -2245,3 +2245,45 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 批量 panel 现在已经可以直接承担“典型问题链路门槛”的角色
 - 这一步让 panel 从 review 能力进一步升级成了 release gate
+
+## [1.2.30] - 2026-04-21
+
+### Step 37: 把 panel 能力接到 API / MCP
+
+### 本步目标
+
+- 让批量 debug bundle panel 不只在 CLI 可用，也能被 HTTP API 和 MCP 工具直接调用
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /compare-debug-bundle-panel`
+   - 同时支持 panel threshold 参数：
+     - `max_changed_cases`
+     - `max_high_priority_cases`
+     - `max_verdict_counts`
+     - `max_focus_area_counts`
+
+2. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `compare_debug_bundle_panel` 工具
+   - 支持同样的 panel threshold 参数
+
+3. 更新测试
+   - `tests/test_api.py`
+     - 新增 compare-debug-bundle-panel API 回归
+   - `tests/test_mcp.py`
+     - 新增 compare_debug_bundle_panel MCP tool 回归
+
+4. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 panel 在 API / MCP 下的使用入口
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_api.py tests/test_mcp.py tests/test_cli.py` 通过
+
+### 结论
+
+- 现在无论是 CLI、HTTP 还是 MCP，批量 panel 和 panel gate 都已经能统一使用
+- 这一步让 release gate 从本地命令进一步升级成了服务化能力

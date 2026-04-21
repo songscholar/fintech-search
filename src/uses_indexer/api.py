@@ -8,7 +8,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .answering import CodebaseAnswerer
-from .debug_bundle import build_debug_bundle, compare_debug_bundles
+from .debug_bundle import (
+    DebugBundlePanelThresholds,
+    build_debug_bundle,
+    build_debug_bundle_regression_panel,
+    compare_debug_bundles,
+    evaluate_debug_bundle_regression_panel_thresholds,
+)
 from .indexer import SQLiteIndexer
 from .llm import LlmConfigError, LlmRequestError
 from .qa import CodebaseQA
@@ -67,6 +73,7 @@ class CodebaseApi:
                     "POST /answer",
                     "POST /debug-bundle",
                     "POST /compare-debug-bundles",
+                    "POST /compare-debug-bundle-panel",
                 ],
             }
 
@@ -158,7 +165,40 @@ class CodebaseApi:
             after_path = self._require_string(payload, "after_path")
             return HTTPStatus.OK, compare_debug_bundles(before_path, after_path)
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles"} and method != "POST":
+        if route == "/compare-debug-bundle-panel" and method == "POST":
+            payload = self._parse_json_body(body)
+            before_db_path = self._require_string(payload, "before_db_path")
+            after_db_path = self._require_string(payload, "after_db_path")
+            cases_path = self._require_string(payload, "cases_path")
+            limit = _coerce_int(payload.get("limit", 6), "limit")
+            context_window = _coerce_int(payload.get("context_window", 2), "context_window")
+            related_limit = _coerce_int(payload.get("related_limit", 3), "related_limit")
+            archive_dir = payload.get("archive_dir")
+            if archive_dir is not None and not isinstance(archive_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "archive_dir must be a string")
+            result = build_debug_bundle_regression_panel(
+                indexer=self.indexer,
+                answerer=self.answerer,
+                before_db_path=before_db_path,
+                after_db_path=after_db_path,
+                cases_path=cases_path,
+                limit=limit,
+                context_window=context_window,
+                related_limit=related_limit,
+                archive_dir=archive_dir,
+            )
+            result["thresholds"] = evaluate_debug_bundle_regression_panel_thresholds(
+                result,
+                DebugBundlePanelThresholds(
+                    max_changed_cases=_optional_nonnegative_int(payload.get("max_changed_cases"), "max_changed_cases"),
+                    max_high_priority_cases=_optional_nonnegative_int(payload.get("max_high_priority_cases"), "max_high_priority_cases"),
+                    max_verdict_counts=_coerce_named_int_mapping(payload.get("max_verdict_counts"), "max_verdict_counts"),
+                    max_focus_area_counts=_coerce_named_int_mapping(payload.get("max_focus_area_counts"), "max_focus_area_counts"),
+                ),
+            )
+            return HTTPStatus.OK, result
+
+        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")
@@ -244,3 +284,34 @@ def _coerce_int(value: Any, field_name: str) -> int:
     if coerced <= 0:
         raise ApiError(HTTPStatus.BAD_REQUEST, f"{field_name} must be greater than 0")
     return coerced
+
+
+def _optional_int(value: Any, field_name: str) -> int | None:
+    if value is None:
+        return None
+    return _coerce_int(value, field_name)
+
+
+def _optional_nonnegative_int(value: Any, field_name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ApiError(HTTPStatus.BAD_REQUEST, f"{field_name} must be an integer") from exc
+    if coerced < 0:
+        raise ApiError(HTTPStatus.BAD_REQUEST, f"{field_name} must be greater than or equal to 0")
+    return coerced
+
+
+def _coerce_named_int_mapping(value: Any, field_name: str) -> dict[str, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ApiError(HTTPStatus.BAD_REQUEST, f"{field_name} must be an object")
+    result: dict[str, int] = {}
+    for key, raw_value in value.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ApiError(HTTPStatus.BAD_REQUEST, f"{field_name} keys must be non-empty strings")
+        result[key.strip()] = _optional_nonnegative_int(raw_value, f"{field_name}.{key}") or 0
+    return result

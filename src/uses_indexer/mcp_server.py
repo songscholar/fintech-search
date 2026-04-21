@@ -7,7 +7,13 @@ from typing import Any, TextIO
 
 from .answering import CodebaseAnswerer
 from .constants import JSON_RPC_VERSION, MCP_PROTOCOL_VERSION
-from .debug_bundle import build_debug_bundle, compare_debug_bundles
+from .debug_bundle import (
+    DebugBundlePanelThresholds,
+    build_debug_bundle,
+    build_debug_bundle_regression_panel,
+    compare_debug_bundles,
+    evaluate_debug_bundle_regression_panel_thresholds,
+)
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
 from .table_indexer import TableIndexer
@@ -169,6 +175,7 @@ class CodebaseMcpServer:
             "answer_codebase": self._tool_answer_codebase,
             "debug_bundle": self._tool_debug_bundle,
             "compare_debug_bundles": self._tool_compare_debug_bundles,
+            "compare_debug_bundle_panel": self._tool_compare_debug_bundle_panel,
             "query_metadata": self._tool_query_metadata,
             "query_table": self._tool_query_table,
         }
@@ -311,6 +318,34 @@ class CodebaseMcpServer:
                         "after_path": {"type": "string"},
                     },
                     "required": ["before_path", "after_path"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "compare_debug_bundle_panel",
+                "description": "Run a fixed question set across before/after DBs, build a regression panel, and evaluate optional panel thresholds.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "before_db_path": {"type": "string"},
+                        "after_db_path": {"type": "string"},
+                        "cases_path": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                        "context_window": {"type": "integer", "minimum": 0, "maximum": 20},
+                        "related_limit": {"type": "integer", "minimum": 0, "maximum": 20},
+                        "archive_dir": {"type": "string"},
+                        "max_changed_cases": {"type": "integer", "minimum": 0},
+                        "max_high_priority_cases": {"type": "integer", "minimum": 0},
+                        "max_verdict_counts": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer", "minimum": 0}
+                        },
+                        "max_focus_area_counts": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer", "minimum": 0}
+                        }
+                    },
+                    "required": ["before_db_path", "after_db_path", "cases_path"],
                     "additionalProperties": False,
                 },
             },
@@ -460,6 +495,36 @@ class CodebaseMcpServer:
         after_path = self._required_string(arguments, "after_path")
         return compare_debug_bundles(before_path, after_path)
 
+    def _tool_compare_debug_bundle_panel(self, arguments: dict[str, object]) -> dict[str, object]:
+        before_db_path = self._required_string(arguments, "before_db_path")
+        after_db_path = self._required_string(arguments, "after_db_path")
+        cases_path = self._required_string(arguments, "cases_path")
+        limit = self._optional_int(arguments, "limit", default=6)
+        context_window = self._optional_int(arguments, "context_window", default=2)
+        related_limit = self._optional_int(arguments, "related_limit", default=3)
+        archive_dir = self._optional_string(arguments, "archive_dir")
+        result = build_debug_bundle_regression_panel(
+            indexer=self.indexer,
+            answerer=self.answerer,
+            before_db_path=before_db_path,
+            after_db_path=after_db_path,
+            cases_path=cases_path,
+            limit=limit,
+            context_window=context_window,
+            related_limit=related_limit,
+            archive_dir=archive_dir,
+        )
+        result["thresholds"] = evaluate_debug_bundle_regression_panel_thresholds(
+            result,
+            DebugBundlePanelThresholds(
+                max_changed_cases=self._optional_nonnegative_int(arguments, "max_changed_cases"),
+                max_high_priority_cases=self._optional_nonnegative_int(arguments, "max_high_priority_cases"),
+                max_verdict_counts=self._optional_named_int_mapping(arguments, "max_verdict_counts"),
+                max_focus_area_counts=self._optional_named_int_mapping(arguments, "max_focus_area_counts"),
+            ),
+        )
+        return result
+
     def _resolve_db_path(self, arguments: dict[str, object]) -> str:
         db_path = self._optional_string(arguments, "db_path")
         if not db_path:
@@ -500,6 +565,37 @@ class CodebaseMcpServer:
         if isinstance(value, bool) or not isinstance(value, int):
             raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} must be an integer."})
         return value
+
+    def _optional_nonnegative_int(self, arguments: dict[str, object], name: str) -> int | None:
+        value = arguments.get(name)
+        if value is None:
+            value = arguments.get(self._camel_name(name))
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} must be an integer."})
+        if value < 0:
+            raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} must be >= 0."})
+        return value
+
+    def _optional_named_int_mapping(self, arguments: dict[str, object], name: str) -> dict[str, int] | None:
+        value = arguments.get(name)
+        if value is None:
+            value = arguments.get(self._camel_name(name))
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} must be an object."})
+        result: dict[str, int] = {}
+        for key, raw_value in value.items():
+            if not isinstance(key, str) or not key.strip():
+                raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name} keys must be non-empty strings."})
+            if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+                raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name}.{key} must be an integer."})
+            if raw_value < 0:
+                raise McpProtocolError(-32602, "Invalid params", {"detail": f"{name}.{key} must be >= 0."})
+            result[key.strip()] = raw_value
+        return result
 
     def _optional_bool(self, arguments: dict[str, object], name: str, *, default: bool) -> bool:
         value = arguments.get(name)

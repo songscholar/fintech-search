@@ -371,6 +371,17 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 - 留一份“这次改动到底影响了哪些典型问题”的证据包
 - 在 CI 里作为发布前守门
 
+### 如果你是通过 API / MCP 调用
+
+现在这套 panel 能力不只在 CLI 可用：
+
+- HTTP API:
+  - `POST /compare-debug-bundle-panel`
+- MCP tool:
+  - `compare_debug_bundle_panel`
+
+这样如果你是在上层 Agent、服务端任务或前端控制台里做回归，也可以直接复用同一套 panel 结构和 threshold 结果，而不用自己再拼装一层。
+
 ## 9. 相关文档
 
 - [TRACE_SCHEMA.md](/Users/songzuoqiang/Documents/agent/condex/codes/docs/TRACE_SCHEMA.md)
