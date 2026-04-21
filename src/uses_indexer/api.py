@@ -13,7 +13,11 @@ from .debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    compare_debug_bundle_regression_panel_baseline,
+    compare_debug_bundle_regression_panels,
     evaluate_debug_bundle_regression_panel_thresholds,
+    list_debug_bundle_regression_panel_baselines,
+    save_debug_bundle_regression_panel_baseline,
 )
 from .indexer import SQLiteIndexer
 from .llm import LlmConfigError, LlmRequestError
@@ -74,6 +78,10 @@ class CodebaseApi:
                     "POST /debug-bundle",
                     "POST /compare-debug-bundles",
                     "POST /compare-debug-bundle-panel",
+                    "POST /compare-debug-bundle-panels",
+                    "GET /list-debug-bundle-panel-baselines",
+                    "POST /save-debug-bundle-panel-baseline",
+                    "POST /compare-debug-bundle-panel-baseline",
                 ],
             }
 
@@ -198,8 +206,47 @@ class CodebaseApi:
             )
             return HTTPStatus.OK, result
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel"} and method != "POST":
+        if route == "/compare-debug-bundle-panels" and method == "POST":
+            payload = self._parse_json_body(body)
+            before_path = self._require_string(payload, "before_path")
+            after_path = self._require_string(payload, "after_path")
+            return HTTPStatus.OK, compare_debug_bundle_regression_panels(before_path, after_path)
+
+        if route == "/list-debug-bundle-panel-baselines" and method == "GET":
+            baseline_dir = query_params.get("baseline_dir", [None])[0]
+            return HTTPStatus.OK, list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir)
+
+        if route == "/save-debug-bundle-panel-baseline" and method == "POST":
+            payload = self._parse_json_body(body)
+            panel_path = self._require_string(payload, "panel_path")
+            baseline_name = self._require_string(payload, "baseline_name")
+            baseline_dir = payload.get("baseline_dir")
+            if baseline_dir is not None and not isinstance(baseline_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_dir must be a string")
+            return HTTPStatus.OK, save_debug_bundle_regression_panel_baseline(
+                panel_path,
+                baseline_name,
+                baseline_dir=baseline_dir,
+            )
+
+        if route == "/compare-debug-bundle-panel-baseline" and method == "POST":
+            payload = self._parse_json_body(body)
+            panel_path = self._require_string(payload, "panel_path")
+            baseline_name = self._require_string(payload, "baseline_name")
+            baseline_dir = payload.get("baseline_dir")
+            if baseline_dir is not None and not isinstance(baseline_dir, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "baseline_dir must be a string")
+            return HTTPStatus.OK, compare_debug_bundle_regression_panel_baseline(
+                panel_path,
+                baseline_name,
+                baseline_dir=baseline_dir,
+            )
+
+        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
+
+        if route == "/list-debug-bundle-panel-baselines" and method != "GET":
+            raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")
 

@@ -85,6 +85,10 @@ def test_initialize_and_tool_listing(tmp_path: Path) -> None:
     assert any(tool["name"] == "debug_bundle" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundles" for tool in tools)
     assert any(tool["name"] == "compare_debug_bundle_panel" for tool in tools)
+    assert any(tool["name"] == "compare_debug_bundle_panels" for tool in tools)
+    assert any(tool["name"] == "save_debug_bundle_panel_baseline" for tool in tools)
+    assert any(tool["name"] == "list_debug_bundle_panel_baselines" for tool in tools)
+    assert any(tool["name"] == "compare_debug_bundle_panel_baseline" for tool in tools)
 
 
 def test_tool_call_returns_grounded_answer(tmp_path: Path) -> None:
@@ -221,6 +225,106 @@ def test_tool_call_builds_debug_bundle_panel(tmp_path: Path) -> None:
     assert structured["bundle_kind"] == "debug_bundle_regression_panel"
     assert structured["case_count"] == 1
     assert structured["thresholds"]["status"] == "pass"
+
+
+def test_tool_call_manages_debug_bundle_panel_baselines(tmp_path: Path) -> None:
+    server, db_path = _build_server(tmp_path)
+    cases_path = tmp_path / "panel_cases.json"
+    cases_path.write_text(
+        json.dumps({"cases": [{"question": "证券代码获取的逻辑在哪里"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    panel_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_debug_bundle_panel",
+                "arguments": {
+                    "before_db_path": str(db_path),
+                    "after_db_path": str(db_path),
+                    "cases_path": str(cases_path),
+                },
+            },
+        }
+    )
+    assert panel_response is not None
+    panel = panel_response["result"]["structuredContent"]
+
+    panel_dir = tmp_path / "panel_archive"
+    panel_dir.mkdir()
+    (panel_dir / "panel.json").write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_dir / "panel.md").write_text(str(panel.get("markdown_summary") or ""), encoding="utf-8")
+    (panel_dir / "panel_summary.json").write_text(json.dumps({"summary": panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    save_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "save_debug_bundle_panel_baseline",
+                "arguments": {
+                    "panel_path": str(panel_dir),
+                    "baseline_name": "mcp baseline",
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                },
+            },
+        }
+    )
+    assert save_response is not None
+    assert save_response["result"]["structuredContent"]["baseline_slug"] == "mcp-baseline"
+
+    list_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "list_debug_bundle_panel_baselines",
+                "arguments": {"baseline_dir": str(tmp_path / "baseline_store")},
+            },
+        }
+    )
+    assert list_response is not None
+    assert list_response["result"]["structuredContent"]["count"] == 1
+
+    compare_saved_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_debug_bundle_panel_baseline",
+                "arguments": {
+                    "panel_path": str(panel_dir),
+                    "baseline_name": "mcp baseline",
+                    "baseline_dir": str(tmp_path / "baseline_store"),
+                },
+            },
+        }
+    )
+    assert compare_saved_response is not None
+    assert compare_saved_response["result"]["structuredContent"]["baseline"]["baseline_slug"] == "mcp-baseline"
+
+    compare_panels_response = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_debug_bundle_panels",
+                "arguments": {
+                    "before_path": str(panel_dir),
+                    "after_path": str(panel_dir),
+                },
+            },
+        }
+    )
+    assert compare_panels_response is not None
+    assert compare_panels_response["result"]["structuredContent"]["bundle_kind"] == "debug_bundle_regression_panel_comparison"
 
 
 def test_stdio_serve_writes_jsonrpc_lines(tmp_path: Path) -> None:

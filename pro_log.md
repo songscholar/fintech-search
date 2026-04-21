@@ -2329,3 +2329,62 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 批量 panel 现在已经可以作为长期基线产物保存下来
 - 这一步让回归能力从“当前版本审阅”进一步升级成了“历史基线比较”
+
+## [1.2.32] - 2026-04-21
+
+### Step 39: 增加固定 baseline 管理并接到 API / MCP
+
+### 本步目标
+
+- 让 panel baseline 不只是“两个 archive 临时比较”，而是能保存、列出、按名字复用
+- 让 panel archive compare 和 baseline 管理都能被 API / MCP 直接调用
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `save_debug_bundle_regression_panel_baseline()`
+   - 新增 `list_debug_bundle_regression_panel_baselines()`
+   - 新增 `load_debug_bundle_regression_panel_baseline()`
+   - 新增 `compare_debug_bundle_regression_panel_baseline()`
+   - 新增默认 baseline 目录解析和 baseline 元数据写入
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `save-debug-bundle-panel-baseline`
+   - 新增 `list-debug-bundle-panel-baselines`
+   - 新增 `compare-debug-bundle-panel-baseline`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /compare-debug-bundle-panels`
+   - 新增 `GET /list-debug-bundle-panel-baselines`
+   - 新增 `POST /save-debug-bundle-panel-baseline`
+   - 新增 `POST /compare-debug-bundle-panel-baseline`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `compare_debug_bundle_panels`
+   - 新增 `save_debug_bundle_panel_baseline`
+   - 新增 `list_debug_bundle_panel_baselines`
+   - 新增 `compare_debug_bundle_panel_baseline`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 baseline 保存 / 列表 / 命名比较回归
+   - `tests/test_api.py`
+     - 新增 panel archive compare 和 baseline 管理 API 回归
+   - `tests/test_mcp.py`
+     - 新增对应 MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充固定 baseline 的 CLI / API / MCP 用法
+   - `docs/EVALUATION.md`
+     - 补充固定 baseline 评测工作流
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- 现在 panel 不只支持“历史 archive 对比”，还支持“固定命名 baseline”
+- 这一步让回归流程从临时产物管理进一步升级成了可复用的长期基线体系

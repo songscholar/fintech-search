@@ -160,6 +160,55 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert panel["case_count"] == 1
     assert panel["thresholds"]["status"] == "pass"
 
+    panel_archive = tmp_path / "panel_archive"
+    panel_archive.mkdir()
+    (panel_archive / "panel.json").write_text(json.dumps(panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_archive / "panel.md").write_text(str(panel.get("markdown_summary") or ""), encoding="utf-8")
+    (panel_archive / "panel_summary.json").write_text(json.dumps({"summary": panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    status, saved = api.handle_request(
+        "POST",
+        "/save-debug-bundle-panel-baseline",
+        json.dumps(
+            {
+                "panel_path": str(panel_archive),
+                "baseline_name": "smoke baseline",
+                "baseline_dir": str(tmp_path / "baseline_store"),
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert saved["baseline_slug"] == "smoke-baseline"
+
+    status, baselines = api.handle_request(
+        "GET",
+        f"/list-debug-bundle-panel-baselines?baseline_dir={tmp_path / 'baseline_store'}",
+    )
+    assert status == 200
+    assert baselines["count"] == 1
+
+    status, compared = api.handle_request(
+        "POST",
+        "/compare-debug-bundle-panels",
+        json.dumps({"before_path": str(panel_archive), "after_path": str(panel_archive)}).encode("utf-8"),
+    )
+    assert status == 200
+    assert compared["bundle_kind"] == "debug_bundle_regression_panel_comparison"
+
+    status, baseline_compare = api.handle_request(
+        "POST",
+        "/compare-debug-bundle-panel-baseline",
+        json.dumps(
+            {
+                "panel_path": str(panel_archive),
+                "baseline_name": "smoke baseline",
+                "baseline_dir": str(tmp_path / "baseline_store"),
+            }
+        ).encode("utf-8"),
+    )
+    assert status == 200
+    assert baseline_compare["baseline"]["baseline_slug"] == "smoke-baseline"
+
 
 def test_http_server_serves_json(tmp_path: Path) -> None:
     api, _ = _build_api(tmp_path)
@@ -208,6 +257,25 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         body = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert body["bundle_kind"] == "debug_bundle_regression_panel"
+
+        panel_archive = tmp_path / "http_panel_archive"
+        panel_archive.mkdir()
+        (panel_archive / "panel.json").write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+        (panel_archive / "panel.md").write_text(str(body.get("markdown_summary") or ""), encoding="utf-8")
+        (panel_archive / "panel_summary.json").write_text(json.dumps({"summary": body["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        baseline_payload = json.dumps(
+            {
+                "panel_path": str(panel_archive),
+                "baseline_name": "http baseline",
+                "baseline_dir": str(tmp_path / "http_baselines"),
+            }
+        )
+        conn.request("POST", "/save-debug-bundle-panel-baseline", body=baseline_payload, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        body = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert body["baseline_slug"] == "http-baseline"
     finally:
         server.shutdown()
         thread.join(timeout=5)

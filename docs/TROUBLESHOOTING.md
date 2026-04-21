@@ -414,6 +414,59 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
 2. 用 `compare-debug-bundle-panels` 和上一次基线 archive 做比较
 3. 如果 panel-level 对比明显变差，再下钻到单题 `comparison.md`
 
+### 怎么管理固定 baseline
+
+如果你不想每次都记住某个历史 archive 的完整路径，可以把它保存成命名 baseline。
+
+先保存：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --output ./examples/release_candidate_baseline.json
+```
+
+再查看当前有哪些 baseline：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-baselines \
+  --baseline-dir ./examples/panel_baselines
+```
+
+最后把当前 panel 和固定 baseline 做比较：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --markdown-output ./examples/release_candidate_compare.md \
+  --output ./examples/release_candidate_compare.json
+```
+
+这套命名 baseline 的好处是：
+
+- 不需要人工维护“这次应该拿哪个 archive 目录做 before”
+- 同名 baseline 可以直接覆盖，适合“当前状态就是新的标准答案”
+- 很适合 release review、固定 smoke case 和长期回归
+
+### baseline 管理也开放到了 API / MCP
+
+现在除了 CLI，还可以直接通过服务接口做这些事：
+
+- HTTP API
+  - `POST /compare-debug-bundle-panels`
+  - `GET /list-debug-bundle-panel-baselines`
+  - `POST /save-debug-bundle-panel-baseline`
+  - `POST /compare-debug-bundle-panel-baseline`
+- MCP tool
+  - `compare_debug_bundle_panels`
+  - `list_debug_bundle_panel_baselines`
+  - `save_debug_bundle_panel_baseline`
+  - `compare_debug_bundle_panel_baseline`
+
 ## 9. 相关文档
 
 - [TRACE_SCHEMA.md](/Users/songzuoqiang/Documents/agent/condex/codes/docs/TRACE_SCHEMA.md)

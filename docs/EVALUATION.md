@@ -373,3 +373,51 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 增加“找定义”和“找调用处”的区分字段。
 - 增加 answer 层评测，检查最终回答是否引用了正确证据。
 - 接入真实 embedding 后，用同一份 case 对比本地 hash embedding 与真实 embedding 的差异。
+
+## 固定 baseline 的评测工作流
+
+如果你已经有一组相对稳定的 regression panel，可以把它保存成命名 baseline，后面每次直接和它比较。
+
+推荐流程：
+
+1. 先生成一份当前 panel archive
+2. 把它保存成命名 baseline
+3. 每次新改动后再生成一份 panel archive
+4. 用当前 panel 和命名 baseline 做比较
+5. 如果 reviewer summary 和 threshold 都符合预期，再把当前 panel 覆盖成新的 baseline
+
+示例：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_current \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines
+
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
+  --panel ./examples/debug_bundle_panel_next \
+  --name "release-candidate" \
+  --baseline-dir ./examples/panel_baselines \
+  --markdown-output ./examples/release_candidate_compare.md \
+  --output ./examples/release_candidate_compare.json
+```
+
+这样做的价值是：
+
+- `eval-retrieval` 继续负责整体数值门槛
+- `compare-debug-bundle-panel` 继续负责生成典型问题链路视图
+- `compare-debug-bundle-panels` 负责任意两个 archive 的历史对比
+- `compare-debug-bundle-panel-baseline` 则负责“和固定标准答案比”
+
+如果你是通过服务接口跑评测，也可以直接走：
+
+- HTTP API
+  - `POST /compare-debug-bundle-panels`
+  - `GET /list-debug-bundle-panel-baselines`
+  - `POST /save-debug-bundle-panel-baseline`
+  - `POST /compare-debug-bundle-panel-baseline`
+- MCP tool
+  - `compare_debug_bundle_panels`
+  - `list_debug_bundle_panel_baselines`
+  - `save_debug_bundle_panel_baseline`
+  - `compare_debug_bundle_panel_baseline`

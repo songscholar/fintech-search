@@ -13,8 +13,11 @@ from .debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
     evaluate_debug_bundle_regression_panel_thresholds,
+    list_debug_bundle_regression_panel_baselines,
+    save_debug_bundle_regression_panel_baseline,
     write_debug_bundle_archive,
 )
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
@@ -118,6 +121,23 @@ def main() -> int:
     compare_panel_archives_parser.add_argument("--after", required=True, help="New panel archive directory or panel.json path.")
     compare_panel_archives_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
     compare_panel_archives_parser.add_argument("--output", help="Optional JSON comparison output path.")
+
+    save_panel_baseline_parser = subparsers.add_parser("save-debug-bundle-panel-baseline", help="Save a named baseline from a debug bundle regression panel archive or panel.json file.")
+    save_panel_baseline_parser.add_argument("--panel", required=True, help="Panel archive directory or panel.json path.")
+    save_panel_baseline_parser.add_argument("--name", required=True, help="Stable baseline name.")
+    save_panel_baseline_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    save_panel_baseline_parser.add_argument("--output", help="Optional JSON output path.")
+
+    list_panel_baselines_parser = subparsers.add_parser("list-debug-bundle-panel-baselines", help="List saved debug bundle regression panel baselines.")
+    list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    list_panel_baselines_parser.add_argument("--output", help="Optional JSON output path.")
+
+    compare_panel_baseline_parser = subparsers.add_parser("compare-debug-bundle-panel-baseline", help="Compare a panel archive against a saved named baseline.")
+    compare_panel_baseline_parser.add_argument("--panel", required=True, help="Panel archive directory or panel.json path.")
+    compare_panel_baseline_parser.add_argument("--name", required=True, help="Saved baseline name.")
+    compare_panel_baseline_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    compare_panel_baseline_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
+    compare_panel_baseline_parser.add_argument("--output", help="Optional JSON comparison output path.")
 
     evidence_parser = subparsers.add_parser("assemble-evidence", help="Assemble retrieval evidence for LLM answering.")
     evidence_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -294,6 +314,12 @@ def main() -> int:
         )
     elif args.command == "compare-debug-bundle-panels":
         data = compare_debug_bundle_regression_panels(args.before, args.after)
+    elif args.command == "save-debug-bundle-panel-baseline":
+        data = save_debug_bundle_regression_panel_baseline(args.panel, args.name, baseline_dir=args.baseline_dir)
+    elif args.command == "list-debug-bundle-panel-baselines":
+        data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir)
+    elif args.command == "compare-debug-bundle-panel-baseline":
+        data = compare_debug_bundle_regression_panel_baseline(args.panel, args.name, baseline_dir=args.baseline_dir)
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,
@@ -352,6 +378,10 @@ def main() -> int:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
     if args.command == "compare-debug-bundle-panels" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "compare-debug-bundle-panel-baseline" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")

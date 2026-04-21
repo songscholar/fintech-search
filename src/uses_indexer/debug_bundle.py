@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,9 @@ class DebugBundlePanelThresholds:
     max_high_priority_cases: int | None = None
     max_verdict_counts: dict[str, int] | None = None
     max_focus_area_counts: dict[str, int] | None = None
+
+
+DEFAULT_DEBUG_BUNDLE_PANEL_BASELINE_DIR = Path(".uses_indexer") / "debug_bundle_panel_baselines"
 
 
 def build_debug_bundle(
@@ -404,6 +409,139 @@ def compare_debug_bundle_regression_panels(before_path: str | Path, after_path: 
     return comparison
 
 
+def save_debug_bundle_regression_panel_baseline(
+    panel_path: str | Path,
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+) -> dict[str, object]:
+    panel = _load_debug_bundle_regression_panel(panel_path)
+    source_archive = _normalize_panel_archive_path(panel_path)
+    root = _resolve_panel_baseline_dir(baseline_dir)
+    root.mkdir(parents=True, exist_ok=True)
+
+    baseline_slug = _slugify(baseline_name)
+    target_dir = root / baseline_slug
+    replaced = target_dir.exists()
+    if replaced:
+        shutil.rmtree(target_dir)
+
+    if source_archive.is_dir():
+        shutil.copytree(source_archive, target_dir)
+    else:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        write_debug_bundle_regression_panel_archive(panel, target_dir)
+
+    baseline_record = {
+        "bundle_kind": "debug_bundle_regression_panel_baseline",
+        "baseline_name": baseline_name,
+        "baseline_slug": baseline_slug,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "archive_dir": str(target_dir),
+        "source_path": str(panel_path),
+        "replaced": replaced,
+        "case_count": panel.get("case_count"),
+        "summary": panel.get("summary"),
+    }
+    baseline_record_path = target_dir / "baseline.json"
+    baseline_record_path.write_text(json.dumps(baseline_record, ensure_ascii=False, indent=2), encoding="utf-8")
+    baseline_record["files"] = {
+        "baseline": str(baseline_record_path),
+        "panel": str(target_dir / "panel.json"),
+        "markdown": str(target_dir / "panel.md"),
+        "summary": str(target_dir / "panel_summary.json"),
+    }
+    return baseline_record
+
+
+def list_debug_bundle_regression_panel_baselines(
+    *,
+    baseline_dir: str | Path | None = None,
+) -> dict[str, object]:
+    root = _resolve_panel_baseline_dir(baseline_dir)
+    items: list[dict[str, object]] = []
+    if root.exists():
+        for entry in sorted(path for path in root.iterdir() if path.is_dir()):
+            record_path = entry / "baseline.json"
+            if record_path.exists():
+                record = json.loads(record_path.read_text(encoding="utf-8"))
+            else:
+                panel = _load_debug_bundle_regression_panel(entry)
+                record = {
+                    "baseline_name": entry.name,
+                    "baseline_slug": entry.name,
+                    "saved_at": None,
+                    "archive_dir": str(entry),
+                    "case_count": panel.get("case_count"),
+                    "summary": panel.get("summary"),
+                }
+            summary = dict(record.get("summary") or {})
+            verdict_counts = dict(summary.get("verdict_counts") or {})
+            items.append(
+                {
+                    "baseline_name": record.get("baseline_name"),
+                    "baseline_slug": record.get("baseline_slug"),
+                    "saved_at": record.get("saved_at"),
+                    "archive_dir": record.get("archive_dir"),
+                    "case_count": record.get("case_count"),
+                    "changed_case_count": summary.get("changed_case_count"),
+                    "possible_regression_count": verdict_counts.get("possible_regression", 0),
+                }
+            )
+    return {
+        "bundle_kind": "debug_bundle_regression_panel_baseline_index",
+        "baseline_dir": str(root),
+        "count": len(items),
+        "items": items,
+    }
+
+
+def load_debug_bundle_regression_panel_baseline(
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+) -> dict[str, object]:
+    root = _resolve_panel_baseline_dir(baseline_dir)
+    baseline_slug = _slugify(baseline_name)
+    target_dir = root / baseline_slug
+    if not target_dir.exists():
+        raise FileNotFoundError(f"Debug bundle panel baseline does not exist: {target_dir}")
+    record_path = target_dir / "baseline.json"
+    if record_path.exists():
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    else:
+        panel = _load_debug_bundle_regression_panel(target_dir)
+        record = {
+            "bundle_kind": "debug_bundle_regression_panel_baseline",
+            "baseline_name": baseline_name,
+            "baseline_slug": baseline_slug,
+            "saved_at": None,
+            "archive_dir": str(target_dir),
+            "source_path": str(target_dir),
+            "replaced": False,
+            "case_count": panel.get("case_count"),
+            "summary": panel.get("summary"),
+        }
+    record["archive_dir"] = str(target_dir)
+    return record
+
+
+def compare_debug_bundle_regression_panel_baseline(
+    panel_path: str | Path,
+    baseline_name: str,
+    *,
+    baseline_dir: str | Path | None = None,
+) -> dict[str, object]:
+    baseline = load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
+    comparison = compare_debug_bundle_regression_panels(baseline["archive_dir"], panel_path)
+    comparison["baseline"] = {
+        "baseline_name": baseline["baseline_name"],
+        "baseline_slug": baseline["baseline_slug"],
+        "baseline_dir": baseline["archive_dir"],
+    }
+    return comparison
+
+
 def compare_debug_bundles_from_payloads(
     before_bundle: dict[str, object],
     after_bundle: dict[str, object],
@@ -535,6 +673,17 @@ def _load_debug_bundle_regression_panel(path: str | Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"Debug bundle regression panel must be a JSON object: {candidate}")
     return payload
+
+
+def _normalize_panel_archive_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_dir() else candidate.parent
+
+
+def _resolve_panel_baseline_dir(baseline_dir: str | Path | None) -> Path:
+    if baseline_dir is None:
+        return (Path.cwd() / DEFAULT_DEBUG_BUNDLE_PANEL_BASELINE_DIR).resolve()
+    return Path(baseline_dir).resolve()
 
 
 def _query_type(query_payload: dict[str, object]) -> str:

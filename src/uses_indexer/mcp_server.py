@@ -12,7 +12,11 @@ from .debug_bundle import (
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    compare_debug_bundle_regression_panel_baseline,
+    compare_debug_bundle_regression_panels,
     evaluate_debug_bundle_regression_panel_thresholds,
+    list_debug_bundle_regression_panel_baselines,
+    save_debug_bundle_regression_panel_baseline,
 )
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
@@ -176,6 +180,10 @@ class CodebaseMcpServer:
             "debug_bundle": self._tool_debug_bundle,
             "compare_debug_bundles": self._tool_compare_debug_bundles,
             "compare_debug_bundle_panel": self._tool_compare_debug_bundle_panel,
+            "compare_debug_bundle_panels": self._tool_compare_debug_bundle_panels,
+            "save_debug_bundle_panel_baseline": self._tool_save_debug_bundle_panel_baseline,
+            "list_debug_bundle_panel_baselines": self._tool_list_debug_bundle_panel_baselines,
+            "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
             "query_metadata": self._tool_query_metadata,
             "query_table": self._tool_query_table,
         }
@@ -346,6 +354,58 @@ class CodebaseMcpServer:
                         }
                     },
                     "required": ["before_db_path", "after_db_path", "cases_path"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "compare_debug_bundle_panels",
+                "description": "Compare two saved debug bundle regression panel archives or panel.json files.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "before_path": {"type": "string"},
+                        "after_path": {"type": "string"},
+                    },
+                    "required": ["before_path", "after_path"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "save_debug_bundle_panel_baseline",
+                "description": "Save a named baseline from a debug bundle regression panel archive or panel.json file.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "panel_path": {"type": "string"},
+                        "baseline_name": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                    },
+                    "required": ["panel_path", "baseline_name"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "list_debug_bundle_panel_baselines",
+                "description": "List saved debug bundle regression panel baselines.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "baseline_dir": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "compare_debug_bundle_panel_baseline",
+                "description": "Compare a panel archive against a saved named debug bundle regression panel baseline.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "panel_path": {"type": "string"},
+                        "baseline_name": {"type": "string"},
+                        "baseline_dir": {"type": "string"},
+                    },
+                    "required": ["panel_path", "baseline_name"],
                     "additionalProperties": False,
                 },
             },
@@ -524,6 +584,27 @@ class CodebaseMcpServer:
             ),
         )
         return result
+
+    def _tool_compare_debug_bundle_panels(self, arguments: dict[str, object]) -> dict[str, object]:
+        before_path = self._required_string(arguments, "before_path")
+        after_path = self._required_string(arguments, "after_path")
+        return compare_debug_bundle_regression_panels(before_path, after_path)
+
+    def _tool_save_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
+        panel_path = self._required_string(arguments, "panel_path")
+        baseline_name = self._required_string(arguments, "baseline_name")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        return save_debug_bundle_regression_panel_baseline(panel_path, baseline_name, baseline_dir=baseline_dir)
+
+    def _tool_list_debug_bundle_panel_baselines(self, arguments: dict[str, object]) -> dict[str, object]:
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        return list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir)
+
+    def _tool_compare_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
+        panel_path = self._required_string(arguments, "panel_path")
+        baseline_name = self._required_string(arguments, "baseline_name")
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        return compare_debug_bundle_regression_panel_baseline(panel_path, baseline_name, baseline_dir=baseline_dir)
 
     def _resolve_db_path(self, arguments: dict[str, object]) -> str:
         db_path = self._optional_string(arguments, "db_path")

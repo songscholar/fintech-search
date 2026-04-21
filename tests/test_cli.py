@@ -10,9 +10,12 @@ from uses_indexer.debug_bundle import (
     DebugBundlePanelThresholds,
     build_debug_bundle,
     build_debug_bundle_regression_panel,
+    compare_debug_bundle_regression_panel_baseline,
     compare_debug_bundle_regression_panels,
     compare_debug_bundles,
     evaluate_debug_bundle_regression_panel_thresholds,
+    list_debug_bundle_regression_panel_baselines,
+    save_debug_bundle_regression_panel_baseline,
     write_debug_bundle_archive,
 )
 from uses_indexer.indexer import SQLiteIndexer
@@ -349,3 +352,67 @@ def test_compare_debug_bundle_regression_panels_reports_panel_deltas(tmp_path: P
     assert comparison["summary"]["verdict_counts_delta"]["possible_regression"] == 1
     assert comparison["review_summary"]["verdict"] == "possible_regression"
     assert comparison["markdown_summary"].startswith("# Debug Bundle Regression Panel Comparison")
+
+
+def test_save_list_and_compare_debug_bundle_panel_baselines(tmp_path: Path) -> None:
+    before_panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/before.db",
+        "after_db_path": "/tmp/before.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {
+            "changed_case_count": 0,
+            "stable_case_count": 1,
+            "verdict_counts": {"stable": 1},
+            "priority_counts": {"low": 1},
+            "focus_area_counts": {"stable": 1},
+            "high_priority_cases": [],
+        },
+        "cases": [
+            {"case_id": "c1", "question_text": "q1", "review_summary": {"verdict": "stable", "priority": "low", "focus_area": "stable"}},
+        ],
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    after_panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/after.db",
+        "after_db_path": "/tmp/after.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {
+            "changed_case_count": 1,
+            "stable_case_count": 0,
+            "verdict_counts": {"possible_regression": 1},
+            "priority_counts": {"high": 1},
+            "focus_area_counts": {"retrieval": 1},
+            "high_priority_cases": [{"case_id": "c1", "question": "q1", "verdict": "possible_regression", "focus_area": "retrieval"}],
+        },
+        "cases": [
+            {"case_id": "c1", "question_text": "q1", "review_summary": {"verdict": "possible_regression", "priority": "high", "focus_area": "retrieval"}},
+        ],
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    panel_dir = tmp_path / "panel_archive"
+    baseline_dir = tmp_path / "baseline_store"
+    panel_dir.mkdir()
+    (panel_dir / "panel.json").write_text(json.dumps(before_panel, ensure_ascii=False, indent=2), encoding="utf-8")
+    (panel_dir / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+    (panel_dir / "panel_summary.json").write_text(json.dumps({"summary": before_panel["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    saved = save_debug_bundle_regression_panel_baseline(panel_dir, "release candidate", baseline_dir=baseline_dir)
+    assert saved["baseline_slug"] == "release-candidate"
+    assert Path(saved["files"]["baseline"]).exists()
+
+    listed = list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir)
+    assert listed["count"] == 1
+    assert listed["items"][0]["baseline_name"] == "release candidate"
+
+    current_dir = tmp_path / "current_panel"
+    current_dir.mkdir()
+    (current_dir / "panel.json").write_text(json.dumps(after_panel, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    comparison = compare_debug_bundle_regression_panel_baseline(current_dir, "release candidate", baseline_dir=baseline_dir)
+    assert comparison["bundle_kind"] == "debug_bundle_regression_panel_comparison"
+    assert comparison["baseline"]["baseline_slug"] == "release-candidate"
+    assert comparison["review_summary"]["verdict"] == "possible_regression"
