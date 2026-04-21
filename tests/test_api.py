@@ -98,6 +98,17 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert answer["final_answer"]["source"] in {"draft", "draft_fallback", "llm"}
     assert answer["response_kind"] == "answer"
 
+    status, bundle = api.handle_request(
+        "POST",
+        "/debug-bundle",
+        json.dumps({"question": "证券代码获取的逻辑在哪里", "limit": 2}).encode("utf-8"),
+    )
+    assert status == 200
+    assert bundle["bundle_kind"] == "debug_bundle"
+    assert bundle["query"]["response_kind"] == "query"
+    assert bundle["evidence"]["response_kind"] == "evidence"
+    assert bundle["answer"]["response_kind"] == "answer"
+
 
 def test_http_server_serves_json(tmp_path: Path) -> None:
     api, _ = _build_api(tmp_path)

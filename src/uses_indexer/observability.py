@@ -6,6 +6,16 @@ from uuid import uuid4
 from .constants import TRACE_PRODUCER, TRACE_SCHEMA_VERSION
 
 
+def _json_safe(value: object) -> object:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, set):
+        return [_json_safe(item) for item in sorted(value, key=str)]
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 def _trace_metadata(
     *,
     schema: str,
@@ -34,6 +44,7 @@ def build_retrieval_debug_payload(
     reranked: list[dict[str, object]],
     elapsed_ms: float | None = None,
 ) -> dict[str, object]:
+    normalized_query_analysis = _json_safe(query_analysis)
     rank_by_entity = {
         (str(item.get("hit_type") or ""), int(item.get("entity_id") or 0)): index
         for index, item in enumerate(reranked, start=1)
@@ -72,7 +83,7 @@ def build_retrieval_debug_payload(
         "schema": "uses_indexer.debug.retrieval",
         "version": TRACE_SCHEMA_VERSION,
         "metadata": metadata,
-        "query_analysis": query_analysis,
+        "query_analysis": normalized_query_analysis,
         "retrieval_contributions": retrieval_contributions,
         "rerank_preview": rerank_preview,
         "trace": {
@@ -81,7 +92,7 @@ def build_retrieval_debug_payload(
             "query": query,
             "fts_query": fts_query,
             "candidate_limit": int(candidate_limit),
-            "query_analysis": query_analysis,
+            "query_analysis": normalized_query_analysis,
             "summary": {
                 "source_count": len(source_trace),
                 "merged_candidate_count": sum(int(source_counts.get(source, 0)) for source in source_trace),

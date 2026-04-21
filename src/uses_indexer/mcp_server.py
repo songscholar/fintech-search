@@ -7,6 +7,7 @@ from typing import Any, TextIO
 
 from .answering import CodebaseAnswerer
 from .constants import JSON_RPC_VERSION, MCP_PROTOCOL_VERSION
+from .debug_bundle import build_debug_bundle
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
 from .table_indexer import TableIndexer
@@ -166,6 +167,7 @@ class CodebaseMcpServer:
             "assemble_evidence": self._tool_assemble_evidence,
             "ask_codebase": self._tool_ask_codebase,
             "answer_codebase": self._tool_answer_codebase,
+            "debug_bundle": self._tool_debug_bundle,
             "query_metadata": self._tool_query_metadata,
             "query_table": self._tool_query_table,
         }
@@ -277,6 +279,22 @@ class CodebaseMcpServer:
                         "context_window": {"type": "integer", "minimum": 0, "maximum": 20},
                         "related_limit": {"type": "integer", "minimum": 0, "maximum": 20},
                         "allow_draft_fallback": {"type": "boolean"},
+                    },
+                    "required": ["question"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "debug_bundle",
+                "description": "Bundle query, evidence, and answer output for a single question to support debugging and offline replay.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "db_path": {"type": "string"},
+                        "question": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                        "context_window": {"type": "integer", "minimum": 0, "maximum": 20},
+                        "related_limit": {"type": "integer", "minimum": 0, "maximum": 20}
                     },
                     "required": ["question"],
                     "additionalProperties": False,
@@ -405,6 +423,22 @@ class CodebaseMcpServer:
             context_window=context_window,
             related_limit=related_limit,
             allow_draft_fallback=allow_draft_fallback,
+        )
+
+    def _tool_debug_bundle(self, arguments: dict[str, object]) -> dict[str, object]:
+        db_path = self._resolve_db_path(arguments)
+        question = self._required_string(arguments, "question")
+        limit = self._optional_int(arguments, "limit", default=6)
+        context_window = self._optional_int(arguments, "context_window", default=2)
+        related_limit = self._optional_int(arguments, "related_limit", default=3)
+        return build_debug_bundle(
+            indexer=self.indexer,
+            answerer=self.answerer,
+            db_path=db_path,
+            question=question,
+            limit=limit,
+            context_window=context_window,
+            related_limit=related_limit,
         )
 
     def _resolve_db_path(self, arguments: dict[str, object]) -> str:

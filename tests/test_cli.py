@@ -4,7 +4,8 @@ from pathlib import Path
 
 from tests.test_answering import StubLlm
 from uses_indexer.answering import CodebaseAnswerer
-from uses_indexer.cli import _build_debug_bundle, _discover_default_db, _parse_threshold_pairs
+from uses_indexer.cli import _discover_default_db, _parse_threshold_pairs
+from uses_indexer.debug_bundle import build_debug_bundle
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.qa import CodebaseQA
 
@@ -56,7 +57,7 @@ def test_build_debug_bundle_collects_query_evidence_and_answer(tmp_path: Path) -
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa=qa, llm=StubLlm(None))
 
-    bundle = _build_debug_bundle(
+    bundle = build_debug_bundle(
         indexer=indexer,
         answerer=answerer,
         db_path=str(db_path),

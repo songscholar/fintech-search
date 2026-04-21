@@ -1915,3 +1915,51 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 评测层现在已经可以做简单的质量守门
 - 排障时不再需要手工拼 query/evidence/answer 三份输出，`debug-bundle` 可以直接复盘整条链路
+
+## [1.2.24] - 2026-04-21
+
+### Step 31: 把 debug bundle 接到 API / MCP，并修复 debug JSON 序列化
+
+### 本步目标
+
+- 让 `debug-bundle` 不只在 CLI 可用，也能从 HTTP API 和 MCP 工具直接调用
+- 修复 retrieval debug payload 中 `set` 导致的 JSON 序列化问题
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/debug_bundle.py`
+   - 抽出公共 `build_debug_bundle()`
+   - 统一生成：
+     - `query`
+     - `evidence`
+     - `answer`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 改为复用 `build_debug_bundle()`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `POST /debug-bundle`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `debug_bundle` 工具
+
+5. 更新 `src/uses_indexer/observability.py`
+   - 新增 `_json_safe()`
+   - retrieval trace 里的 `query_analysis` 现在会把 `set` 正常转成 JSON-safe 列表
+
+6. 更新测试
+   - `tests/test_cli.py`
+   - `tests/test_api.py`
+   - `tests/test_mcp.py`
+   - 新增 debug bundle 在 CLI / API / MCP 三端的回归覆盖
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/observability.py src/uses_indexer/debug_bundle.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- 结果：`11 passed`
+
+### 结论
+
+- 现在无论是命令行、HTTP 还是 MCP 工具，都能统一拿到完整 debug bundle
+- debug trace 的 JSON 序列化问题已经被收口，后续更适合直接落盘或透传给外部系统
