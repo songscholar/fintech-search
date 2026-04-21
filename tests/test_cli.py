@@ -19,6 +19,7 @@ from uses_indexer.debug_bundle import (
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
+    summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
 )
 from uses_indexer.indexer import SQLiteIndexer
@@ -479,3 +480,47 @@ def test_baseline_metadata_latest_compare_and_delete(tmp_path: Path) -> None:
     deleted = delete_debug_bundle_regression_panel_baseline("nightly stable", baseline_dir=baseline_dir)
     assert deleted["deleted"] is True
     assert not (baseline_dir / "nightly-stable").exists()
+
+
+def test_baseline_trend_summarizes_tagged_history(tmp_path: Path) -> None:
+    panel = {
+        "bundle_kind": "debug_bundle_regression_panel",
+        "before_db_path": "/tmp/a.db",
+        "after_db_path": "/tmp/b.db",
+        "cases_path": "/tmp/cases.json",
+        "case_count": 1,
+        "summary": {
+            "changed_case_count": 0,
+            "stable_case_count": 1,
+            "verdict_counts": {"stable": 1},
+            "priority_counts": {"low": 1},
+            "focus_area_counts": {"stable": 1},
+            "high_priority_cases": [],
+        },
+        "cases": [
+            {"case_id": "c1", "question_text": "q1", "review_summary": {"verdict": "stable", "priority": "low", "focus_area": "stable"}},
+        ],
+        "markdown_summary": "# Debug Bundle Regression Panel\n",
+    }
+    baseline_dir = tmp_path / "baseline_store"
+    first_dir = tmp_path / "panel_one"
+    second_dir = tmp_path / "panel_two"
+    for target, changed_count in ((first_dir, 0), (second_dir, 2)):
+        payload = dict(panel)
+        payload["summary"] = dict(panel["summary"])
+        payload["summary"]["changed_case_count"] = changed_count
+        payload["summary"]["verdict_counts"] = {"possible_regression": changed_count} if changed_count else {"stable": 1}
+        target.mkdir()
+        (target / "panel.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (target / "panel.md").write_text("# Debug Bundle Regression Panel\n", encoding="utf-8")
+        (target / "panel_summary.json").write_text(json.dumps({"summary": payload["summary"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    save_debug_bundle_regression_panel_baseline(first_dir, "release-1", baseline_dir=baseline_dir, baseline_tags=["release"])
+    save_debug_bundle_regression_panel_baseline(second_dir, "release-2", baseline_dir=baseline_dir, baseline_tags=["release"])
+
+    trend = summarize_debug_bundle_regression_panel_baseline_trend(baseline_dir=baseline_dir, baseline_tag="release")
+    assert trend["bundle_kind"] == "debug_bundle_regression_panel_baseline_trend"
+    assert trend["baseline_count"] == 2
+    assert trend["latest"]["baseline_slug"] == "release-2"
+    assert trend["summary"]["overall_changed_case_delta"]["delta"] == 2
+    assert trend["markdown_summary"].startswith("# Debug Bundle Panel Baseline Trend")

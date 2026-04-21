@@ -20,6 +20,7 @@ from .debug_bundle import (
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
+    summarize_debug_bundle_regression_panel_baseline_trend,
 )
 from .indexer import SQLiteIndexer
 from .qa import CodebaseQA
@@ -186,6 +187,7 @@ class CodebaseMcpServer:
             "compare_debug_bundle_panels": self._tool_compare_debug_bundle_panels,
             "save_debug_bundle_panel_baseline": self._tool_save_debug_bundle_panel_baseline,
             "list_debug_bundle_panel_baselines": self._tool_list_debug_bundle_panel_baselines,
+            "show_debug_bundle_panel_baseline_trend": self._tool_show_debug_bundle_panel_baseline_trend,
             "show_debug_bundle_panel_baseline": self._tool_show_debug_bundle_panel_baseline,
             "delete_debug_bundle_panel_baseline": self._tool_delete_debug_bundle_panel_baseline,
             "compare_debug_bundle_panel_baseline": self._tool_compare_debug_bundle_panel_baseline,
@@ -400,6 +402,19 @@ class CodebaseMcpServer:
                     "properties": {
                         "baseline_dir": {"type": "string"},
                         "baseline_tag": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "show_debug_bundle_panel_baseline_trend",
+                "description": "Show baseline trend history for saved debug bundle regression panel baselines.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "baseline_dir": {"type": "string"},
+                        "baseline_tag": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1},
                     },
                     "additionalProperties": False,
                 },
@@ -657,6 +672,18 @@ class CodebaseMcpServer:
         baseline_dir = self._optional_string(arguments, "baseline_dir")
         baseline_tag = self._optional_string(arguments, "baseline_tag")
         return list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir, baseline_tag=baseline_tag)
+
+    def _tool_show_debug_bundle_panel_baseline_trend(self, arguments: dict[str, object]) -> dict[str, object]:
+        baseline_dir = self._optional_string(arguments, "baseline_dir")
+        baseline_tag = self._optional_string(arguments, "baseline_tag")
+        limit = self._optional_nonnegative_int(arguments, "limit")
+        if limit == 0:
+            raise McpProtocolError(-32602, "Invalid params", {"detail": "limit must be >= 1."})
+        return summarize_debug_bundle_regression_panel_baseline_trend(
+            baseline_dir=baseline_dir,
+            baseline_tag=baseline_tag,
+            limit=limit,
+        )
 
     def _tool_show_debug_bundle_panel_baseline(self, arguments: dict[str, object]) -> dict[str, object]:
         baseline_name = self._required_string(arguments, "baseline_name")

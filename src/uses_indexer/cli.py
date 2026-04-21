@@ -21,6 +21,7 @@ from .debug_bundle import (
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
+    summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
 )
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
@@ -137,6 +138,13 @@ def main() -> int:
     list_panel_baselines_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
     list_panel_baselines_parser.add_argument("--tag", help="Optional tag filter.")
     list_panel_baselines_parser.add_argument("--output", help="Optional JSON output path.")
+
+    baseline_trend_parser = subparsers.add_parser("show-debug-bundle-panel-baseline-trend", help="Show baseline trend history for saved debug bundle regression panel baselines.")
+    baseline_trend_parser.add_argument("--baseline-dir", help="Optional baseline storage root directory.")
+    baseline_trend_parser.add_argument("--tag", help="Optional tag filter.")
+    baseline_trend_parser.add_argument("--limit", type=int, help="Optional maximum number of most recent baselines to include.")
+    baseline_trend_parser.add_argument("--markdown-output", help="Optional markdown summary output path.")
+    baseline_trend_parser.add_argument("--output", help="Optional JSON output path.")
 
     show_panel_baseline_parser = subparsers.add_parser("show-debug-bundle-panel-baseline", help="Show the full metadata for a saved debug bundle regression panel baseline.")
     show_panel_baseline_parser.add_argument("--name", required=True, help="Saved baseline name.")
@@ -347,6 +355,12 @@ def main() -> int:
         )
     elif args.command == "list-debug-bundle-panel-baselines":
         data = list_debug_bundle_regression_panel_baselines(baseline_dir=args.baseline_dir, baseline_tag=args.tag)
+    elif args.command == "show-debug-bundle-panel-baseline-trend":
+        data = summarize_debug_bundle_regression_panel_baseline_trend(
+            baseline_dir=args.baseline_dir,
+            baseline_tag=args.tag,
+            limit=args.limit,
+        )
     elif args.command == "show-debug-bundle-panel-baseline":
         data = load_debug_bundle_regression_panel_baseline(args.name, baseline_dir=args.baseline_dir)
     elif args.command == "delete-debug-bundle-panel-baseline":
@@ -425,6 +439,10 @@ def main() -> int:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
     if args.command == "compare-debug-bundle-panel-latest-baseline" and getattr(args, "markdown_output", None):
+        markdown_path = Path(args.markdown_output)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
+    if args.command == "show-debug-bundle-panel-baseline-trend" and getattr(args, "markdown_output", None):
         markdown_path = Path(args.markdown_output)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")

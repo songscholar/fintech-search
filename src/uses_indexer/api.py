@@ -21,6 +21,7 @@ from .debug_bundle import (
     load_debug_bundle_regression_panel_baseline,
     list_debug_bundle_regression_panel_baselines,
     save_debug_bundle_regression_panel_baseline,
+    summarize_debug_bundle_regression_panel_baseline_trend,
 )
 from .indexer import SQLiteIndexer
 from .llm import LlmConfigError, LlmRequestError
@@ -83,6 +84,7 @@ class CodebaseApi:
                     "POST /compare-debug-bundle-panel",
                     "POST /compare-debug-bundle-panels",
                     "GET /list-debug-bundle-panel-baselines",
+                    "GET /show-debug-bundle-panel-baseline-trend",
                     "GET /show-debug-bundle-panel-baseline",
                     "POST /save-debug-bundle-panel-baseline",
                     "POST /compare-debug-bundle-panel-baseline",
@@ -230,6 +232,17 @@ class CodebaseApi:
             baseline_dir = query_params.get("baseline_dir", [None])[0]
             return HTTPStatus.OK, load_debug_bundle_regression_panel_baseline(baseline_name, baseline_dir=baseline_dir)
 
+        if route == "/show-debug-bundle-panel-baseline-trend" and method == "GET":
+            baseline_dir = query_params.get("baseline_dir", [None])[0]
+            baseline_tag = query_params.get("baseline_tag", [None])[0]
+            raw_limit = query_params.get("limit", [None])[0]
+            limit = _coerce_int(raw_limit, "limit") if raw_limit is not None else None
+            return HTTPStatus.OK, summarize_debug_bundle_regression_panel_baseline_trend(
+                baseline_dir=baseline_dir,
+                baseline_tag=baseline_tag,
+                limit=limit,
+            )
+
         if route == "/save-debug-bundle-panel-baseline" and method == "POST":
             payload = self._parse_json_body(body)
             panel_path = self._require_string(payload, "panel_path")
@@ -295,7 +308,7 @@ class CodebaseApi:
         if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
-        if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline"} and method != "GET":
+        if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend"} and method != "GET":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")

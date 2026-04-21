@@ -498,6 +498,31 @@ PYTHONPATH=. python3 -m uses_indexer delete-debug-bundle-panel-baseline \
   --baseline-dir ./examples/panel_baselines
 ```
 
+如果你想看一组 baseline 的长期走势，而不是只做两两比较，可以直接看 trend：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --markdown-output ./examples/release_baseline_trend.md \
+  --output ./examples/release_baseline_trend.json
+```
+
+这个结果适合回答三类问题：
+
+- 最近几次 release baseline 的 `changed_case_count` 是上升还是下降
+- `possible_regression_count` 是不是在慢慢累积
+- 当前这一类 baseline 的总体趋势是变稳了还是变差了
+
+建议先看 markdown，再在需要时下钻 JSON：
+
+- `Timeline`
+  - 看每次 baseline 的 `changed / possible_regression`
+- `Transitions`
+  - 看相邻两次 baseline 的变化量
+- `Overall delta`
+  - 看从最早一份到最新一份的累计变化
+
 ### baseline 管理也开放到了 API / MCP
 
 现在除了 CLI，还可以直接通过服务接口做这些事：
@@ -505,6 +530,7 @@ PYTHONPATH=. python3 -m uses_indexer delete-debug-bundle-panel-baseline \
 - HTTP API
   - `POST /compare-debug-bundle-panels`
   - `GET /list-debug-bundle-panel-baselines`
+  - `GET /show-debug-bundle-panel-baseline-trend`
   - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-baseline`
@@ -513,6 +539,7 @@ PYTHONPATH=. python3 -m uses_indexer delete-debug-bundle-panel-baseline \
 - MCP tool
   - `compare_debug_bundle_panels`
   - `list_debug_bundle_panel_baselines`
+  - `show_debug_bundle_panel_baseline_trend`
   - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_baseline`

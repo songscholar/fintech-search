@@ -198,6 +198,14 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert status == 200
     assert shown["baseline_tags"] == ["nightly", "smoke"]
 
+    status, trend = api.handle_request(
+        "GET",
+        f"/show-debug-bundle-panel-baseline-trend?baseline_dir={tmp_path / 'baseline_store'}&baseline_tag=smoke",
+    )
+    assert status == 200
+    assert trend["bundle_kind"] == "debug_bundle_regression_panel_baseline_trend"
+    assert trend["baseline_count"] == 1
+
     status, compared = api.handle_request(
         "POST",
         "/compare-debug-bundle-panels",

@@ -423,11 +423,27 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline 
 - `compare-debug-bundle-panel-baseline` 则负责“和固定标准答案比”
 - `compare-debug-bundle-panel-latest-baseline` 则负责“和最近一份同类 baseline 比”
 
+如果你想看某一类 baseline 的长期变化趋势，而不只是做一次比较，可以再加一层 trend：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
+  --baseline-dir ./examples/panel_baselines \
+  --tag release \
+  --markdown-output ./examples/release_baseline_trend.md
+```
+
+这个命令更适合：
+
+- release review 后做阶段性复盘
+- 观察 smoke baseline 是否越来越稳定
+- 看某一类 baseline 的 `possible_regression_count` 有没有长期积累
+
 如果你是通过服务接口跑评测，也可以直接走：
 
 - HTTP API
   - `POST /compare-debug-bundle-panels`
   - `GET /list-debug-bundle-panel-baselines`
+  - `GET /show-debug-bundle-panel-baseline-trend`
   - `GET /show-debug-bundle-panel-baseline`
   - `POST /save-debug-bundle-panel-baseline`
   - `POST /compare-debug-bundle-panel-baseline`
@@ -436,6 +452,7 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline 
 - MCP tool
   - `compare_debug_bundle_panels`
   - `list_debug_bundle_panel_baselines`
+  - `show_debug_bundle_panel_baseline_trend`
   - `show_debug_bundle_panel_baseline`
   - `save_debug_bundle_panel_baseline`
   - `compare_debug_bundle_panel_baseline`

@@ -2470,3 +2470,63 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在 baseline 已经具备“保存、筛选、查看、比较最近版本、删除”的完整管理闭环
 - 这一步让 panel baseline 从“可复用”进一步升级成了“可运营、可长期维护”的回归资产
+
+## [1.2.34] - 2026-04-21
+
+### Step 41: 增加 baseline trend 视图
+
+### 本步目标
+
+- 让 baseline 不只是“单次比较对象”，而是能被当作一条长期趋势序列来观察
+- 让 release / smoke / nightly 这类标签基线具备更直观的历史复盘能力
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `summarize_debug_bundle_regression_panel_baseline_trend()`
+   - 新增 baseline trend markdown 渲染
+   - trend 输出包含：
+     - `timeline`
+     - `transitions`
+     - `latest`
+     - `oldest`
+     - `summary.overall_changed_case_delta`
+     - `summary.overall_possible_regression_delta`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - 新增 `show-debug-bundle-panel-baseline-trend`
+   - 支持：
+     - `--baseline-dir`
+     - `--tag`
+     - `--limit`
+     - `--markdown-output`
+
+3. 更新 `src/uses_indexer/api.py`
+   - 新增 `GET /show-debug-bundle-panel-baseline-trend`
+
+4. 更新 `src/uses_indexer/mcp_server.py`
+   - 新增 `show_debug_bundle_panel_baseline_trend`
+
+5. 更新测试
+   - `tests/test_cli.py`
+     - 新增 baseline trend 聚合回归
+   - `tests/test_api.py`
+     - 新增 trend API 回归
+   - `tests/test_mcp.py`
+     - 新增 trend MCP tool 回归
+
+6. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 baseline trend 的使用方式和阅读顺序
+   - `docs/EVALUATION.md`
+     - 补充 baseline trend 在长期评测复盘中的定位
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py src/uses_indexer/api.py src/uses_indexer/mcp_server.py tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过，结果 `22 passed`
+
+### 结论
+
+- 现在同一组 tagged baseline 已经可以直接看长期走势，不再只能两两比较
+- 这一步让 baseline 体系从“可管理”进一步升级成了“可做阶段性趋势复盘”的质量资产

@@ -634,6 +634,64 @@ def compare_debug_bundle_regression_panel_latest_baseline(
     return comparison
 
 
+def summarize_debug_bundle_regression_panel_baseline_trend(
+    *,
+    baseline_dir: str | Path | None = None,
+    baseline_tag: str | None = None,
+    limit: int | None = None,
+) -> dict[str, object]:
+    listing = list_debug_bundle_regression_panel_baselines(baseline_dir=baseline_dir, baseline_tag=baseline_tag)
+    items = [dict(item) for item in list(listing.get("items") or [])]
+    if limit is not None:
+        items = items[:limit]
+
+    ordered = sorted(items, key=_baseline_trend_sort_key)
+    timeline: list[dict[str, object]] = []
+    transitions: list[dict[str, object]] = []
+
+    previous: dict[str, object] | None = None
+    for entry in ordered:
+        summary = {
+            "changed_case_count": entry.get("changed_case_count"),
+            "possible_regression_count": entry.get("possible_regression_count"),
+        }
+        timeline.append(
+            {
+                "baseline_name": entry.get("baseline_name"),
+                "baseline_slug": entry.get("baseline_slug"),
+                "saved_at": entry.get("saved_at"),
+                "baseline_tags": list(entry.get("baseline_tags") or []),
+                "baseline_notes": entry.get("baseline_notes"),
+                "case_count": entry.get("case_count"),
+                "summary": summary,
+            }
+        )
+        if previous is not None:
+            transitions.append(
+                {
+                    "from_baseline_slug": previous.get("baseline_slug"),
+                    "to_baseline_slug": entry.get("baseline_slug"),
+                    "changed_case_delta": _numeric_delta(previous.get("changed_case_count"), entry.get("changed_case_count")),
+                    "possible_regression_delta": _numeric_delta(previous.get("possible_regression_count"), entry.get("possible_regression_count")),
+                }
+            )
+        previous = entry
+
+    trend = {
+        "bundle_kind": "debug_bundle_regression_panel_baseline_trend",
+        "baseline_dir": listing.get("baseline_dir"),
+        "baseline_tag": baseline_tag,
+        "baseline_count": len(ordered),
+        "timeline": timeline,
+        "transitions": transitions,
+        "latest": timeline[-1] if timeline else None,
+        "oldest": timeline[0] if timeline else None,
+    }
+    trend["summary"] = _summarize_baseline_trend(timeline, transitions)
+    trend["markdown_summary"] = render_debug_bundle_regression_panel_baseline_trend_markdown(trend)
+    return trend
+
+
 def compare_debug_bundles_from_payloads(
     before_bundle: dict[str, object],
     after_bundle: dict[str, object],
@@ -791,6 +849,79 @@ def _baseline_sort_key(record: dict[str, object]) -> tuple[int, str]:
     if isinstance(saved_at, str) and saved_at:
         return (1, saved_at)
     return (0, str(record.get("baseline_slug") or record.get("baseline_name") or ""))
+
+
+def _baseline_trend_sort_key(record: dict[str, object]) -> tuple[int, str]:
+    saved_at = record.get("saved_at")
+    if isinstance(saved_at, str) and saved_at:
+        return (1, saved_at)
+    return (0, str(record.get("baseline_slug") or record.get("baseline_name") or ""))
+
+
+def _summarize_baseline_trend(
+    timeline: list[dict[str, object]],
+    transitions: list[dict[str, object]],
+) -> dict[str, object]:
+    latest = timeline[-1] if timeline else None
+    oldest = timeline[0] if timeline else None
+    return {
+        "latest_changed_case_count": ((latest or {}).get("summary") or {}).get("changed_case_count"),
+        "latest_possible_regression_count": ((latest or {}).get("summary") or {}).get("possible_regression_count"),
+        "overall_changed_case_delta": _numeric_delta(
+            ((oldest or {}).get("summary") or {}).get("changed_case_count"),
+            ((latest or {}).get("summary") or {}).get("changed_case_count"),
+        ) if latest and oldest else _numeric_delta(None, None),
+        "overall_possible_regression_delta": _numeric_delta(
+            ((oldest or {}).get("summary") or {}).get("possible_regression_count"),
+            ((latest or {}).get("summary") or {}).get("possible_regression_count"),
+        ) if latest and oldest else _numeric_delta(None, None),
+        "transition_count": len(transitions),
+    }
+
+
+def render_debug_bundle_regression_panel_baseline_trend_markdown(trend: dict[str, object]) -> str:
+    summary = dict(trend.get("summary") or {})
+    latest = dict(trend.get("latest") or {})
+    lines = [
+        "# Debug Bundle Panel Baseline Trend",
+        "",
+        f"- Baseline count: {trend.get('baseline_count', 0)}",
+        f"- Baseline tag: {trend.get('baseline_tag') or 'all'}",
+        f"- Latest baseline: {latest.get('baseline_slug') or 'n/a'}",
+        f"- Latest changed cases: {summary.get('latest_changed_case_count')}",
+        f"- Latest possible regressions: {summary.get('latest_possible_regression_count')}",
+        f"- Overall changed case delta: {_render_delta(summary.get('overall_changed_case_delta'))}",
+        f"- Overall possible regression delta: {_render_delta(summary.get('overall_possible_regression_delta'))}",
+        "",
+        "## Timeline",
+    ]
+    timeline = list(trend.get("timeline") or [])
+    if not timeline:
+        lines.append("- No baselines available.")
+    else:
+        for item in timeline:
+            item_summary = dict(item.get("summary") or {})
+            lines.append(
+                "- "
+                + f"{item.get('baseline_slug')} "
+                + f"({item.get('saved_at') or 'unknown'}) "
+                + f"changed={item_summary.get('changed_case_count')} "
+                + f"possible_regression={item_summary.get('possible_regression_count')}"
+            )
+
+    transitions = list(trend.get("transitions") or [])
+    lines.extend(["", "## Transitions"])
+    if not transitions:
+        lines.append("- No transitions available.")
+    else:
+        for item in transitions:
+            lines.append(
+                "- "
+                + f"{item.get('from_baseline_slug')} -> {item.get('to_baseline_slug')} "
+                + f"changed_delta={_render_delta(item.get('changed_case_delta'))} "
+                + f"possible_regression_delta={_render_delta(item.get('possible_regression_delta'))}"
+            )
+    return "\n".join(lines).strip() + "\n"
 
 
 def _query_type(query_payload: dict[str, object]) -> str:
