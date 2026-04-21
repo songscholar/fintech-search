@@ -7,9 +7,11 @@ from tests.test_answering import StubLlm
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.cli import _discover_default_db, _parse_scoped_threshold_pairs, _parse_threshold_pairs
 from uses_indexer.debug_bundle import (
+    DebugBundlePanelThresholds,
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    evaluate_debug_bundle_regression_panel_thresholds,
     write_debug_bundle_archive,
 )
 from uses_indexer.indexer import SQLiteIndexer
@@ -48,6 +50,15 @@ def test_parse_scoped_threshold_pairs_parses_values() -> None:
     assert _parse_scoped_threshold_pairs(["variable:5=1.0", "callers:3=0.8"]) == {
         "variable": {"5": 1.0},
         "callers": {"3": 0.8},
+    }
+
+
+def test_parse_named_int_pairs_parses_values() -> None:
+    from uses_indexer.cli import _parse_named_int_pairs
+
+    assert _parse_named_int_pairs(["possible_regression=0", "retrieval=2"]) == {
+        "possible_regression": 0,
+        "retrieval": 2,
     }
 
 
@@ -270,3 +281,15 @@ def test_build_debug_bundle_regression_panel_summarizes_cases(tmp_path: Path) ->
     assert sum(panel["summary"]["priority_counts"].values()) == 1
     assert panel["archive_manifest"][0]["case_id"] == "stock-code"
     assert panel["markdown_summary"].startswith("# Debug Bundle Regression Panel")
+
+    threshold_report = evaluate_debug_bundle_regression_panel_thresholds(
+        panel,
+        DebugBundlePanelThresholds(
+            max_changed_cases=0,
+            max_high_priority_cases=1,
+            max_verdict_counts={"behavior_changed": 0},
+            max_focus_area_counts={"retrieval": 0},
+        ),
+    )
+    assert threshold_report["status"] == "fail"
+    assert threshold_report["failed_count"] >= 2

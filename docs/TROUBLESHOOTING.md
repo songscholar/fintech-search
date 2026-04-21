@@ -261,6 +261,10 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
   --before-db ./examples/business_code_index_before.db \
   --after-db ./examples/business_code_index_after.db \
   --cases ./eval/uses_codes_effect_cases.json \
+  --max-changed-cases 0 \
+  --max-verdict-count possible_regression=0 \
+  --max-focus-area-count retrieval=1 \
+  --fail-on-thresholds \
   --archive-dir ./examples/debug_bundle_panel \
   --markdown-output ./examples/debug_bundle_panel.md \
   --output ./examples/debug_bundle_panel.json
@@ -271,6 +275,14 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 1. 对 `cases` 里的每个问题分别跑 before/after 两套 `debug-bundle`
 2. 逐题生成 comparison
 3. 最后汇总成一个总览 panel
+
+如果你传了 threshold 参数，panel 结果里还会带：
+
+- `thresholds.status`
+- `thresholds.failed_count`
+- `thresholds.checks`
+
+并且在带 `--fail-on-thresholds` 时，CLI 会返回非零退出码。
 
 ### cases 文件怎么准备
 
@@ -309,6 +321,40 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 - 影响主要集中在 retrieval / evidence / answering 哪一层
 - 哪几个 case 最值得优先人工复盘
 
+### panel threshold 怎么配
+
+最常用的是这几类：
+
+- `--max-changed-cases`
+  - 限制这次总共有多少题发生了明显行为变化
+- `--max-high-priority-cases`
+  - 限制高优先级问题数量
+- `--max-verdict-count possible_regression=0`
+  - 禁止出现 `possible_regression`
+- `--max-focus-area-count retrieval=1`
+  - 限制回退主要集中在某一层时的数量
+
+一个比较实用的保守配置例子是：
+
+```bash
+PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
+  --before-db ./examples/business_code_index_before.db \
+  --after-db ./examples/business_code_index_after.db \
+  --cases ./eval/uses_codes_effect_cases.json \
+  --max-changed-cases 2 \
+  --max-high-priority-cases 0 \
+  --max-verdict-count possible_regression=0 \
+  --max-focus-area-count retrieval=1 \
+  --fail-on-thresholds
+```
+
+这个配置的含义是：
+
+- 允许少量行为变化
+- 不允许高优先级问题
+- 不允许明确回退
+- retrieval 层的问题最多只允许 1 个
+
 ### archive-dir 会产出什么
 
 如果传了 `--archive-dir`，每个 case 都会生成一套目录，里面包括：
@@ -323,6 +369,7 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 - 做一次版本发布前的回归审阅
 - 把高优先级 case 发给同事一起看
 - 留一份“这次改动到底影响了哪些典型问题”的证据包
+- 在 CI 里作为发布前守门
 
 ## 9. 相关文档
 

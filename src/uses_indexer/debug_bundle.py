@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .answering import CodebaseAnswerer
 from .indexer import SQLiteIndexer
+
+
+@dataclass(frozen=True, slots=True)
+class DebugBundlePanelThresholds:
+    max_changed_cases: int | None = None
+    max_high_priority_cases: int | None = None
+    max_verdict_counts: dict[str, int] | None = None
+    max_focus_area_counts: dict[str, int] | None = None
 
 
 def build_debug_bundle(
@@ -234,6 +243,59 @@ def build_debug_bundle_regression_panel(
     }
     panel["markdown_summary"] = render_debug_bundle_regression_panel_markdown(panel)
     return panel
+
+
+def evaluate_debug_bundle_regression_panel_thresholds(
+    panel: dict[str, object],
+    thresholds: DebugBundlePanelThresholds,
+) -> dict[str, object]:
+    summary = dict(panel.get("summary") or {})
+    checks: list[dict[str, object]] = []
+
+    if thresholds.max_changed_cases is not None:
+        checks.append(
+            _panel_threshold_check(
+                metric="changed_case_count",
+                actual=_coerce_panel_int(summary.get("changed_case_count")),
+                expected=thresholds.max_changed_cases,
+            )
+        )
+
+    if thresholds.max_high_priority_cases is not None:
+        checks.append(
+            _panel_threshold_check(
+                metric="high_priority_case_count",
+                actual=len(list(summary.get("high_priority_cases") or [])),
+                expected=thresholds.max_high_priority_cases,
+            )
+        )
+
+    verdict_counts = dict(summary.get("verdict_counts") or {})
+    for verdict, expected in sorted((thresholds.max_verdict_counts or {}).items()):
+        checks.append(
+            _panel_threshold_check(
+                metric=f"verdict_counts.{verdict}",
+                actual=_coerce_panel_int(verdict_counts.get(verdict, 0)),
+                expected=expected,
+            )
+        )
+
+    focus_area_counts = dict(summary.get("focus_area_counts") or {})
+    for focus_area, expected in sorted((thresholds.max_focus_area_counts or {}).items()):
+        checks.append(
+            _panel_threshold_check(
+                metric=f"focus_area_counts.{focus_area}",
+                actual=_coerce_panel_int(focus_area_counts.get(focus_area, 0)),
+                expected=expected,
+            )
+        )
+
+    return {
+        "status": "pass" if all(item["passed"] for item in checks) else "fail",
+        "check_count": len(checks),
+        "failed_count": sum(1 for item in checks if not item["passed"]),
+        "checks": checks,
+    }
 
 
 def compare_debug_bundles_from_payloads(
@@ -618,6 +680,7 @@ def _summarize_regression_panel(comparisons: list[dict[str, object]]) -> dict[st
 
 def render_debug_bundle_regression_panel_markdown(panel: dict[str, object]) -> str:
     summary = dict(panel.get("summary") or {})
+    thresholds = dict(panel.get("thresholds") or {})
     lines = [
         "# Debug Bundle Regression Panel",
         "",
@@ -661,6 +724,16 @@ def render_debug_bundle_regression_panel_markdown(panel: dict[str, object]) -> s
     else:
         lines.append("- none")
 
+    if thresholds:
+        lines.extend(
+            [
+                "",
+                "## Threshold Status",
+                f"- Status: {thresholds.get('status')}",
+                f"- Failed checks: {thresholds.get('failed_count')}",
+            ]
+        )
+
     lines.extend(["", "## Case Summaries"])
     for case in list(panel.get("cases") or []):
         review = dict(case.get("review_summary") or {})
@@ -680,3 +753,22 @@ def _slugify(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", "-", lowered)
     trimmed = normalized.strip("-")
     return trimmed or "case"
+
+
+def _panel_threshold_check(*, metric: str, actual: int | None, expected: int) -> dict[str, object]:
+    passed = actual is not None and actual <= expected
+    return {
+        "metric": metric,
+        "actual": actual,
+        "expected": expected,
+        "comparator": "<=",
+        "passed": passed,
+    }
+
+
+def _coerce_panel_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    return None

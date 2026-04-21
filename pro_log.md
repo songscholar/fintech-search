@@ -2194,3 +2194,54 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在不仅能复盘单题，还能对一组典型问题做批量链路级回归审阅
 - 这一步让 debug bundle 从“问题排障工具”进一步升级成了“版本回归审阅工具”
+
+## [1.2.29] - 2026-04-21
+
+### Step 36: 增加 panel 级 fail gate
+
+### 本步目标
+
+- 让批量 debug bundle panel 不只是 review 看板，也能直接作为发布守门
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/debug_bundle.py`
+   - 新增 `DebugBundlePanelThresholds`
+   - 新增 `evaluate_debug_bundle_regression_panel_thresholds()`
+   - 支持检查：
+     - `changed_case_count`
+     - `high_priority_case_count`
+     - `verdict_counts.<verdict>`
+     - `focus_area_counts.<focus_area>`
+   - panel markdown 新增 `Threshold Status`
+
+2. 更新 `src/uses_indexer/cli.py`
+   - `compare-debug-bundle-panel` 新增：
+     - `--max-changed-cases`
+     - `--max-high-priority-cases`
+     - `--max-verdict-count`
+     - `--max-focus-area-count`
+     - `--fail-on-thresholds`
+   - 新增 `_parse_named_int_pairs()`
+   - threshold fail 时退出码为 `2`
+
+3. 更新测试
+   - `tests/test_cli.py`
+     - 新增 named int threshold 解析测试
+     - 新增 panel threshold fail 回归
+
+4. 更新文档
+   - `docs/TROUBLESHOOTING.md`
+     - 补充 panel threshold 配置示例
+   - `docs/EVALUATION.md`
+     - 补充 panel 守门在 CI 中的使用建议
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/debug_bundle.py src/uses_indexer/cli.py tests/test_cli.py` 通过
+- `PYTHONPATH=. pytest -q tests/test_cli.py tests/test_api.py tests/test_mcp.py` 通过
+
+### 结论
+
+- 批量 panel 现在已经可以直接承担“典型问题链路门槛”的角色
+- 这一步让 panel 从 review 能力进一步升级成了 release gate

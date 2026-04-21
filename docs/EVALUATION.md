@@ -213,6 +213,8 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
   --before-db examples/business_code_index_before.db \
   --after-db examples/business_code_index_after.db \
   --cases eval/uses_codes_effect_cases.json \
+  --max-verdict-count possible_regression=0 \
+  --fail-on-thresholds \
   --markdown-output examples/debug_bundle_panel.md \
   --output examples/debug_bundle_panel.json
 ```
@@ -227,6 +229,16 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 1. 先跑 `eval-retrieval`
 2. 如果整体指标有变化，再跑 `compare-debug-bundle-panel`
 3. 从 panel 里的 `high priority cases` 开始逐题看 `comparison.md`
+
+如果你想把它接到 CI，最推荐的方式是：
+
+1. `eval-retrieval` 负责整体检索质量门槛
+2. `compare-debug-bundle-panel` 负责典型问题链路门槛
+
+两者一起用时，你能同时拦住：
+
+- 整体指标退化
+- 典型关键问题退化
 
 ## 当前基准
 

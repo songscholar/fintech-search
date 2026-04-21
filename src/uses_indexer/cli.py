@@ -9,9 +9,11 @@ from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .config import bootstrap_env
 from .debug_bundle import (
+    DebugBundlePanelThresholds,
     build_debug_bundle,
     build_debug_bundle_regression_panel,
     compare_debug_bundles,
+    evaluate_debug_bundle_regression_panel_thresholds,
     write_debug_bundle_archive,
 )
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
@@ -102,6 +104,11 @@ def main() -> int:
     compare_bundle_panel_parser.add_argument("--context-window", type=int, default=2, help="Neighbor statement window around an anchor hit.")
     compare_bundle_panel_parser.add_argument("--related-limit", type=int, default=3, help="Maximum related calls or tables per evidence block.")
     compare_bundle_panel_parser.add_argument("--archive-dir", help="Optional directory to archive per-case before/after bundles and comparisons.")
+    compare_bundle_panel_parser.add_argument("--max-changed-cases", type=int, help="Fail when changed_case_count exceeds this value.")
+    compare_bundle_panel_parser.add_argument("--max-high-priority-cases", type=int, help="Fail when high priority case count exceeds this value.")
+    compare_bundle_panel_parser.add_argument("--max-verdict-count", action="append", default=[], help="Threshold like possible_regression=0; can be provided multiple times.")
+    compare_bundle_panel_parser.add_argument("--max-focus-area-count", action="append", default=[], help="Threshold like retrieval=2; can be provided multiple times.")
+    compare_bundle_panel_parser.add_argument("--fail-on-thresholds", action="store_true", help="Exit with non-zero status when panel threshold checks fail.")
     compare_bundle_panel_parser.add_argument("--markdown-output", help="Optional markdown panel output path.")
     compare_bundle_panel_parser.add_argument("--output", help="Optional JSON panel output path.")
 
@@ -269,6 +276,15 @@ def main() -> int:
             related_limit=args.related_limit,
             archive_dir=args.archive_dir,
         )
+        data["thresholds"] = evaluate_debug_bundle_regression_panel_thresholds(
+            data,
+            DebugBundlePanelThresholds(
+                max_changed_cases=args.max_changed_cases,
+                max_high_priority_cases=args.max_high_priority_cases,
+                max_verdict_counts=_parse_named_int_pairs(args.max_verdict_count),
+                max_focus_area_counts=_parse_named_int_pairs(args.max_focus_area_count),
+            ),
+        )
     elif args.command == "assemble-evidence":
         data = indexer.assemble_evidence(
             args.db,
@@ -328,6 +344,8 @@ def main() -> int:
         markdown_path.write_text(str(data.get("markdown_summary") or ""), encoding="utf-8")
 
     if args.command == "eval-retrieval" and args.fail_on_thresholds and data["thresholds"]["status"] != "pass":
+        return 2
+    if args.command == "compare-debug-bundle-panel" and args.fail_on_thresholds and data["thresholds"]["status"] != "pass":
         return 2
 
     return 0
@@ -398,4 +416,14 @@ def _parse_scoped_threshold_pairs(raw_values: list[str]) -> dict[str, dict[str, 
         if not sep2:
             raise ValueError(f"Invalid scoped threshold pair: {raw!r}. Expected format like variable:5=1.0")
         result.setdefault(scope.strip(), {})[str(int(key.strip()))] = float(value.strip())
+    return result
+
+
+def _parse_named_int_pairs(raw_values: list[str]) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for raw in raw_values:
+        key, sep, value = raw.partition("=")
+        if not sep:
+            raise ValueError(f"Invalid named threshold pair: {raw!r}. Expected format like retrieval=2")
+        result[key.strip()] = int(value.strip())
     return result
