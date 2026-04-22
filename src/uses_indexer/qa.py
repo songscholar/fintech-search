@@ -54,6 +54,20 @@ LEAD_SUMMARY_LABELS = {
 }
 
 
+QUERY_SUMMARY_HINT_LABELS = {
+    "table_write": "表写入重点",
+    "table_read": "表读取重点",
+    "table_access": "表访问重点",
+    "variable_write": "变量写入重点",
+    "variable_read": "变量读取重点",
+    "variable_flow": "变量链路重点",
+    "metadata_definition": "metadata 定义重点",
+    "topic_publish": "topic 发布重点",
+    "callers": "上游调用重点",
+    "callees": "下游调用重点",
+}
+
+
 ANSWER_FORMAT = """请按下面结构回答：
 
 结论:
@@ -257,6 +271,12 @@ class CodebaseQA:
         )
 
         summary_points = [lead_desc]
+        query_specific_summary = self._build_query_specific_summary(
+            query_type=query_type,
+            primary_candidate=primary_candidate,
+        )
+        if query_specific_summary:
+            summary_points.append(query_specific_summary)
         profile_hints: list[str] = []
         for item in top_evidence[1:]:
             summary_points.append(
@@ -399,6 +419,12 @@ class CodebaseQA:
             primary_candidate=primary_candidate,
         )
         prioritized_hints = [*path_hints, *profile_hints, *related_hints]
+        review_required = self._should_require_review(
+            query_type=query_type,
+            primary_candidate=primary_candidate,
+            secondary_candidates=secondary_candidates,
+            confidence=confidence,
+        )
         return {
             "status": "ok",
             "answer": "\n".join(answer_lines),
@@ -410,7 +436,47 @@ class CodebaseQA:
             "tier": "grounded_summary",
             "query_type": query_type,
             "confidence": confidence,
+            "review_required": review_required,
         }
+
+    def _build_query_specific_summary(
+        self,
+        *,
+        query_type: str,
+        primary_candidate: dict[str, object],
+    ) -> str:
+        profile = dict(primary_candidate.get("procedure_profile") or {})
+        procedure_name = str(primary_candidate.get("procedure_name") or "")
+        label = QUERY_SUMMARY_HINT_LABELS.get(query_type)
+        if not label or not procedure_name:
+            return ""
+
+        if query_type in {"table_write", "table_read", "table_access"}:
+            table_names = list(profile.get("core_write_tables") or []) or list(profile.get("core_read_tables") or [])
+            if table_names:
+                return f"{label}: {procedure_name} 重点涉及 {', '.join(str(name) for name in table_names[:3])}。"
+
+        if query_type in {"variable_write", "variable_read", "variable_flow"}:
+            variable_names = list(profile.get("core_variable_writes") or [])
+            if variable_names:
+                return f"{label}: {procedure_name} 重点变量包括 {', '.join(str(name) for name in variable_names[:3])}。"
+
+        if query_type == "metadata_definition":
+            refs = list(profile.get("core_metadata_refs") or [])
+            if refs:
+                return f"{label}: {procedure_name} 重点 metadata 引用包括 {', '.join(str(name) for name in refs[:3])}。"
+
+        if query_type == "topic_publish":
+            topics = list(profile.get("core_topics") or [])
+            if topics:
+                return f"{label}: {procedure_name} 发布主题包括 {', '.join(str(name) for name in topics[:3])}。"
+
+        if query_type in {"callers", "callees"}:
+            calls = list(profile.get("core_callers") or []) if query_type == "callers" else list(profile.get("core_calls") or [])
+            if calls:
+                return f"{label}: {procedure_name} 直接关联 {', '.join(str(name) for name in calls[:3])}。"
+
+        return ""
 
     def _estimate_confidence(
         self,
@@ -462,3 +528,22 @@ class CodebaseQA:
         else:
             label = "low"
         return {"score": score, "label": label}
+
+    def _should_require_review(
+        self,
+        *,
+        query_type: str,
+        primary_candidate: dict[str, object],
+        secondary_candidates: list[dict[str, object]],
+        confidence: dict[str, object],
+    ) -> bool:
+        confidence_score = float(confidence.get("score") or 0.0)
+        if confidence_score < 0.45:
+            return True
+        if not secondary_candidates:
+            return False
+        if query_type not in {"table_write", "table_read", "table_access", "variable_write", "variable_read", "variable_flow", "metadata_definition", "topic_publish"}:
+            return False
+        primary_score = float(primary_candidate.get("aggregate_score") or 0.0)
+        secondary_score = float(secondary_candidates[0].get("aggregate_score") or 0.0)
+        return primary_score > 0 and secondary_score > 0 and (primary_score - secondary_score) <= 12.0

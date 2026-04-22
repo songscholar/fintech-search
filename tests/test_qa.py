@@ -223,3 +223,12 @@ def test_ask_uses_metadata_specific_summary_for_metadata_queries(tmp_path: Path)
     assert "Metadata 定义:" in result["draft_answer"]["answer"]
     summary_points = list(result["draft_answer"]["summary_points"])
     assert any("metadata 定义过程" in item for item in summary_points)
+
+
+def test_ask_keeps_review_not_required_for_clear_table_candidate(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "uses_fund_real 在哪里读取", evidence_limit=3, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["secondary_candidates"]
+    assert result["draft_answer"]["review_required"] is False

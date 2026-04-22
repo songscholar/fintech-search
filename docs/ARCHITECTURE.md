@@ -919,3 +919,45 @@ SQL 恢复这边也有一个仓库特性要处理：
 - `docs/WORKLOG.md` 记录实施过程
 
 说明文档不是最后补，而是和实现同步推进。
+
+## 最新问答链路收口
+
+最新一轮又把“query-specific summary”和“guarded answer”两层收得更一致：
+
+- QA 草答在保留原有 `query-specific section` 的同时，又新增了一层更轻的首段摘要提示
+  - 表问题会优先给出：
+    - `最关键的表访问过程 ...`
+    - `表读取重点 / 表写入重点 / 表访问重点 ...`
+  - 变量问题会优先给出：
+    - `最关键的变量链路过程 ...`
+    - `变量写入重点 / 变量读取重点 / 变量链路重点 ...`
+  - metadata / topic / callers / callees 也都会优先利用 `procedure_profile` 输出更贴近问题类型的第一段提示
+- 这样草答不再只是“后面有一段分类 section”，而是从第一句开始就更明确地朝 query type 对齐
+
+回答层这次也不再只按“低置信度”单独降级：
+
+- `draft_answer.review_required`
+  - 现在会一路传到 `answering.py`
+- 如果当前问题不是明显低置信度，但属于：
+  - `review_required = true`
+  - 且主候选与次候选分差不大
+  - 或整体只有中等置信度
+- 回答层也会改走 `guarded_draft`
+  - `tier = guarded_low_confidence`
+  - `review_required = true`
+  - 明确给出：
+    - 当前主候选
+    - 其他近似候选
+    - 不确定点
+
+这意味着当前的“保守回答策略”已经从单点的 confidence gate，演进成了更完整的：
+
+- query type-aware draft summary
+- candidate-gap-aware review gate
+- guarded answer fallback
+
+最终效果是：
+
+- 问题类型越明确，首段摘要越像“针对这个问题类型写出来的”
+- 候选越接近，最终回答越保守、越诚实
+- QA 和 answering 不再各自维护两套割裂的“是否需要人工复核”判断

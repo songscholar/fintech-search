@@ -52,8 +52,9 @@ class CodebaseAnswerer:
         confidence = dict(draft_answer.get("confidence") or {})
         confidence_score = float(confidence.get("score") or 0.0)
         low_confidence = confidence_score < float(self.policy.low_confidence_threshold)
+        review_required = bool(draft_answer.get("review_required"))
 
-        if low_confidence and self.policy.prefer_guarded_draft_on_low_confidence:
+        if (low_confidence or (review_required and confidence_score < 0.65)) and self.policy.prefer_guarded_draft_on_low_confidence:
             guarded_text = self._build_guarded_low_confidence_answer(qa_bundle)
             return self._build_result(
                 qa_bundle,
@@ -118,6 +119,13 @@ class CodebaseAnswerer:
             lines.append("不确定点:")
             for item in uncertainties[:3]:
                 lines.append(f"- {item}")
+        secondary_candidates = list(draft_answer.get("secondary_candidates") or [])
+        if secondary_candidates:
+            lines.append("其他近似候选:")
+            for item in secondary_candidates[:2]:
+                lines.append(
+                    f"- {item['procedure_name']} {item['file_path']}:{item['line_start']}-{item['line_end']}"
+                )
         lines.append("建议:")
         lines.append("- 继续查看主候选过程的上下游调用、相关表访问和失败处理分支。")
         return "\n".join(lines)
@@ -164,7 +172,7 @@ class CodebaseAnswerer:
                 "secondary_candidates": list(draft_answer.get("secondary_candidates") or []),
                 "uncertainties": list(draft_answer.get("uncertainties") or []),
             },
-            "review_required": answer_source == "guarded_draft",
+            "review_required": answer_source == "guarded_draft" or bool(draft_answer.get("review_required")),
             "used_model": model_response["model"] if model_response else None,
             "provider": model_response["provider"] if model_response else None,
             "error": error,

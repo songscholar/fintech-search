@@ -4306,3 +4306,61 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 query type 的误判面又收窄了一层，尤其是 metadata / topic 之间
 - 当前 table / variable / metadata / topic 四类问题的产品化表达更统一
 - 当前优化仍然没有破坏既有的 exact focus 和表链路准确度
+
+## [1.2.64] - 2026-04-23
+
+### Step 71: 统一 query-specific 摘要模板与 review_required 降级策略
+
+### 本步目标
+
+- 继续做正向增强，让 QA 草答从第一段开始就更像“按问题类型定制”
+- 把 `draft_answer.review_required` 真正贯通到回答层
+- 在多候选接近、需要人工复核的场景下，更稳地走 guarded draft，而不是硬给普通回答
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/qa.py`
+   - 新增 `QUERY_SUMMARY_HINT_LABELS`
+   - 在 `_build_draft_answer()` 中增加 `_build_query_specific_summary()`
+   - 这层摘要会直接读取 `primary_candidate.procedure_profile`，对不同 query type 输出更轻量、更贴近问题的第一段提示：
+     - 表问题：
+       - `表读取重点 / 表写入重点 / 表访问重点`
+     - 变量问题：
+       - `变量读取重点 / 变量写入重点 / 变量链路重点`
+     - metadata / topic：
+       - `metadata 定义重点 / topic 发布重点`
+     - callers / callees：
+       - `上游调用重点 / 下游调用重点`
+
+2. 更新 `src/uses_indexer/answering.py`
+   - `answer()` 现在会读取 `draft_answer.review_required`
+   - guarded draft 不再只在明显低置信度时触发
+   - 现在对于：
+     - `review_required = true`
+     - 且整体只有中等置信度
+   - 也会主动走 guarded fallback
+   - `_build_guarded_low_confidence_answer()` 现在会附带：
+     - `其他近似候选`
+   - `_build_result()` 也会把 `review_required` 显式带回最终结果
+
+3. 更新测试
+   - `tests/test_qa.py`
+     - `test_ask_uses_metadata_specific_summary_for_metadata_queries`
+       - 验证 metadata 问题会使用 metadata 专属摘要
+     - `test_ask_keeps_review_not_required_for_clear_table_candidate`
+       - 验证清晰表问题不会被误判成需要复核
+   - `tests/test_answering.py`
+     - `test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+       - 验证多候选接近且 `review_required = true` 时，会主动走 guarded draft
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/qa.py src/uses_indexer/answering.py tests/test_qa.py tests/test_answering.py`
+- `PYTHONPATH=src pytest -q tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_qa.py::test_ask_keeps_review_not_required_for_clear_table_candidate tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question tests/test_answering.py::test_answer_uses_draft_when_llm_not_configured tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context`
+- 结果：`9 passed`
+
+### 结论
+
+- 当前 QA 首段摘要已经更像按 query type 定制出来的结果，而不是统一模板后面再补一个 section
+- 当前回答层已经开始统一消费 `review_required`，多候选接近时会更稳、更诚实地降级
+- 当前这轮优化仍然没有破坏 topic / metadata / table / call focus 的既有准确度

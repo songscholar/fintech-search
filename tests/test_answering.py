@@ -57,6 +57,22 @@ class StubLlm:
         }
 
 
+class StubQa:
+    def __init__(self, bundle: dict[str, object]) -> None:
+        self.bundle = bundle
+
+    def ask(
+        self,
+        db_path: str | Path,
+        question: str,
+        *,
+        evidence_limit: int | None = None,
+        context_window: int | None = None,
+        related_limit: int | None = None,
+    ) -> dict[str, object]:
+        return dict(self.bundle)
+
+
 def _build_answerer(tmp_path: Path, *, llm: StubLlm | None = None) -> tuple[CodebaseAnswerer, Path]:
     source_dir = tmp_path / "src"
     source_dir.mkdir()
@@ -165,3 +181,72 @@ def test_answer_uses_guarded_draft_for_low_confidence_questions(tmp_path: Path) 
     assert result["final_answer"]["tier"] == "guarded_low_confidence"
     assert result["final_answer"]["review_required"] is True
     assert "当前证据不足" in result["final_answer"]["text"]
+
+
+def test_answer_uses_guarded_draft_for_close_multi_candidate_table_question(tmp_path: Path) -> None:
+    answerer = CodebaseAnswerer(
+        qa=StubQa(
+            {
+                "db_path": str(tmp_path / "index.db"),
+                "question": "uses_fund_real 在哪里读取",
+                "evidence": [
+                    {
+                        "rank": 1,
+                        "procedure_name": "AF_SAMPLE",
+                        "file_path": "/tmp/AF_SAMPLE.uftatomfunction",
+                        "line_start": 2,
+                        "line_end": 7,
+                        "matched_text": "AF_SAMPLE -> uses_fund_real",
+                        "retrieval_source": "relation_table_edge",
+                        "match_source": "table_edge_relation",
+                    }
+                ],
+                "draft_answer": {
+                    "answer": "原始草答",
+                    "tier": "grounded_summary",
+                    "confidence": {"score": 0.6, "label": "medium"},
+                    "supporting_locations": [
+                        {
+                            "procedure_name": "AF_SAMPLE",
+                            "file_path": "/tmp/AF_SAMPLE.uftatomfunction",
+                            "line_start": 2,
+                            "line_end": 7,
+                            "matched_text": "AF_SAMPLE -> uses_fund_real",
+                        }
+                    ],
+                    "primary_candidate": {
+                        "procedure_name": "AF_SAMPLE",
+                        "file_path": "/tmp/AF_SAMPLE.uftatomfunction",
+                        "line_start": 2,
+                        "line_end": 7,
+                        "aggregate_score": 120.0,
+                    },
+                    "secondary_candidates": [
+                        {
+                            "procedure_name": "LS_FLOW",
+                            "file_path": "/tmp/LS_FLOW.uftservice",
+                            "line_start": 1,
+                            "line_end": 3,
+                            "aggregate_score": 115.0,
+                        }
+                    ],
+                    "uncertainties": ["多个候选过程分差很小，需要人工复核。"],
+                    "review_required": True,
+                },
+                "llm_context": "Use only the following indexed evidence when answering.\n[Evidence 1]",
+                "evidence_count": 1,
+                "prompt_package": {
+                    "system_prompt": "system",
+                    "answer_format": "结论:\n证据:\n推断:\n不确定点:",
+                    "user_prompt": "用户问题: uses_fund_real 在哪里读取",
+                },
+            }
+        ),
+        llm=StubLlm("这是一条本不该被使用的模型答案。"),
+    )
+
+    result = answerer.answer(tmp_path / "index.db", "uses_fund_real 在哪里读取", evidence_limit=3)
+
+    assert result["answer_source"] == "guarded_draft"
+    assert result["final_answer"]["review_required"] is True
+    assert "其他近似候选:" in result["final_answer"]["text"]
