@@ -74,6 +74,7 @@ class IndexBuildService:
             with conn:
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=initial_embedder_info)
                 counters = self._index_files(conn, files, parse_cache=parse_cache, parse_stats=parse_stats)
+                write_service.refresh_all_procedure_features(conn)
                 self._upsert_indexed_file_state(
                     conn,
                     files,
@@ -281,6 +282,7 @@ class IndexBuildService:
                     if self.owner._index_write_service.refresh_unit_metadata(conn, path=path, unit=unit):
                         metadata_refresh_count += 1
                 reused_vector_stats = self._restore_reusable_chunk_vectors(conn, reusable_vectors)
+                write_service.refresh_all_procedure_features(conn)
                 self._upsert_indexed_file_state(
                     conn,
                     files,

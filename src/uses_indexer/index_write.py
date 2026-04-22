@@ -33,6 +33,22 @@ class IndexWriteService:
     def __init__(self, owner: "SQLiteIndexer") -> None:
         self.owner = owner
 
+    def refresh_all_procedure_features(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute(
+            """
+            SELECT p.id, p.file_id, p.name
+            FROM procedures p
+            ORDER BY p.id
+            """
+        ).fetchall()
+        for procedure_id, file_id, procedure_name in rows:
+            self.upsert_procedure_features(
+                conn,
+                file_id=int(file_id),
+                procedure_id=int(procedure_id),
+                procedure_name=str(procedure_name),
+            )
+
     def insert_unit(self, conn: sqlite3.Connection, unit: ParsedUnit) -> tuple[int, int]:
         attributes_json = json_dumps(unit.attributes)
         cursor = conn.execute(
@@ -1119,6 +1135,8 @@ class IndexWriteService:
         statement_count = int(counts_row[0] or 0)
         call_count = int(counts_row[1] or 0)
         action_count = int(counts_row[2] or 0)
+        call_fan_out = len(outgoing_calls)
+        call_fan_in = len(incoming_callers)
         feature_flags = {
             "has_calls": bool(outgoing_calls or incoming_callers),
             "has_table_reads": bool(read_tables),
@@ -1132,12 +1150,19 @@ class IndexWriteService:
             "statement_count": statement_count,
             "action_count": action_count,
             "call_count": call_count,
+            "call_fan_out": call_fan_out,
+            "call_fan_in": call_fan_in,
+            "is_call_bridge": bool(call_fan_out and call_fan_in),
             "call_density": round(call_count / max(statement_count, 1), 6),
             "action_density": round(action_count / max(statement_count, 1), 6),
         }
         summary_parts = [procedure_name]
         if outgoing_calls:
             summary_parts.append(f"calls {', '.join(outgoing_calls[:4])}")
+        if incoming_callers:
+            summary_parts.append(f"called by {', '.join(incoming_callers[:4])}")
+        if call_fan_out and call_fan_in:
+            summary_parts.append(f"bridge in={call_fan_in} out={call_fan_out}")
         if read_tables or write_tables:
             summary_parts.append(
                 f"tables R[{', '.join(read_tables[:3])}] W[{', '.join(write_tables[:3])}]".replace("R[] ", "").replace(" W[]", "")

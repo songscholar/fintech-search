@@ -128,6 +128,18 @@ flowchart LR
   - 调用链邻居加权
   - 显式路径桥接优先级
 
+知识构建层现在还会在建库结束后做一次全局的 `procedure_features` 刷新：
+
+- 先按文件写入语句、边、chunk、block
+- 再统一重算所有过程的：
+  - `incoming_callers`
+  - `outgoing_calls`
+  - `call_fan_in / call_fan_out`
+  - `is_call_bridge`
+  - 过程级摘要文本
+
+这样像“桥接过程”“被谁调用”这类跨文件语义，不会再因为文件处理顺序不同而漂移。
+
 ## 端到端问答链路
 
 ```mermaid

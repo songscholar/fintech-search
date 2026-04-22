@@ -3709,3 +3709,67 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 evidence 也更稳了：
   - 同一上下文的多路命中会合流
   - 精确路径信息不会在后续问答阶段被去重吃掉
+
+## [1.2.55] - 2026-04-22
+
+### Step 62: 强化过程级知识构建并修复跨文件调用特征顺序依赖
+
+### 本步目标
+
+- 让 `procedure_features` 里的调用图知识更完整
+- 修复 `incoming_callers / bridge` 受文件建库顺序影响的问题
+- 让问答层能更稳定利用“桥接过程”这种过程级知识
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_write.py`
+   - `upsert_procedure_features()` 新增：
+     - `call_fan_in`
+     - `call_fan_out`
+     - `is_call_bridge`
+   - `summary_text` 现在会补：
+     - `called by ...`
+     - `bridge in=X out=Y`
+   - 新增 `refresh_all_procedure_features()`
+
+2. 更新 `src/uses_indexer/index_build.py`
+   - 全量建库完成主写入后，统一调用：
+     - `refresh_all_procedure_features()`
+   - 增量建库完成增量写入后，也统一调用：
+     - `refresh_all_procedure_features()`
+   - 这样过程级特征从“单文件即时统计”升级成了“全局二次刷新”
+
+3. 更新 `src/uses_indexer/rerank.py`
+   - 调用链类问题新增过程级特征加权：
+     - `feature_call_bridge`
+     - `feature_call_fan_balance`
+
+4. 更新 `src/uses_indexer/qa.py`
+   - 草答现在会从 `path_bridge=A->B->C` 中提取中间过程
+   - 增加：
+     - `桥接候选过程: ...`
+   - 同时把桥接路径和桥接候选纳入置信度判断
+
+5. 更新测试
+   - `tests/test_indexer.py`
+     - 验证 `procedure_features` 包含：
+       - `call_fan_in`
+       - `call_fan_out`
+       - `is_call_bridge`
+     - 验证桥接路径检索仍然成立
+   - `tests/test_qa.py`
+     - 验证草答会显式输出：
+       - `桥接候选过程`
+       - `调用链桥接路径`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_write.py src/uses_indexer/index_build.py src/uses_indexer/rerank.py src/uses_indexer/qa.py tests/test_indexer.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_chunk_features_and_procedure_features tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_qa.py::test_ask_surfaces_path_bridge_summary_for_call_chain_questions tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- 结果：`4 passed`
+
+### 结论
+
+- 当前“知识构建”这条线已经不只是存摘要文本了，而是开始稳定沉淀过程级调用图特征
+- 当前 `procedure_features` 的质量不再受文件处理顺序影响
+- 当前调用链问答不仅能给路径，还能更稳定地点出“桥接过程”

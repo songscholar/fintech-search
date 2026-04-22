@@ -658,6 +658,14 @@ def _feature_bonus(
         if bool(feature_flags.get("has_calls")):
             bonus += 10.0
             reasons.append("feature_call_procedure")
+        if bool(feature_flags.get("is_call_bridge")):
+            bonus += 8.0
+            reasons.append("feature_call_bridge")
+        call_fan_in = int(feature_flags.get("call_fan_in") or 0)
+        call_fan_out = int(feature_flags.get("call_fan_out") or 0)
+        if query_analysis.get("procedure_terms") and call_fan_in and call_fan_out:
+            bonus += min(call_fan_in + call_fan_out, 4) * 1.5
+            reasons.append("feature_call_fan_balance")
 
     if query_type == "failure_flow":
         if chunk_role == "failure_flow" or bool(chunk_features.get("has_failure_markers")):

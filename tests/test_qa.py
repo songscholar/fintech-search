@@ -113,3 +113,5 @@ def test_ask_surfaces_path_bridge_summary_for_call_chain_questions(tmp_path: Pat
 
     summary_points = list(result["draft_answer"]["summary_points"])
     assert any("调用链桥接路径" in item for item in summary_points)
+    assert any("桥接候选过程" in item for item in summary_points)
+    assert result["draft_answer"]["confidence"]["score"] >= 0.55

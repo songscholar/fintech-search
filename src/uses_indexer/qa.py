@@ -125,6 +125,9 @@ class CodebaseQA:
                 },
             )
         top_locations = list(unique_locations.values())
+        path_hints = []
+        bridge_candidates: list[str] = []
+        retrieval_sources = {str(item.get("retrieval_source") or "") for item in top_evidence}
 
         lead = top_evidence[0]
         primary_candidate = {
@@ -157,12 +160,13 @@ class CodebaseQA:
                 f"另一个候选过程是 {item['procedure_name']}，命中的关键文本是 {item['matched_text']}。"
             )
 
-        path_hints = []
         related_hints = []
         for item in top_evidence:
             related = item.get("related_context", {})
             outgoing_calls = related.get("outgoing_calls") or []
             related_tables = related.get("related_tables") or []
+            if "feature_call_bridge" in item.get("reasons", []):
+                bridge_candidates.append(str(item["procedure_name"]))
             path_reason = next(
                 (
                     str(reason)
@@ -172,11 +176,15 @@ class CodebaseQA:
                 "",
             )
             if path_reason:
+                path_value = path_reason.removeprefix("path_bridge=")
                 path_hints.append(
                     "调用链桥接路径为 "
-                    + path_reason.removeprefix("path_bridge=")
+                    + path_value
                     + "。"
                 )
+                path_steps = [step.strip() for step in path_value.split("->") if step.strip()]
+                if len(path_steps) > 2:
+                    bridge_candidates.extend(path_steps[1:-1])
             if outgoing_calls:
                 related_hints.append(
                     f"{item['procedure_name']} 还关联调用 {', '.join(outgoing_calls[:3])}。"
@@ -228,6 +236,11 @@ class CodebaseQA:
             uncertainties.append("仓库里存在多个相近候选过程，最终答案可能依赖具体业务场景。")
         if not related_hints:
             uncertainties.append("当前证据主要来自直接命中语句，尚未展开更深层调用链。")
+        if query_type in {"callers", "callees"} and "relation_path_bridge" not in retrieval_sources and "relation_multi_hop_context" not in retrieval_sources:
+            uncertainties.append("当前调用链回答主要基于直连命中，尚未形成更完整的桥接路径证据。")
+        if bridge_candidates:
+            bridge_label = "、".join(dict.fromkeys(bridge_candidates))
+            summary_points.append(f"桥接候选过程: {bridge_label}。")
         if uncertainties:
             answer_lines.append("不确定点:")
             for item in uncertainties:
@@ -257,6 +270,13 @@ class CodebaseQA:
         score = 0.35 + min(len(evidence), 3) * 0.15
         if related_hints:
             score += 0.1
+        if any(
+            "path_bridge=" in " ".join(str(reason) for reason in item.get("reasons", []))
+            for item in evidence
+        ):
+            score += 0.12
+        if any("feature_call_bridge" in item.get("reasons", []) for item in evidence):
+            score += 0.06
         if uncertainties:
             score -= min(len(uncertainties), 2) * 0.08
         score = max(0.1, min(round(score, 2), 0.95))
