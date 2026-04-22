@@ -674,6 +674,20 @@ def _feature_bonus(
         if bool(feature_flags.get("has_failure_chunks")):
             bonus += 10.0
             reasons.append("feature_failure_procedure")
+        if bool(feature_flags.get("has_failure_handlers")):
+            bonus += 10.0
+            reasons.append("feature_failure_handlers")
+        failure_handler_count = int(feature_flags.get("failure_handler_count") or 0)
+        exception_handler_count = int(feature_flags.get("exception_handler_count") or 0)
+        when_others_handler_count = int(feature_flags.get("when_others_handler_count") or 0)
+        if failure_handler_count or exception_handler_count or when_others_handler_count:
+            bonus += min(
+                failure_handler_count * 3.0
+                + exception_handler_count * 2.0
+                + when_others_handler_count * 1.5,
+                10.0,
+            )
+            reasons.append("feature_failure_handler_counts")
 
     if query_type == "metadata" and bool(feature_flags.get("has_metadata_refs")):
         bonus += 10.0

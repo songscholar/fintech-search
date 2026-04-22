@@ -1121,6 +1121,18 @@ class IndexWriteService:
                 (procedure_id,),
             ).fetchall()
         ]
+        block_counts = {
+            str(row[0]): int(row[1] or 0)
+            for row in conn.execute(
+                """
+                SELECT block_type, COUNT(*)
+                FROM blocks
+                WHERE procedure_id = ?
+                GROUP BY block_type
+                """,
+                (procedure_id,),
+            ).fetchall()
+        }
         counts_row = conn.execute(
             """
             SELECT
@@ -1137,6 +1149,9 @@ class IndexWriteService:
         action_count = int(counts_row[2] or 0)
         call_fan_out = len(outgoing_calls)
         call_fan_in = len(incoming_callers)
+        failure_handler_count = int(block_counts.get("failure_handler", 0))
+        exception_handler_count = int(block_counts.get("exception_handler", 0))
+        when_others_handler_count = int(block_counts.get("when_others_handler", 0))
         feature_flags = {
             "has_calls": bool(outgoing_calls or incoming_callers),
             "has_table_reads": bool(read_tables),
@@ -1145,6 +1160,11 @@ class IndexWriteService:
             "has_metadata_refs": bool(metadata_refs),
             "has_variable_writes": bool(variable_writes),
             "has_failure_chunks": "failure_flow" in chunk_roles,
+            "has_failure_handlers": bool(
+                failure_handler_count
+                or exception_handler_count
+                or when_others_handler_count
+            ),
             "has_call_chain_chunks": "call_chain" in chunk_roles,
             "has_table_access_chunks": "table_access" in chunk_roles,
             "statement_count": statement_count,
@@ -1153,6 +1173,9 @@ class IndexWriteService:
             "call_fan_out": call_fan_out,
             "call_fan_in": call_fan_in,
             "is_call_bridge": bool(call_fan_out and call_fan_in),
+            "failure_handler_count": failure_handler_count,
+            "exception_handler_count": exception_handler_count,
+            "when_others_handler_count": when_others_handler_count,
             "call_density": round(call_count / max(statement_count, 1), 6),
             "action_density": round(action_count / max(statement_count, 1), 6),
         }
@@ -1163,6 +1186,15 @@ class IndexWriteService:
             summary_parts.append(f"called by {', '.join(incoming_callers[:4])}")
         if call_fan_out and call_fan_in:
             summary_parts.append(f"bridge in={call_fan_in} out={call_fan_out}")
+        failure_summary_parts: list[str] = []
+        if failure_handler_count:
+            failure_summary_parts.append(f"failure={failure_handler_count}")
+        if exception_handler_count:
+            failure_summary_parts.append(f"exception={exception_handler_count}")
+        if when_others_handler_count:
+            failure_summary_parts.append(f"when_others={when_others_handler_count}")
+        if failure_summary_parts:
+            summary_parts.append("failure blocks " + ", ".join(failure_summary_parts))
         if read_tables or write_tables:
             summary_parts.append(
                 f"tables R[{', '.join(read_tables[:3])}] W[{', '.join(write_tables[:3])}]".replace("R[] ", "").replace(" W[]", "")

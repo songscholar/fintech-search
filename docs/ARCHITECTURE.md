@@ -140,6 +140,15 @@ flowchart LR
 
 这样像“桥接过程”“被谁调用”这类跨文件语义，不会再因为文件处理顺序不同而漂移。
 
+同一层里，失败路径相关的过程级知识也开始显式沉淀：
+
+- `failure_handler_count`
+- `exception_handler_count`
+- `when_others_handler_count`
+- `has_failure_handlers`
+
+并且会进入 `procedure_features.summary_text`，所以失败题后续不只靠块级命中，还可以直接利用过程级失败语义。
+
 ## 端到端问答链路
 
 ```mermaid
@@ -188,6 +197,13 @@ sequenceDiagram
   - `secondary_candidates`
   - `citations`
   - `uncertainties`
+
+对失败路径问题，草答现在也会额外提取：
+
+- 恢复出来的 `failure_handler / exception_handler / when_others_handler`
+- 更明确的失败处理块摘要
+
+这样回答“失败在哪里处理”这类问题时，不再只是命中某段代码，而是会更稳定地指出异常处理结构。
 
 另外，证据层现在也不再简单丢弃“同一上下文的重复命中”：
 

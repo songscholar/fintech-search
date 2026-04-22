@@ -326,6 +326,13 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
         WHERE procedure_name = 'AF_SAMPLE'
         """
     ).fetchone()
+    failure_row = conn.execute(
+        """
+        SELECT summary_text, feature_flags_json
+        FROM procedure_features
+        WHERE procedure_name = 'AF_SAMPLE'
+        """
+    ).fetchone()
     conn.close()
 
     assert chunk_rows
@@ -340,19 +347,27 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
 
     assert procedure_row is not None
     assert bridge_row is not None
+    assert failure_row is not None
     summary_text, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json = procedure_row
     feature_flags = json.loads(str(feature_flags_json))
     bridge_summary_text, bridge_feature_flags_json = bridge_row
     bridge_feature_flags = json.loads(str(bridge_feature_flags_json))
+    failure_summary_text, failure_feature_flags_json = failure_row
+    failure_feature_flags = json.loads(str(failure_feature_flags_json))
     assert "uses_deep_table" in json.loads(str(read_tables_json))
     assert "uses_deep_table" in json.loads(str(write_tables_json))
     assert "@deep_flag" in json.loads(str(variable_writes_json))
     assert feature_flags["has_table_reads"] is True
     assert feature_flags["has_table_writes"] is True
     assert feature_flags["has_variable_writes"] is True
+    assert feature_flags["has_failure_handlers"] is False
     assert bridge_feature_flags["call_fan_out"] >= 1
     assert bridge_feature_flags["call_fan_in"] >= 1
     assert bridge_feature_flags["is_call_bridge"] is True
+    assert failure_feature_flags["has_failure_handlers"] is True
+    assert failure_feature_flags["failure_handler_count"] >= 1
+    assert failure_feature_flags["exception_handler_count"] >= 1
+    assert "failure blocks" in str(failure_summary_text)
     assert "called by" in str(bridge_summary_text) or "bridge" in str(bridge_summary_text)
     assert "calls" in str(summary_text) or "tables" in str(summary_text)
 

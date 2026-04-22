@@ -15,6 +15,14 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
   [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
   [AF_DEEP][][]
   [获取记录][uses_fund_real(idx_x)][fund_account = @fund_account]
+  [处理失败]
+  {
+    [EXCEPTION]
+    [WHEN_OTHERS]
+    {
+      [业务报错返回][ERR_FUND_QRY_FUNDREAL_FAIL][查询交易资金表失败]
+    }
+  }
   @row_count = 1;
   ]]></code>
 </business:Function>
@@ -115,3 +123,13 @@ def test_ask_surfaces_path_bridge_summary_for_call_chain_questions(tmp_path: Pat
     assert any("调用链桥接路径" in item for item in summary_points)
     assert any("桥接候选过程" in item for item in summary_points)
     assert result["draft_answer"]["confidence"]["score"] >= 0.55
+
+
+def test_ask_surfaces_failure_path_summary_for_failure_questions(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "查询交易资金表失败在哪里处理", evidence_limit=3, context_window=1, related_limit=2)
+
+    summary_points = list(result["draft_answer"]["summary_points"])
+    assert any("失败处理块" in item for item in summary_points)
+    assert result["draft_answer"]["confidence"]["label"] in {"medium", "high"}

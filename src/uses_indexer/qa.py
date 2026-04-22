@@ -127,6 +127,7 @@ class CodebaseQA:
         top_locations = list(unique_locations.values())
         path_hints = []
         bridge_candidates: list[str] = []
+        failure_hints: list[str] = []
         retrieval_sources = {str(item.get("retrieval_source") or "") for item in top_evidence}
 
         lead = top_evidence[0]
@@ -195,6 +196,17 @@ class CodebaseQA:
                     for table in related_tables[:3]
                 )
                 related_hints.append(f"{item['procedure_name']} 涉及表访问 {table_desc}。")
+            if query_type == "failure_flow":
+                recovered_blocks = list(item.get("recovered_blocks") or [])
+                failure_blocks = [
+                    str(block.get("block_type") or "")
+                    for block in recovered_blocks
+                    if str(block.get("block_type") or "") in {"failure_handler", "exception_handler", "when_others_handler"}
+                ]
+                if failure_blocks:
+                    failure_hints.append(
+                        f"{item['procedure_name']} 覆盖失败处理块 {', '.join(dict.fromkeys(failure_blocks))}。"
+                    )
 
         answer_lines = [f"结论: 围绕“{question}”，当前索引最优先命中的实现位置是 {lead['procedure_name']}。"]
         if query_type in {"callers", "callees"}:
@@ -212,6 +224,8 @@ class CodebaseQA:
         else:
             answer_lines.append("实现位置:")
         for line in summary_points:
+            answer_lines.append(f"- {line}")
+        for line in failure_hints[:2]:
             answer_lines.append(f"- {line}")
         for line in related_hints[:2]:
             answer_lines.append(f"- {line}")
@@ -238,15 +252,25 @@ class CodebaseQA:
             uncertainties.append("当前证据主要来自直接命中语句，尚未展开更深层调用链。")
         if query_type in {"callers", "callees"} and "relation_path_bridge" not in retrieval_sources and "relation_multi_hop_context" not in retrieval_sources:
             uncertainties.append("当前调用链回答主要基于直连命中，尚未形成更完整的桥接路径证据。")
+        if query_type == "failure_flow" and "relation_failure_block" not in retrieval_sources and not failure_hints:
+            uncertainties.append("当前失败路径回答缺少直接的失败处理块证据，需要继续检查异常分支和报错语句。")
         if bridge_candidates:
             bridge_label = "、".join(dict.fromkeys(bridge_candidates))
             summary_points.append(f"桥接候选过程: {bridge_label}。")
+        if failure_hints:
+            summary_points.extend(failure_hints[:1])
         if uncertainties:
             answer_lines.append("不确定点:")
             for item in uncertainties:
                 answer_lines.append(f"- {item}")
 
-        confidence = self._estimate_confidence(top_evidence, related_hints, uncertainties)
+        confidence = self._estimate_confidence(
+            top_evidence,
+            related_hints,
+            uncertainties,
+            query_type=query_type,
+            failure_hints=failure_hints,
+        )
         prioritized_hints = [*path_hints, *related_hints]
         return {
             "status": "ok",
@@ -266,6 +290,9 @@ class CodebaseQA:
         evidence: list[dict[str, object]],
         related_hints: list[str],
         uncertainties: list[str],
+        *,
+        query_type: str,
+        failure_hints: list[str],
     ) -> dict[str, object]:
         score = 0.35 + min(len(evidence), 3) * 0.15
         if related_hints:
@@ -277,6 +304,11 @@ class CodebaseQA:
             score += 0.12
         if any("feature_call_bridge" in item.get("reasons", []) for item in evidence):
             score += 0.06
+        if query_type == "failure_flow":
+            if any(str(item.get("retrieval_source") or "") == "relation_failure_block" for item in evidence):
+                score += 0.12
+            if failure_hints:
+                score += 0.08
         if uncertainties:
             score -= min(len(uncertainties), 2) * 0.08
         score = max(0.1, min(round(score, 2), 0.95))

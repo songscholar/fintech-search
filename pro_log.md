@@ -3773,3 +3773,60 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前“知识构建”这条线已经不只是存摘要文本了，而是开始稳定沉淀过程级调用图特征
 - 当前 `procedure_features` 的质量不再受文件处理顺序影响
 - 当前调用链问答不仅能给路径，还能更稳定地点出“桥接过程”
+
+## [1.2.56] - 2026-04-22
+
+### Step 63: 强化失败路径知识构建与失败题草答稳定性
+
+### 本步目标
+
+- 让失败处理结构进入过程级知识底座
+- 让“失败在哪里处理”这类问题在草答阶段就能更稳定给出失败块信息
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_write.py`
+   - `procedure_features.feature_flags` 新增：
+     - `failure_handler_count`
+     - `exception_handler_count`
+     - `when_others_handler_count`
+     - `has_failure_handlers`
+   - `summary_text` 新增：
+     - `failure blocks failure=X, exception=Y, when_others=Z`
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - `failure_flow` 问题新增过程级失败特征加权：
+     - `feature_failure_handlers`
+     - `feature_failure_handler_counts`
+
+3. 更新 `src/uses_indexer/qa.py`
+   - 失败题草答会优先提取 recovered blocks 中的：
+     - `failure_handler`
+     - `exception_handler`
+     - `when_others_handler`
+   - 新增：
+     - `AF_SAMPLE 覆盖失败处理块 ...`
+   - 失败题置信度估计新增：
+     - `relation_failure_block` 命中加分
+     - `failure_hints` 加分
+   - 同时在缺少直接失败块证据时，显式补充不确定点
+
+4. 更新测试
+   - `tests/test_indexer.py`
+     - 验证过程级失败特征和失败摘要已经写入 `procedure_features`
+   - `tests/test_qa.py`
+     - 新增 `test_ask_surfaces_failure_path_summary_for_failure_questions`
+     - 验证失败题草答会输出失败处理块摘要，并提升到 `medium/high`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_write.py src/uses_indexer/rerank.py src/uses_indexer/qa.py tests/test_indexer.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_chunk_features_and_procedure_features tests/test_qa.py::test_ask_surfaces_failure_path_summary_for_failure_questions tests/test_qa.py::test_ask_surfaces_path_bridge_summary_for_call_chain_questions tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- 结果：`4 passed`
+
+### 结论
+
+- 当前“知识构建”对失败路径已经不再只停留在块级恢复，而是开始把失败结构沉淀到过程级摘要
+- 当前“问答流程”对失败题也更像真实排障回答：
+  - 会直接指出失败处理块
+  - 并在证据不足时给出更明确的不确定点
