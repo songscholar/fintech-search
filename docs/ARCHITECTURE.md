@@ -282,6 +282,35 @@ flowchart LR
 - 多路一致支撑的过程获得稳定加权
 - 前端与调试接口能直接看到 `aggregate_score / aggregate_hit_count`
 
+在此基础上，topic / metadata 这两类问题又继续做了更细的专属配方：
+
+- rerank 现在会对以下路径做轻量额外加权：
+  - metadata 问题：
+    - `fts_procedure_feature`
+    - `fts_edge`
+  - topic 问题：
+    - `fts_procedure_feature`
+    - `fts_action`
+    - `fts_edge`
+- 同时也会显式读取画像中的：
+  - `core_topics`
+  - `core_metadata_refs`
+
+因此这两类问题不再只是“命中了相关文本”，而是更偏：
+
+- 命中了相关文本
+- 且对应过程真的具备该 topic / metadata 画像
+
+evidence 选择层也开始跟上这个策略：
+
+- `topic_publish / metadata_definition` 默认会把同一过程的 evidence cap 收紧到 `1`
+- 选出来的 evidence block 会直接携带：
+  - `aggregate_score`
+  - `aggregate_hit_count`
+  - `procedure_profile`
+
+这样最终给到 QA / LLM / 前端的证据面会更干净，不再被同一过程的多条相似片段占满。
+
 ## 端到端问答链路
 
 ```mermaid

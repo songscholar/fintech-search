@@ -680,6 +680,18 @@ def test_related_context_exposes_mc_published_topics(tmp_path: Path) -> None:
     assert "CNST_MC_UFT_OPTSYNC(消息中心主题发布 异步发布)" in llm_context
 
 
+def test_assemble_evidence_limits_topic_queries_to_one_procedure_context(tmp_path: Path) -> None:
+    indexer, db_path = _build_mc_publish_index(tmp_path)
+
+    result = indexer.assemble_evidence(db_path, "CNST_MC_UFT_OPTSYNC topic 发布", limit=3, context_window=1, related_limit=2)
+
+    assert result["evidence_count"] == 1
+    block = result["evidence"][0]
+    assert block["procedure_name"] == "LS_MC_PUBLISH"
+    assert block["aggregate_hit_count"] >= 1
+    assert block["procedure_profile"].get("topic_role") == "publisher"
+
+
 def test_metadata_files_are_indexed_and_summarized(tmp_path: Path) -> None:
     indexer, db_path = _build_metadata_index(tmp_path)
 

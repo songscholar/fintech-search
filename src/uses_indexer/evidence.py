@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .observability import build_evidence_debug_payload
 from .response_schema import apply_response_envelope
+from .rerank import analyze_query
 from .semantic_recovery import format_call_edge_label, format_mc_topic_label, maybe_int
 
 
@@ -40,22 +41,27 @@ class EvidenceService:
             candidate_limit=max(limit * 8, 40),
             debug=debug,
         )
+        query_analysis = analyze_query(query)
+        query_type = str(query_analysis.get("query_type") or "")
 
         evidence_blocks: list[dict[str, object]] = []
         seen_contexts: set[tuple[int, int, int]] = set()
         context_indexes: dict[tuple[int, int, int], int] = {}
         procedure_counts: dict[int, int] = {}
         pruned_events: list[dict[str, object]] = []
+        procedure_cap = 1 if query_type in {"topic_publish", "metadata_definition"} else 2
 
         for rank, candidate in enumerate(candidates, start=1):
             procedure_id = int(candidate["procedure_id"])
-            if procedure_counts.get(procedure_id, 0) >= 2:
+            if procedure_counts.get(procedure_id, 0) >= procedure_cap:
                 if debug:
                     pruned_events.append(
                         {
                             "reason": "procedure_evidence_cap",
                             "procedure_name": str(candidate["procedure_name"]),
                             "rank": rank,
+                            "query_type": query_type,
+                            "procedure_cap": procedure_cap,
                         }
                     )
                 continue
@@ -90,6 +96,17 @@ class EvidenceService:
                     if retrieval_source not in matched_via:
                         matched_via.append(retrieval_source)
                     existing_block["matched_via"] = matched_via
+                    existing_block["aggregate_score"] = round(
+                        max(
+                            float(existing_block.get("aggregate_score") or 0.0),
+                            float(candidate.get("aggregate_score") or candidate.get("score") or 0.0),
+                        ),
+                        3,
+                    )
+                    existing_block["aggregate_hit_count"] = max(
+                        int(existing_block.get("aggregate_hit_count") or 1),
+                        int(candidate.get("aggregate_hit_count") or 1),
+                    )
                 if debug:
                     pruned_events.append(
                         {
@@ -118,6 +135,8 @@ class EvidenceService:
                 {
                     "rank": rank,
                     "score": round(float(candidate["score"]), 3),
+                    "aggregate_score": round(float(candidate.get("aggregate_score") or candidate["score"]), 3),
+                    "aggregate_hit_count": int(candidate.get("aggregate_hit_count") or 1),
                     "hit_type": candidate["hit_type"],
                     "retrieval_source": candidate["retrieval_source"],
                     "matched_via": list(candidate.get("matched_via", [candidate["retrieval_source"]])),

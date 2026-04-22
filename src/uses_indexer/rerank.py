@@ -592,11 +592,17 @@ def _intent_bonus(
         if "references_" in combined or "metadata" in combined:
             bonus += 12.0
             reasons.append("intent_metadata")
+        if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
+            bonus += 6.0
+            reasons.append("intent_metadata_feature_source")
 
     if query_analysis.get("wants_topic"):
         if "publishes_mc_topic" in combined or "mc_topic" in combined or "topic" in combined:
             bonus += 14.0
             reasons.append("intent_topic")
+        if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_action", "fts_edge"}:
+            bonus += 6.0
+            reasons.append("intent_topic_feature_source")
 
     if query_analysis["wants_procedure"] and not query_analysis["wants_call_chain"]:
         if hit_type == "procedure":
@@ -713,6 +719,9 @@ def _feature_bonus(
         if str(procedure_profile.get("metadata_role") or "") == "referencer":
             bonus += 4.0
             reasons.append("feature_metadata_role")
+        if procedure_profile.get("core_metadata_refs"):
+            bonus += 3.0
+            reasons.append("feature_metadata_profile")
 
     if query_type == "topic_publish" and bool(feature_flags.get("has_mc_topics")):
         bonus += 12.0
@@ -720,6 +729,9 @@ def _feature_bonus(
         if str(procedure_profile.get("topic_role") or "") == "publisher":
             bonus += 4.0
             reasons.append("feature_topic_role")
+        if procedure_profile.get("core_topics"):
+            bonus += 3.0
+            reasons.append("feature_topic_profile")
 
     if hit_type == "chunk" and float(chunk_features.get("action_density") or 0.0) >= 0.5:
         bonus += 2.0

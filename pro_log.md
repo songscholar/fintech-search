@@ -4133,3 +4133,60 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前“过程级聚合”已经形成上下游闭环：
   - retrieval 负责聚合排序
   - QA 负责聚合候选表达
+
+## [1.2.61] - 2026-04-23
+
+### Step 68: 细化 topic / metadata 精排并收紧证据面
+
+### 本步目标
+
+- 继续做正向增强，重点优化 topic / metadata 这两类非失败问题
+- 让这两类问题不只在检索排序更稳，也在 evidence 选择层更干净
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/rerank.py`
+   - topic / metadata 精排进一步细化：
+     - metadata 问题对 `fts_procedure_feature / fts_edge` 额外加轻量 bonus
+     - topic 问题对 `fts_procedure_feature / fts_action / fts_edge` 额外加轻量 bonus
+   - 同时也显式利用画像里的：
+     - `core_topics`
+     - `core_metadata_refs`
+   - 新增：
+     - `feature_topic_profile`
+     - `feature_metadata_profile`
+     - `intent_topic_feature_source`
+     - `intent_metadata_feature_source`
+
+2. 更新 `src/uses_indexer/evidence.py`
+   - evidence 选择开始感知 query type
+   - 对：
+     - `topic_publish`
+     - `metadata_definition`
+   - 同一过程的 evidence cap 从默认 `2` 收紧到 `1`
+   - evidence block 现在显式保留：
+     - `aggregate_score`
+     - `aggregate_hit_count`
+   - 并在 duplicate context merge 时同步维护这两个聚合指标
+
+3. 更新测试
+   - `tests/test_indexer.py`
+     - 新增 `test_assemble_evidence_limits_topic_queries_to_one_procedure_context`
+       - 验证 topic 问题的 evidence 面只保留一个过程上下文
+   - 回归：
+     - topic 聚合指标
+     - topic 提示
+     - 表链路 / 路径桥接 / exact focus 不回退
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evidence.py src/uses_indexer/rerank.py tests/test_indexer.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_indexer.py::test_query_index_prefers_aggregate_topic_hits_without_hurting_table_focus tests/test_indexer.py::test_assemble_evidence_limits_topic_queries_to_one_procedure_context tests/test_indexer.py::test_related_context_exposes_mc_published_topics tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_expands_table_chain_context_for_flow_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context`
+- 结果：`10 passed`
+
+### 结论
+
+- 当前 topic / metadata 问题已经不只是“能命中”，而是开始具备更明确的专属精排配方
+- 当前 evidence 选择层也会配合 query type 收紧证据面，让最终输出更干净
+- 当前这类问题的优化仍然没有牺牲表链路、路径桥接和 exact focus 的已有准确度
