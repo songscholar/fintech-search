@@ -486,6 +486,8 @@ def test_incremental_build_reuses_parsed_units_with_cache(tmp_path: Path) -> Non
     assert result["build_stats"]["parse_cache_misses"] >= 2
     assert parser.calls[str(changed_source)] - before_calls.get(str(changed_source), 0) == 1
     assert parser.calls[str(added_source)] == 1
+    unchanged_source = source_dir / "LS_FLOW.uftservice"
+    assert parser.calls[str(unchanged_source)] == before_calls.get(str(unchanged_source), 0)
 
 
 def test_query_index_uses_fts_and_rerank(tmp_path: Path) -> None:
@@ -768,6 +770,24 @@ def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: P
     assert failure_hits
     assert any(hit["procedure_name"] == "AF_SAMPLE" for hit in failure_hits)
     assert any(hit["match_source"] in {"block_summary", "failure_block_relation"} for hit in failure_hits)
+
+
+def test_query_index_expands_neighbor_context_for_table_flow_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_deep_table 更新链路", limit=20)
+
+    neighbor_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_neighbor_context"
+        or "relation_neighbor_context" in hit.get("matched_via", [])
+    ]
+    assert neighbor_hits
+    assert any(hit["procedure_name"] == "AF_SAMPLE" for hit in neighbor_hits)
+    assert any(
+        "intent_table_neighbor_context" in hit["reasons"] or "relation_neighbor_context" in hit.get("matched_via", [])
+        for hit in neighbor_hits
+    )
 
 
 def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:

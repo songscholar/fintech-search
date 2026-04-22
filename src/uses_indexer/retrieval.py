@@ -117,6 +117,17 @@ class RetrievalService:
         for candidate in relation_candidates:
             merge_candidate(candidates, candidate)
 
+        neighbor_candidates = self._run_neighbor_expansion_queries(
+            conn,
+            query_analysis=query_analysis,
+            relation_candidates=relation_candidates,
+            limit=candidate_limit,
+        )
+        source_trace["neighbor"] = [self._trace_candidate(item) for item in neighbor_candidates[:20]]
+        source_counts["neighbor"] = len(neighbor_candidates)
+        for candidate in neighbor_candidates:
+            merge_candidate(candidates, candidate)
+
         merged = list(candidates.values())
         for candidate in merged:
             candidate["debug_retrieval"] = {
@@ -156,6 +167,99 @@ class RetrievalService:
             )
 
         return reranked, fts_query, vector_status, retrieval_debug
+
+    def _run_neighbor_expansion_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        relation_candidates: list[dict[str, object]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        wants_table = bool(query_analysis.get("wants_table_sql"))
+        wants_variable = bool(query_analysis.get("wants_variable"))
+        wants_failure = bool(query_analysis.get("wants_failure_flow"))
+        if not any((wants_table, wants_variable, wants_failure)):
+            return []
+
+        context_fetch = self.owner._context_fetch_service
+        seed_sources: set[str] = set()
+        if wants_table:
+            seed_sources.add("relation_table_edge")
+        if wants_variable:
+            seed_sources.add("relation_variable_edge")
+        if wants_failure:
+            seed_sources.add("relation_failure_block")
+        seeds: list[str] = []
+        seen_seed_names: set[str] = set()
+        for item in relation_candidates:
+            if str(item.get("retrieval_source") or "") not in seed_sources:
+                continue
+            procedure_name = str(item.get("procedure_name") or "")
+            if not procedure_name or procedure_name in seen_seed_names:
+                continue
+            seen_seed_names.add(procedure_name)
+            seeds.append(procedure_name)
+            if len(seeds) >= 3:
+                break
+        if not seeds:
+            return []
+
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for procedure_name in seeds:
+            outgoing_hops, incoming_hops = context_fetch.procedure_call_neighbors(
+                conn,
+                procedure_name=procedure_name,
+                max_depth=1,
+            )
+            for direction, neighbors in (("incoming", incoming_hops.get(1, set())), ("outgoing", outgoing_hops.get(1, set()))):
+                for neighbor_name in sorted(neighbors):
+                    if neighbor_name == procedure_name:
+                        continue
+                    key = (procedure_name, direction, neighbor_name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    row = conn.execute(
+                        """
+                        SELECT p.id, f.id, p.chinese_name, p.object_id, f.path
+                        FROM procedures p
+                        JOIN files f ON f.id = p.file_id
+                        WHERE p.name = ? OR p.chinese_name = ?
+                        ORDER BY CASE WHEN p.name = ? THEN 0 ELSE 1 END
+                        LIMIT 1
+                        """,
+                        (neighbor_name, neighbor_name, neighbor_name),
+                    ).fetchone()
+                    summary = context_fetch.lookup_procedure_summary(conn, neighbor_name)
+                    if summary is None or row is None:
+                        continue
+                    matched_text = f"{neighbor_name} {'->' if direction == 'incoming' else '<-'} {procedure_name}"
+                    candidates.append(
+                        {
+                            "hit_type": "procedure",
+                            "entity_id": int(row[0]),
+                            "procedure_id": int(row[0]),
+                            "file_id": int(row[1]),
+                            "statement_id": None,
+                            "file_path": str(row[4]),
+                            "procedure_name": str(summary["procedure_name"]),
+                            "chinese_name": row[2] if row[2] else None,
+                            "object_id": row[3] if row[3] else None,
+                            "line_start": summary.get("line_start"),
+                            "line_end": summary.get("line_end"),
+                            "matched_text": matched_text,
+                            "match_source": f"neighbor_{direction}_context",
+                            "retrieval_source": "relation_neighbor_context",
+                            "base_score": 88.0 if direction == "incoming" else 82.0,
+                            "source_rank": 8.8 if direction == "incoming" else 8.2,
+                            "search_text": f"{matched_text} {summary.get('summary_text') or ''}",
+                            "procedure_summary": str(summary.get("summary_text") or ""),
+                            "reasons": [f"neighbor_{direction}={procedure_name}"],
+                        }
+                    )
+        return candidates[:limit]
 
     def _run_vector_queries(
         self,

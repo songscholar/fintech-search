@@ -3524,3 +3524,58 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 当前建库链路已经不再把“无变化增量”当成一次完整任务去执行
 - 向量补齐阶段的写库动作也从逐条执行改成了批量提交，更适合后续大库场景
+
+## [1.2.52] - 2026-04-22
+
+### Step 59: 深化检索邻居扩展与增量建库状态缓存
+
+### 本步目标
+
+- 让检索在 `表 / 变量 / 失败路径` 这类问题里，不只看到直连命中，还能补上一跳邻居过程
+- 让增量建库在写回 `indexed_files` 状态时，不再重新 parse 所有未变化文件
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 新增 `_run_neighbor_expansion_queries()`
+   - 对以下意图开启邻居扩展：
+     - `wants_table_sql`
+     - `wants_variable`
+     - `wants_failure_flow`
+   - 基于直连关系候选，补充一跳：
+     - `incoming` caller
+     - `outgoing` callee
+   - 新增召回源：
+     - `relation_neighbor_context`
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 新增：
+     - `intent_table_neighbor_context`
+     - `intent_variable_neighbor_context`
+     - `intent_failure_neighbor_context`
+   - 让邻居上下文保留为“可见的辅助证据”，但不去抢掉直连主证据
+
+3. 更新 `src/uses_indexer/index_build.py`
+   - `indexed_files` 状态写回新增 `preserved_state`
+   - 增量建库现在会复用未变化文件已有的：
+     - `fingerprint`
+     - `code_fingerprint`
+     - `unit_signature`
+   - 不再为了写回状态而重新 parse 未变文件
+
+4. 更新测试
+   - `tests/test_indexer.py`
+   - 覆盖：
+     - `test_query_index_expands_neighbor_context_for_table_flow_queries`
+     - `test_incremental_build_reuses_parsed_units_with_cache`
+     - `test_incremental_build_short_circuits_when_nothing_changed`
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py -k "reuses_parsed_units_with_cache or expands_neighbor_context_for_table_flow_queries or incremental_build_short_circuits_when_nothing_changed"`
+- 结果：`3 passed`
+
+### 结论
+
+- 当前检索已经开始具备“主证据 + 一跳上下文”的组合能力，更适合回答带路径感的问题
+- 当前增量建库除了 `noop` 和 `metadata_only` 之外，连状态写回阶段也不再会把未变文件重新 parse 一遍

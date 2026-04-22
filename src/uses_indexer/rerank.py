@@ -488,6 +488,9 @@ def _intent_bonus(
         elif hit_type == "edge" and match_source == "table_edge_relation":
             bonus += 26.0 if query_analysis["wants_table_write"] else 22.0
             reasons.append("intent_exact_table_edge")
+        elif candidate.get("retrieval_source") == "relation_neighbor_context":
+            bonus += 18.0
+            reasons.append("intent_table_neighbor_context")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
             bonus += 30.0
             reasons.append("intent_sql_block")
@@ -519,6 +522,9 @@ def _intent_bonus(
         if hit_type == "edge" and match_source == "variable_edge_relation":
             bonus += 12.0 if query_analysis.get("wants_variable_write") else 8.0
             reasons.append("intent_exact_variable_edge")
+        elif candidate.get("retrieval_source") == "relation_neighbor_context":
+            bonus += 14.0
+            reasons.append("intent_variable_neighbor_context")
         if query_analysis.get("wants_variable_read") and match_source == "read":
             bonus += 10.0
             reasons.append("variable_read_match")
@@ -533,6 +539,9 @@ def _intent_bonus(
             if match_source == "failure_block_relation":
                 bonus += 14.0
                 reasons.append("intent_exact_failure_block")
+        elif candidate.get("retrieval_source") == "relation_neighbor_context":
+            bonus += 14.0
+            reasons.append("intent_failure_neighbor_context")
         elif hit_type == "chunk" and contains_any(combined, FAILURE_MATCH_HINTS):
             bonus += 4.0
             reasons.append("intent_failure_chunk")

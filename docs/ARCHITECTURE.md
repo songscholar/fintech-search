@@ -119,6 +119,7 @@ flowchart LR
   - 表访问边
   - 变量写入边
   - 失败处理块
+  - 一跳邻居上下文过程
 - rerank：
   - query type 感知
   - feature flag 感知
@@ -203,6 +204,22 @@ sequenceDiagram
 - 不触发向量补齐
 
 向量补齐阶段也已经从“逐条写入 `chunk_vectors`”切到“按 batch 组装后 `executemany()` 批量写入”，这样更适合后续较大的索引库。
+
+除此之外，`indexed_files` 的状态回写也不再要求重新 parse 所有未变化文件：
+
+- changed / added 文件会重新计算：
+  - `fingerprint`
+  - `code_fingerprint`
+  - `unit_signature`
+- unchanged 文件直接复用上一次存量状态
+
+这意味着当前增量建库的开销已经进一步压缩到：
+
+- 变化检测
+- 真正需要重建或刷新的文件
+- 必要的向量补齐
+
+而不是在“状态写回”这一步又把整库文件重新扫一遍。
 
 ## 模块职责与源码映射
 

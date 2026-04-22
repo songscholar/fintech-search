@@ -287,6 +287,11 @@ class IndexBuildService:
                     index_type=index_type,
                     parse_cache=parse_cache,
                     parse_stats=parse_stats,
+                    preserved_state={
+                        path: state
+                        for path, state in stored_state.items()
+                        if path in current_state and path not in set([*added_paths, *changed_paths])
+                    },
                 )
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=self.owner.embedder.info)
 
@@ -667,8 +672,10 @@ class IndexBuildService:
         index_type: str,
         parse_cache: dict[str, ParsedUnit],
         parse_stats: dict[str, int],
+        preserved_state: dict[str, dict[str, object]] | None = None,
     ) -> None:
         conn.execute("DELETE FROM indexed_files WHERE index_type = ?", (index_type,))
+        preserved_state = preserved_state or {}
         conn.executemany(
             """
             INSERT OR REPLACE INTO indexed_files(path, file_size, mtime_ns, fingerprint, index_type, code_fingerprint, unit_signature)
@@ -685,7 +692,10 @@ class IndexBuildService:
                     state["unit_signature"],
                 )
                 for path in files
-                for state in [self._build_index_state_record(path, parse_cache=parse_cache, parse_stats=parse_stats)]
+                for state in [
+                    dict(preserved_state.get(str(path)) or {})
+                    or self._build_index_state_record(path, parse_cache=parse_cache, parse_stats=parse_stats)
+                ]
             ],
         )
 
