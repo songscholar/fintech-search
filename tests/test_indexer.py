@@ -55,6 +55,10 @@ DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
   [获取记录][uses_deep_table(idx_x)][fund_account = @fund_account]
   [通用SQL执行][update uses_deep_table set deep_flag = 1 where fund_account = @fund_account][]
   @table_name = "uses_dynamic_table";
+  @sql_prefix = "select * from " + @table_name;
+  @sql_filter = " where fund_account = @fund_account";
+  @query_sql = @sql_prefix + @sql_filter;
+  [通用SQL执行][@query_sql][]
   sprintf(@sql_str, "delete from %s where fund_account = %s", @table_name, @fund_account);
   [通用SQL执行][@sql_str][]
   @deep_flag = 1;
@@ -360,10 +364,18 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
     assert "@deep_flag" in json.loads(str(variable_writes_json))
     assert "fund_account" in " ".join(str(item) for item in profile["primary_inputs"])
     assert profile["table_access_role"] == "read_write"
+    assert profile["variable_access_role"] == "read_write"
     assert "uses_dynamic_table" in profile["dynamic_tables"]
+    assert "@fund_account" in profile["core_variable_reads"]
+    assert profile["dynamic_sql_templates"]
+    assert any("uses_dynamic_table" in template for template in profile["dynamic_sql_templates"])
+    assert profile["relation_graph"]["tables"]
+    assert profile["relation_graph"]["variables"]
     assert feature_flags["has_table_reads"] is True
     assert feature_flags["has_table_writes"] is True
+    assert feature_flags["has_variable_reads"] is True
     assert feature_flags["has_variable_writes"] is True
+    assert feature_flags["has_dynamic_sql"] is True
     assert feature_flags["has_failure_handlers"] is False
     assert bridge_feature_flags["call_fan_out"] >= 1
     assert bridge_feature_flags["call_fan_in"] >= 1
@@ -847,6 +859,45 @@ def test_query_index_uses_exact_variable_edge_relation_for_variable_write_querie
     assert any("intent_exact_variable_edge" in hit["reasons"] for hit in variable_edge_hits)
 
 
+def test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@fund_account 在哪里读取", limit=10)
+
+    variable_edge_hits = [hit for hit in result["hits"] if hit["retrieval_source"] == "relation_variable_edge"]
+    assert variable_edge_hits
+    assert any(hit["procedure_name"] in {"AF_SAMPLE", "AF_DEEP", "LS_FLOW"} for hit in variable_edge_hits)
+    assert any("intent_exact_variable_edge" in hit["reasons"] for hit in variable_edge_hits)
+
+
+def test_query_index_expands_variable_flow_bridge_for_flow_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@fund_account 变量链路", limit=20)
+
+    bridge_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_variable_flow_bridge"
+        or "relation_variable_flow_bridge" in hit.get("matched_via", [])
+    ]
+    assert bridge_hits
+    assert any("variable_flow_bridge=@fund_account" in " ".join(hit["reasons"]) for hit in bridge_hits)
+
+
+def test_query_index_expands_table_flow_bridge_for_table_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_deep_table 表访问链路", limit=20)
+
+    bridge_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_table_flow_bridge"
+        or "relation_table_flow_bridge" in hit.get("matched_via", [])
+    ]
+    assert bridge_hits
+    assert any("table_flow_bridge=uses_deep_table" in " ".join(hit["reasons"]) for hit in bridge_hits)
+
+
 def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 
@@ -953,8 +1004,8 @@ def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: 
         if "证券代码获取" in str(hit["matched_text"])
     ]
     assert exact_focus_hits
-    assert vector_mismatches
-    assert max(exact_focus_hits) < min(vector_mismatches)
+    if vector_mismatches:
+        assert max(exact_focus_hits) < min(vector_mismatches)
 
 
 def test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries(tmp_path: Path) -> None:

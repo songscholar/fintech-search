@@ -961,3 +961,105 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 问题类型越明确，首段摘要越像“针对这个问题类型写出来的”
 - 候选越接近，最终回答越保守、越诚实
 - QA 和 answering 不再各自维护两套割裂的“是否需要人工复核”判断
+
+## 最新核心强化
+
+这一轮不再是轻量 rerank 微调，而是直接围绕三条更本质的核心问题补了一层底座：
+
+- 关系索引还不够强
+- 知识底座还不够硬
+- 回答决策还不够体系化
+
+### 1. 变量 / 表关系开始更像“一等关系索引”
+
+当前索引不再只有：
+
+- `writes_variable`
+- `reads_table / writes_table`
+
+而是新增了更完整的变量与实体流向视角：
+
+- `reads_variable`
+  - 变量读取也会被写成显式边
+- `relation_variable_flow_bridge`
+  - 查询变量链路时，直接按过程聚合“读 / 写 / 读写”角色
+- `relation_table_flow_bridge`
+  - 查询表访问链路时，直接按过程聚合“读 / 写 / 读写”角色
+
+这意味着后续的变量题和表题，不再只能靠：
+
+- 语句命中
+- chunk 命中
+- 再由 rerank 抢救
+
+而是已经开始具备更明确的“关系型主召回对象”。
+
+### 2. 动态 SQL / 字符串恢复更稳了
+
+之前动态 SQL 主要依赖：
+
+- 直接字符串
+- `sprintf / snprintf`
+
+这次又补了一层：
+
+- 字符串拼接表达式恢复
+  - `a + b`
+  - `a || b`
+- 双引号 / 单引号赋值字符串解析
+- 非 tracked string 变量在格式化 SQL 中也会保留占位
+
+这样像：
+
+- `"select * from " + @table_name + " where ..."`
+- `sprintf(@sql, "delete from %s where id = %s", @table, @id)`
+
+这类动态 SQL 更容易在建库阶段直接恢复出稳定表名和 SQL 模板，而不是等到查询时临时猜。
+
+### 3. 过程画像从“摘要文本”继续推进到“结构化知识图”
+
+`procedure_profile` 这一轮不再只补几个数组字段，而是开始显式沉淀更结构化的关系图知识：
+
+- `core_variable_reads`
+- `table_entities`
+  - 每个表的 `read / write / read_write`
+- `variable_entities`
+  - 每个变量的 `read / write / read_write`
+- `dynamic_sql_templates`
+- `relation_graph`
+  - calls
+  - tables
+  - variables
+  - topics
+  - metadata_refs
+  - dynamic_sql_templates
+
+这一步的意义在于：
+
+- 后续检索、evidence、QA 不再只消费“文本 summary”
+- 而是开始消费更稳定的结构化知识对象
+
+### 4. 回答层开始显式表达“决策状态”
+
+现在 QA / answering 不再只暴露：
+
+- `primary_candidate`
+- `secondary_candidates`
+- `confidence`
+
+还会显式产出：
+
+- `decision.state`
+  - `resolved`
+  - `competitive`
+  - `guarded`
+- `decision.score_gap`
+- `decision.conflict_summary`
+
+回答层的 guarded draft 也会把这些信息带回最终结果，所以现在系统在“多个候选很近”时，不只是简单说“不确定”，而是更明确地说明：
+
+- 当前主候选是谁
+- 次候选是谁
+- 为什么需要人工复核
+
+这让回答决策开始从“基于分数的隐式策略”，逐步变成“显式可解释的决策系统”。

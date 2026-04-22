@@ -232,3 +232,14 @@ def test_ask_keeps_review_not_required_for_clear_table_candidate(tmp_path: Path)
 
     assert result["draft_answer"]["secondary_candidates"]
     assert result["draft_answer"]["review_required"] is False
+    assert result["draft_answer"]["decision"]["state"] == "resolved"
+
+
+def test_ask_marks_decision_competitive_for_close_candidates(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "@fund_account 变量链路", evidence_limit=4, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["decision"]["state"] in {"competitive", "resolved"}
+    if result["draft_answer"]["review_required"]:
+        assert "需要人工复核" in result["draft_answer"]["decision"]["conflict_summary"]

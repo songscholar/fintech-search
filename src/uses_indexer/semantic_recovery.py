@@ -32,6 +32,7 @@ SQL_MERGE_RE = re.compile(r"\bmerge\s+into\s+([A-Za-z_][A-Za-z0-9_$.]*)", re.IGN
 SQL_STRING_RE = re.compile(r"'(?:''|[^'])*'")
 SQL_SKIP_TABLES = {"dual"}
 DOUBLE_QUOTED_STRING_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
+SINGLE_QUOTED_ASSIGNMENT_RE = re.compile(r"'((?:''|[^'])*)'")
 CALL_EXPR_RE = re.compile(r"(?P<func>hs_snprintf|snprintf|sprintf|hs_strcpy|strcpy)\s*\((?P<args>.*)\)\s*;?\s*$", re.DOTALL)
 TRACKED_STRING_VAR_TOKENS = ("sql", "table", "where", "column", "group", "order", "join")
 MC_PUBLISH_ACTIONS = {
@@ -828,9 +829,15 @@ def _is_tracked_string_var(var_name: str) -> bool:
 
 def _resolve_string_expression(expr: str, string_hints: dict[str, str]) -> str | None:
     candidate = expr.strip()
+    concatenated = _resolve_concatenated_string_expression(candidate, string_hints)
+    if concatenated is not None:
+        return concatenated
     quoted = _parse_double_quoted_string(candidate)
     if quoted is not None:
         return quoted
+    single_quoted = _parse_single_quoted_assignment_string(candidate)
+    if single_quoted is not None:
+        return single_quoted
     if candidate.startswith("@"):
         return string_hints.get(candidate, candidate if _is_tracked_string_var(candidate) else None)
     return None
@@ -891,6 +898,96 @@ def _parse_double_quoted_string(expr: str) -> str | None:
     if match is None:
         return None
     return bytes(match.group(1), "utf-8").decode("unicode_escape")
+
+
+def _parse_single_quoted_assignment_string(expr: str) -> str | None:
+    match = SINGLE_QUOTED_ASSIGNMENT_RE.fullmatch(expr.strip())
+    if match is None:
+        return None
+    return match.group(1).replace("''", "'")
+
+
+def _resolve_concatenated_string_expression(expr: str, string_hints: dict[str, str]) -> str | None:
+    parts = _split_concat_expression(expr)
+    if len(parts) <= 1:
+        return None
+
+    rendered_parts: list[str] = []
+    for part in parts:
+        text = part.strip()
+        if not text:
+            continue
+        resolved = _parse_double_quoted_string(text)
+        if resolved is None:
+            resolved = _parse_single_quoted_assignment_string(text)
+        if resolved is None and text.startswith("@"):
+            resolved = string_hints.get(text, text)
+        if resolved is None:
+            return None
+        rendered_parts.append(resolved)
+
+    joined = "".join(rendered_parts).strip()
+    return joined or None
+
+
+def _split_concat_expression(expr: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    in_double = False
+    in_single = False
+    escape = False
+    index = 0
+
+    while index < len(expr):
+        char = expr[index]
+        next_two = expr[index : index + 2]
+        if in_double:
+            current.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_double = False
+            index += 1
+            continue
+        if in_single:
+            if next_two == "''":
+                current.append("'")
+                index += 2
+                continue
+            current.append(char)
+            if char == "'":
+                in_single = False
+            index += 1
+            continue
+        if char == '"':
+            in_double = True
+            current.append(char)
+            index += 1
+            continue
+        if char == "'":
+            in_single = True
+            current.append(char)
+            index += 1
+            continue
+        if next_two == "||":
+            parts.append("".join(current).strip())
+            current = []
+            index += 2
+            continue
+        if char == "+":
+            parts.append("".join(current).strip())
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return [part for part in parts if part]
 
 
 def _split_call_args(raw_args: str) -> list[str]:

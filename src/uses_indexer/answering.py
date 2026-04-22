@@ -105,6 +105,7 @@ class CodebaseAnswerer:
     def _build_guarded_low_confidence_answer(self, qa_bundle: dict[str, object]) -> str:
         draft_answer = dict(qa_bundle.get("draft_answer") or {})
         supporting_locations = list(draft_answer.get("supporting_locations") or [])
+        decision = dict(draft_answer.get("decision") or {})
         lead = supporting_locations[0] if supporting_locations else None
         lines = [
             "结论: 当前证据不足以支持一个高置信度的最终结论，下面只给出最可能的候选位置和明确的不确定点。",
@@ -119,6 +120,9 @@ class CodebaseAnswerer:
             lines.append("不确定点:")
             for item in uncertainties[:3]:
                 lines.append(f"- {item}")
+        if decision.get("conflict_summary"):
+            lines.append("决策提示:")
+            lines.append(f"- {decision['conflict_summary']}")
         secondary_candidates = list(draft_answer.get("secondary_candidates") or [])
         if secondary_candidates:
             lines.append("其他近似候选:")
@@ -171,6 +175,7 @@ class CodebaseAnswerer:
                 "primary_candidate": dict(draft_answer.get("primary_candidate") or {}),
                 "secondary_candidates": list(draft_answer.get("secondary_candidates") or []),
                 "uncertainties": list(draft_answer.get("uncertainties") or []),
+                "decision": dict(draft_answer.get("decision") or {}),
             },
             "review_required": answer_source == "guarded_draft" or bool(draft_answer.get("review_required")),
             "used_model": model_response["model"] if model_response else None,

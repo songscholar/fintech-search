@@ -4364,3 +4364,97 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 QA 首段摘要已经更像按 query type 定制出来的结果，而不是统一模板后面再补一个 section
 - 当前回答层已经开始统一消费 `review_required`，多候选接近时会更稳、更诚实地降级
 - 当前这轮优化仍然没有破坏 topic / metadata / table / call focus 的既有准确度
+
+## [1.2.65] - 2026-04-23
+
+### Step 72: 强化关系索引、结构化知识底座与回答决策状态
+
+### 本步目标
+
+- 不再做小幅打分微调，而是直接增强三类底层能力：
+  - 更强的关系索引
+  - 更硬的结构化知识底座
+  - 更体系化的回答决策
+- 保持“不降低原有准确度”的前提下，把变量流、表流、动态 SQL 和多候选回答这些高价值能力再往前推一层
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/semantic_recovery.py`
+   - 动态字符串恢复新增：
+     - `a + b`
+     - `a || b`
+   - 新增单引号赋值字符串解析
+   - `sprintf / snprintf` 中的变量占位保留更稳
+   - 这样动态 SQL 不再只依赖直接字符串或 format 调用，拼接表达式也能稳定恢复
+
+2. 更新 `src/uses_indexer/index_write.py`
+   - 新增 `reads_variable` 显式边
+   - `procedure_profile` 新增结构化知识字段：
+     - `core_variable_reads`
+     - `table_entities`
+     - `variable_entities`
+     - `dynamic_sql_templates`
+     - `relation_graph`
+   - `feature_flags` 新增：
+     - `has_variable_reads`
+     - `has_dynamic_sql`
+   - `summary_text` 现在也会补：
+     - `reads vars ...`
+     - `dynamic sql ...`
+
+3. 更新 `src/uses_indexer/retrieval.py`
+   - 变量精确关系召回不再只支持写边：
+     - `reads_variable`
+     - `writes_variable`
+   - 新增：
+     - `relation_variable_flow_bridge`
+     - `relation_table_flow_bridge`
+   - 也就是变量流 / 表流开始具备自己的过程级桥接召回，而不再只是依赖普通 evidence 命中
+
+4. 更新 `src/uses_indexer/rerank.py`
+   - 修复变量问题中的一个更本质的误加分问题：
+     - 以前 SQL 里的 `=` 也可能被误判成“变量写入信号”
+     - 现在只在真正的 `writes_variable / assignment` 场景里加这部分分
+   - 对变量读取问题，`reads_variable` 现在会得到更明确的 read-focused bonus
+   - 对 `relation_variable_flow_bridge / relation_table_flow_bridge` 也补了专属 bonus
+   - `profile_exact_variable_focus` 现在也会看 `core_variable_reads`
+
+5. 更新 `src/uses_indexer/qa.py` 和 `src/uses_indexer/answering.py`
+   - draft answer 新增 `decision`
+     - `state`
+     - `primary_score`
+     - `secondary_score`
+     - `score_gap`
+     - `conflict_summary`
+   - answering 最终结果也会把这层 `decision` 带回 grounding
+   - guarded draft 会显式输出：
+     - `决策提示`
+     - `其他近似候选`
+   - 这样“为什么保守、为什么需要人工复核”开始变成显式信息，而不是只藏在分数逻辑里
+
+6. 更新测试
+   - `tests/test_indexer.py`
+     - 扩展动态 SQL fixture，覆盖字符串拼接恢复
+     - 验证：
+       - `core_variable_reads`
+       - `dynamic_sql_templates`
+       - `relation_graph`
+       - `relation_variable_flow_bridge`
+       - `relation_table_flow_bridge`
+       - 变量读取精确边
+   - `tests/test_qa.py`
+     - 验证 decision 状态在清晰候选和接近候选下的行为
+   - `tests/test_answering.py`
+     - 验证 guarded answer 会带 `decision` 和更明确的 conflict 提示
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/semantic_recovery.py src/uses_indexer/index_write.py src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/qa.py src/uses_indexer/answering.py tests/test_indexer.py tests/test_qa.py tests/test_answering.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_chunk_features_and_procedure_features tests/test_indexer.py::test_query_index_recovers_dynamic_sql_tables tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_expands_variable_flow_bridge_for_flow_queries tests/test_indexer.py::test_query_index_expands_table_flow_bridge_for_table_queries tests/test_qa.py::test_ask_keeps_review_not_required_for_clear_table_candidate tests/test_qa.py::test_ask_marks_decision_competitive_for_close_candidates tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+- 结果：`9 passed`
+
+### 结论
+
+- 当前变量流 / 表流已经开始具备更像“一等关系对象”的检索入口，而不再只是靠普通语句命中
+- 当前知识底座开始从 profile 摘要继续推进到结构化 `relation_graph`
+- 当前回答层已经不只给候选和置信度，而是开始显式表达决策状态和冲突说明

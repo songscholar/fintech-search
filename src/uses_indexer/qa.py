@@ -425,6 +425,15 @@ class CodebaseQA:
             secondary_candidates=secondary_candidates,
             confidence=confidence,
         )
+        decision = self._build_decision(
+            query_type=query_type,
+            primary_candidate=primary_candidate,
+            secondary_candidates=secondary_candidates,
+            confidence=confidence,
+            review_required=review_required,
+        )
+        if decision.get("conflict_summary"):
+            uncertainties.append(str(decision["conflict_summary"]))
         return {
             "status": "ok",
             "answer": "\n".join(answer_lines),
@@ -437,6 +446,7 @@ class CodebaseQA:
             "query_type": query_type,
             "confidence": confidence,
             "review_required": review_required,
+            "decision": decision,
         }
 
     def _build_query_specific_summary(
@@ -458,6 +468,8 @@ class CodebaseQA:
 
         if query_type in {"variable_write", "variable_read", "variable_flow"}:
             variable_names = list(profile.get("core_variable_writes") or [])
+            if query_type in {"variable_read", "variable_flow"}:
+                variable_names = variable_names or list(profile.get("core_variable_reads") or [])
             if variable_names:
                 return f"{label}: {procedure_name} 重点变量包括 {', '.join(str(name) for name in variable_names[:3])}。"
 
@@ -547,3 +559,40 @@ class CodebaseQA:
         primary_score = float(primary_candidate.get("aggregate_score") or 0.0)
         secondary_score = float(secondary_candidates[0].get("aggregate_score") or 0.0)
         return primary_score > 0 and secondary_score > 0 and (primary_score - secondary_score) <= 12.0
+
+    def _build_decision(
+        self,
+        *,
+        query_type: str,
+        primary_candidate: dict[str, object],
+        secondary_candidates: list[dict[str, object]],
+        confidence: dict[str, object],
+        review_required: bool,
+    ) -> dict[str, object]:
+        primary_score = float(primary_candidate.get("aggregate_score") or 0.0)
+        secondary_score = float(secondary_candidates[0].get("aggregate_score") or 0.0) if secondary_candidates else 0.0
+        score_gap = round(primary_score - secondary_score, 3) if secondary_score else round(primary_score, 3)
+        if not secondary_candidates:
+            state = "resolved"
+            conflict_summary = ""
+        elif review_required:
+            state = "competitive"
+            conflict_summary = (
+                f"主候选 {primary_candidate.get('procedure_name')} 与次候选 {secondary_candidates[0].get('procedure_name')} 分差较小，"
+                "需要人工复核最终落点。"
+            )
+        else:
+            state = "resolved"
+            conflict_summary = ""
+        if float(confidence.get("score") or 0.0) < 0.45:
+            state = "guarded"
+            if not conflict_summary:
+                conflict_summary = "当前证据整体偏弱，需要保守解释并继续核验上下文。"
+        return {
+            "state": state,
+            "query_type": query_type,
+            "primary_score": round(primary_score, 3),
+            "secondary_score": round(secondary_score, 3),
+            "score_gap": score_gap,
+            "conflict_summary": conflict_summary,
+        }

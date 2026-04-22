@@ -59,6 +59,11 @@ def analyze_query(query: str) -> dict[str, object]:
         )
 
     wants_table_sql = bool(table_terms) or contains_any(lowered, TABLE_INTENT_KEYWORDS)
+    if wants_variable and variable_terms and not table_terms and not contains_any(
+        lowered,
+        ("表", "sql", "select", "insert", "update", "delete", "merge", "from", "join"),
+    ):
+        wants_table_sql = False
     wants_table_write = contains_any(lowered, WRITE_INTENT_KEYWORDS)
     wants_table_read = contains_any(lowered, READ_INTENT_KEYWORDS)
     wants_call_chain = contains_any(lowered, CALL_CHAIN_INTENT_KEYWORDS)
@@ -506,6 +511,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_table_chain_context":
             bonus += 20.0
             reasons.append("intent_table_chain_context")
+        elif candidate.get("retrieval_source") == "relation_table_flow_bridge":
+            bonus += 18.0
+            reasons.append("intent_table_flow_bridge")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
             bonus += 30.0
             reasons.append("intent_sql_block")
@@ -534,11 +542,11 @@ def _intent_bonus(
             bonus += 12.0
             reasons.append("intent_assignment_chunk")
 
-        if "=" in combined or "writes_variable" in combined or match_source == "write":
+        if "writes_variable" in combined or match_source == "write" or match_source == "assignment":
             bonus += 8.0
             reasons.append("variable_write_match")
         if hit_type == "edge" and match_source == "variable_edge_relation":
-            bonus += 12.0 if query_analysis.get("wants_variable_write") else 8.0
+            bonus += 20.0 if query_analysis.get("wants_variable_write") else 18.0 if query_analysis.get("wants_variable_read") else 12.0
             reasons.append("intent_exact_variable_edge")
         elif candidate.get("retrieval_source") == "relation_neighbor_context":
             bonus += 14.0
@@ -546,10 +554,13 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_variable_chain_context":
             bonus += 18.0
             reasons.append("intent_variable_chain_context")
-        if query_analysis.get("wants_variable_read") and match_source == "read":
-            bonus += 10.0
+        elif candidate.get("retrieval_source") == "relation_variable_flow_bridge":
+            bonus += 16.0
+            reasons.append("intent_variable_flow_bridge")
+        if query_analysis.get("wants_variable_read") and ("reads_variable" in combined or match_source == "read"):
+            bonus += 14.0
             reasons.append("variable_read_match")
-        if query_analysis.get("wants_variable_write") and ("writes_variable" in combined or match_source == "write"):
+        if query_analysis.get("wants_variable_write") and ("writes_variable" in combined or match_source in {"write", "assignment"}):
             bonus += 10.0
             reasons.append("variable_write_focus")
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_statement"}:
@@ -676,6 +687,9 @@ def _feature_bonus(
         if bool(feature_flags.get("has_variable_writes")):
             bonus += 14.0 if hit_type == "procedure" else 8.0
             reasons.append("feature_variable_procedure")
+        if bool(feature_flags.get("has_variable_reads")):
+            bonus += 8.0 if hit_type == "procedure" else 4.0
+            reasons.append("feature_variable_reads")
         if procedure_profile.get("core_variable_writes"):
             bonus += 4.0
             reasons.append("feature_variable_profile")
@@ -778,6 +792,11 @@ def _profile_focus_bonus(
         for name in procedure_profile.get("core_variable_writes") or []
         if str(name)
     }
+    core_variable_reads = {
+        str(name).lower()
+        for name in procedure_profile.get("core_variable_reads") or []
+        if str(name)
+    }
     core_calls = {str(name).lower() for name in procedure_profile.get("core_calls") or [] if str(name)}
     core_callers = {str(name).lower() for name in procedure_profile.get("core_callers") or [] if str(name)}
     core_topics = {str(name).lower() for name in procedure_profile.get("core_topics") or [] if str(name)}
@@ -795,7 +814,10 @@ def _profile_focus_bonus(
             reasons.append(f"profile_exact_table_focus={matched[0]}")
 
     if query_type in {"variable_write", "variable_read", "variable_flow"}:
-        matched = sorted(variable_terms & core_variables)
+        variable_focus_pool = set(core_variables)
+        if query_type in {"variable_read", "variable_flow"}:
+            variable_focus_pool.update(core_variable_reads)
+        matched = sorted(variable_terms & variable_focus_pool)
         if matched:
             bonus += 8.0
             reasons.append(f"profile_exact_variable_focus={matched[0]}")

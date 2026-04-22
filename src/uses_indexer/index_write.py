@@ -949,8 +949,26 @@ class IndexWriteService:
                 )
                 edge_counter[str(sql_edge["edge_type"])] += 1
 
+        variable_reads = list(dict.fromkeys(statement.reads))
+        if variable_reads:
+            for target in variable_reads:
+                self.insert_edge(
+                    conn,
+                    file_id=file_id,
+                    procedure_id=procedure_id,
+                    statement_id=statement_id,
+                    procedure_name=unit.name,
+                    file_path=unit.path,
+                    edge_type="reads_variable",
+                    source_name=unit.name,
+                    target_name=target,
+                    target_kind="variable",
+                    detail={"line_start": statement.line_start, "line_end": statement.line_end},
+                )
+                edge_counter["reads_variable"] += 1
+
         if statement.kind == "assignment" and statement.writes:
-            for target in statement.writes:
+            for target in dict.fromkeys(statement.writes):
                 self.insert_edge(
                     conn,
                     file_id=file_id,
@@ -1178,6 +1196,27 @@ class IndexWriteService:
                 (procedure_id,),
             ).fetchall()
         ]
+        dynamic_sql_templates = sorted(
+            {
+                str(row[0])
+                for row in conn.execute(
+                    """
+                    SELECT DISTINCT json_extract(detail_json, '$.sql_source')
+                    FROM edges
+                    WHERE procedure_id = ?
+                      AND edge_type IN ('reads_table', 'writes_table', 'reads_dynamic_table', 'writes_dynamic_table')
+                      AND COALESCE(json_extract(detail_json, '$.sql_source'), '') <> ''
+                      AND (
+                        edge_type IN ('reads_dynamic_table', 'writes_dynamic_table')
+                        OR instr(lower(COALESCE(json_extract(detail_json, '$.sql_source'), '')), '@') > 0
+                      )
+                    ORDER BY json_extract(detail_json, '$.sql_source')
+                    """,
+                    (procedure_id,),
+                ).fetchall()
+                if row[0]
+            }
+        )
         chunk_roles = [
             str(row[0])
             for row in conn.execute(
@@ -1244,7 +1283,9 @@ class IndexWriteService:
             "has_table_writes": bool(write_tables),
             "has_mc_topics": bool(mc_topics),
             "has_metadata_refs": bool(metadata_refs),
+            "has_variable_reads": bool(variable_reads),
             "has_variable_writes": bool(variable_writes),
+            "has_dynamic_sql": bool(dynamic_sql_templates),
             "has_failure_chunks": "failure_flow" in chunk_roles,
             "has_failure_handlers": bool(
                 failure_handler_count
@@ -1265,10 +1306,42 @@ class IndexWriteService:
             "call_density": round(call_count / max(statement_count, 1), 6),
             "action_density": round(action_count / max(statement_count, 1), 6),
         }
+        table_entities = [
+            {
+                "name": table_name,
+                "mode": (
+                    "read_write"
+                    if table_name in read_tables and table_name in write_tables
+                    else "write"
+                    if table_name in write_tables
+                    else "read"
+                ),
+            }
+            for table_name in sorted(dict.fromkeys([*read_tables, *write_tables]))[:8]
+        ]
+        variable_entities = [
+            {
+                "name": variable_name,
+                "mode": (
+                    "read_write"
+                    if variable_name in variable_reads and variable_name in variable_writes
+                    else "write"
+                    if variable_name in variable_writes
+                    else "read"
+                ),
+            }
+            for variable_name in sorted(dict.fromkeys([*variable_reads, *variable_writes]))[:10]
+        ]
         table_access_role = (
             "read_write" if read_tables and write_tables
             else "write" if write_tables
             else "read" if read_tables
+            else "none"
+        )
+        variable_access_role = (
+            "read_write" if variable_reads and variable_writes
+            else "write" if variable_writes
+            else "read" if variable_reads
             else "none"
         )
         profile = {
@@ -1278,10 +1351,14 @@ class IndexWriteService:
             "core_callers": incoming_callers[:6],
             "core_read_tables": read_tables[:6],
             "core_write_tables": write_tables[:6],
+            "table_entities": table_entities,
+            "core_variable_reads": variable_reads[:6],
             "core_variable_writes": variable_writes[:6],
+            "variable_entities": variable_entities,
             "core_topics": mc_topics[:6],
             "core_metadata_refs": metadata_refs[:6],
             "dynamic_tables": dynamic_tables[:6],
+            "dynamic_sql_templates": dynamic_sql_templates[:4],
             "call_role": (
                 "bridge"
                 if call_fan_out and call_fan_in
@@ -1294,8 +1371,22 @@ class IndexWriteService:
             "call_fan_in": call_fan_in,
             "call_fan_out": call_fan_out,
             "table_access_role": table_access_role,
+            "variable_access_role": variable_access_role,
             "topic_role": "publisher" if mc_topics else "none",
             "metadata_role": "referencer" if metadata_refs else "none",
+            "relation_graph": {
+                "calls": {
+                    "fan_in": call_fan_in,
+                    "fan_out": call_fan_out,
+                    "core_callers": incoming_callers[:6],
+                    "core_callees": outgoing_calls[:6],
+                },
+                "tables": table_entities,
+                "variables": variable_entities,
+                "topics": mc_topics[:6],
+                "metadata_refs": metadata_refs[:6],
+                "dynamic_sql_templates": dynamic_sql_templates[:4],
+            },
         }
         summary_parts = [procedure_name]
         if input_params:
@@ -1323,10 +1414,14 @@ class IndexWriteService:
             summary_parts.append(
                 f"tables R[{', '.join(read_tables[:3])}] W[{', '.join(write_tables[:3])}]".replace("R[] ", "").replace(" W[]", "")
             )
+        if variable_reads:
+            summary_parts.append(f"reads vars {', '.join(variable_reads[:4])}")
         if variable_writes:
             summary_parts.append(f"writes vars {', '.join(variable_writes[:4])}")
         if mc_topics:
             summary_parts.append(f"publishes {', '.join(mc_topics[:3])}")
+        if dynamic_sql_templates:
+            summary_parts.append(f"dynamic sql {', '.join(dynamic_sql_templates[:2])}")
         summary_text = " | ".join(part for part in summary_parts if part)
 
         conn.execute(

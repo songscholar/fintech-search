@@ -117,6 +117,16 @@ class RetrievalService:
         for candidate in relation_candidates:
             merge_candidate(candidates, candidate)
 
+        flow_bridge_candidates = self._run_entity_flow_bridge_queries(
+            conn,
+            query_analysis=query_analysis,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["flow_bridge"] = [self._trace_candidate(item) for item in flow_bridge_candidates[:20]]
+        source_counts["flow_bridge"] = len(flow_bridge_candidates)
+        for candidate in flow_bridge_candidates:
+            merge_candidate(candidates, candidate)
+
         path_bridge_candidates = self._run_path_bridge_queries(
             conn,
             query_analysis=query_analysis,
@@ -417,6 +427,149 @@ class RetrievalService:
                     )
                     if len(candidates) >= limit:
                         return candidates
+        return candidates[:limit]
+
+    def _run_entity_flow_bridge_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[str, str]] = set()
+
+        def add_table_bridge(table_name: str) -> None:
+            rows = conn.execute(
+                """
+                SELECT
+                  p.id,
+                  p.file_id,
+                  p.name,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  pf.profile_json,
+                  GROUP_CONCAT(DISTINCT e.edge_type) AS edge_types
+                FROM edges e
+                JOIN procedures p ON p.id = e.procedure_id
+                JOIN files f ON f.id = p.file_id
+                JOIN procedure_features pf ON pf.procedure_id = p.id
+                WHERE lower(e.target_name) = lower(?)
+                  AND e.edge_type IN ('reads_table', 'writes_table', 'reads_dynamic_table', 'writes_dynamic_table')
+                GROUP BY p.id, p.file_id, p.name, p.chinese_name, p.object_id, f.path, pf.summary_text, pf.feature_flags_json, pf.profile_json
+                LIMIT ?
+                """,
+                (table_name, limit),
+            ).fetchall()
+            for row in rows:
+                edge_types = {part for part in str(row[9] or "").split(",") if part}
+                flow_mode = (
+                    "read_write"
+                    if edge_types & {"reads_table", "reads_dynamic_table"} and edge_types & {"writes_table", "writes_dynamic_table"}
+                    else "write"
+                    if edge_types & {"writes_table", "writes_dynamic_table"}
+                    else "read"
+                )
+                key = ("table", f"{row[2]}::{row[5]}")
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[5]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[3] if row[3] else None,
+                        "object_id": row[4] if row[4] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": f"{table_name} ({flow_mode})",
+                        "match_source": "table_flow_bridge",
+                        "retrieval_source": "relation_table_flow_bridge",
+                        "base_score": 93.0,
+                        "source_rank": 9.3,
+                        "search_text": f"{table_name} {flow_mode} {row[6]}",
+                        "procedure_summary": str(row[6]),
+                        "feature_flags": json.loads(str(row[7] or "{}")),
+                        "procedure_profile": json.loads(str(row[8] or "{}")),
+                        "reasons": [f"table_flow_bridge={table_name}", f"table_flow_mode={flow_mode}"],
+                    }
+                )
+
+        def add_variable_bridge(variable_name: str) -> None:
+            rows = conn.execute(
+                """
+                SELECT
+                  p.id,
+                  p.file_id,
+                  p.name,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  pf.profile_json,
+                  GROUP_CONCAT(DISTINCT v.access_type) AS access_types
+                FROM variable_refs v
+                JOIN procedures p ON p.id = v.procedure_id
+                JOIN files f ON f.id = p.file_id
+                JOIN procedure_features pf ON pf.procedure_id = p.id
+                WHERE lower(v.var_name) = lower(?)
+                GROUP BY p.id, p.file_id, p.name, p.chinese_name, p.object_id, f.path, pf.summary_text, pf.feature_flags_json, pf.profile_json
+                LIMIT ?
+                """,
+                (variable_name, limit),
+            ).fetchall()
+            for row in rows:
+                access_types = {part for part in str(row[9] or "").split(",") if part}
+                flow_mode = (
+                    "read_write"
+                    if {"read", "write"} <= access_types
+                    else "write"
+                    if "write" in access_types
+                    else "read"
+                )
+                key = ("variable", f"{row[2]}::{row[5]}")
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[5]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[3] if row[3] else None,
+                        "object_id": row[4] if row[4] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": f"{variable_name} ({flow_mode})",
+                        "match_source": "variable_flow_bridge",
+                        "retrieval_source": "relation_variable_flow_bridge",
+                        "base_score": 89.0,
+                        "source_rank": 8.9,
+                        "search_text": f"{variable_name} {flow_mode} {row[6]}",
+                        "procedure_summary": str(row[6]),
+                        "feature_flags": json.loads(str(row[7] or "{}")),
+                        "procedure_profile": json.loads(str(row[8] or "{}")),
+                        "reasons": [f"variable_flow_bridge={variable_name}", f"variable_flow_mode={flow_mode}"],
+                    }
+                )
+
+        for table_name in query_analysis.get("table_terms", [])[:3]:
+            add_table_bridge(str(table_name))
+        for variable_name in query_analysis.get("variable_terms", [])[:3]:
+            add_variable_bridge(str(variable_name))
         return candidates[:limit]
 
     def _run_path_bridge_queries(
@@ -1563,6 +1716,72 @@ class RetrievalService:
                     }
                 )
 
+        def add_exact_variable_edge_candidates(term: str, *, score: float) -> None:
+            rows = conn.execute(
+                """
+                SELECT
+                  e.id,
+                  e.procedure_id,
+                  e.file_id,
+                  e.statement_id,
+                  e.edge_type,
+                  e.target_name,
+                  e.source_name,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  pf.profile_json,
+                  p.name,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  s.line_start,
+                  s.line_end
+                FROM edges e
+                JOIN procedures p ON p.id = e.procedure_id
+                JOIN files f ON f.id = e.file_id
+                JOIN procedure_features pf ON pf.procedure_id = e.procedure_id
+                LEFT JOIN statements s ON s.id = e.statement_id
+                WHERE e.edge_type IN ('writes_variable', 'reads_variable')
+                  AND (
+                    lower(e.target_name) = lower(?)
+                    OR lower(replace(e.target_name, '@', '')) = lower(replace(?, '@', ''))
+                  )
+                LIMIT ?
+                """,
+                (term, term, limit),
+            ).fetchall()
+            for row in rows:
+                key = (int(row[0]), "variable_edge_relation")
+                if key in seen:
+                    continue
+                seen.add(key)
+                edge_label = f"{row[6]} -> {row[5]}"
+                candidates.append(
+                    {
+                        "hit_type": "edge",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[1]),
+                        "file_id": int(row[2]),
+                        "statement_id": int(row[3]) if row[3] is not None else None,
+                        "file_path": str(row[13]),
+                        "procedure_name": str(row[10]),
+                        "chinese_name": row[11] if row[11] else None,
+                        "object_id": row[12] if row[12] else None,
+                        "line_start": int(row[14]) if row[14] is not None else None,
+                        "line_end": int(row[15]) if row[15] is not None else None,
+                        "matched_text": edge_label,
+                        "match_source": "variable_edge_relation",
+                        "retrieval_source": "relation_variable_edge",
+                        "base_score": score,
+                        "source_rank": score / 10.0,
+                        "search_text": f"{edge_label} {row[4]} {row[7]}",
+                        "procedure_summary": str(row[7]),
+                        "feature_flags": json.loads(str(row[8] or "{}")),
+                        "procedure_profile": json.loads(str(row[9] or "{}")),
+                        "reasons": [f"variable_edge_relation={term}", f"edge_type={row[4]}"],
+                    }
+                )
+
         def add_failure_block_candidates() -> None:
             rows = conn.execute(
                 """
@@ -1670,13 +1889,9 @@ class RetrievalService:
             )
         for term in query_analysis.get("variable_terms", []):
             lowered = f"%{str(term).lower()}%"
-            add_exact_edge_candidates(
+            add_exact_variable_edge_candidates(
                 str(term),
-                edge_types=("writes_variable",),
-                field_name="variable_edge_relation",
-                retrieval_source="relation_variable_edge",
-                reason="variable_edge_relation",
-                score=84.0 if query_analysis.get("wants_variable_write") else 80.0,
+                score=86.0 if query_analysis.get("wants_variable_write") else 83.0 if query_analysis.get("wants_variable_read") else 80.0,
             )
             add_procedure_candidates(
                 str(term),
