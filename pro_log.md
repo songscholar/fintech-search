@@ -3637,3 +3637,75 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前回答层也开始区分：
   - 正常 grounded answer
   - 低置信度 guarded draft
+
+## [1.2.54] - 2026-04-22
+
+### Step 61: 增加显式过程对的路径桥接与证据合流
+
+### 本步目标
+
+- 对“过程 A 到过程 B 的调用链路”这类显式双过程问题，补最短调用路径桥接
+- 让路径桥接命中不会因为 evidence 去重而在问答阶段丢掉
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/rerank.py`
+   - `analyze_query()` 新增：
+     - `procedure_terms_ordered`
+   - 让显式过程名顺序可以被后续路径桥接逻辑直接使用
+   - 新增 `intent_path_bridge`
+
+2. 更新 `src/uses_indexer/context_fetch.py`
+   - 新增 `find_shortest_call_path()`
+   - 基于 `calls_procedure` 边做受控 BFS
+   - 只求短路径，不展开无限调用图
+   - 同时把过程别名解析改成大小写不敏感
+
+3. 更新 `src/uses_indexer/retrieval.py`
+   - 新增 `_run_path_bridge_queries()`
+   - 当问题满足：
+     - `wants_call_chain = true`
+     - 且显式出现两个过程名
+   - 会补充：
+     - `relation_path_bridge`
+   - 当前只把桥接路径中的中间过程作为高价值候选加入结果
+
+4. 更新 `src/uses_indexer/evidence.py`
+   - 同一上下文如果被多路召回同时命中：
+     - 不再直接丢弃后来的重复候选
+     - 而是把 `reasons` 与 `matched_via` 合并回已有 evidence block
+   - 这样精确路径桥接不会在 evidence 去重时消失
+
+5. 更新 `src/uses_indexer/qa.py`
+   - 草答会优先提取 `path_bridge=` reason
+   - 对调用链问题增加：
+     - `调用链桥接路径为 A -> B -> C`
+   - 让最终 draft 不只是给过程位置，还能给出链路骨架
+
+6. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_uses_explicit_path_bridge_for_two_procedures`
+     - 调整调用链上下文测试，让它接受更强的 `relation_path_bridge`
+     - 调整过程特征关系测试，让它接受 `matched_via` 合流后的表达
+   - `tests/test_qa.py`
+     - `test_ask_surfaces_path_bridge_summary_for_call_chain_questions`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/context_fetch.py src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/qa.py src/uses_indexer/evidence.py tests/test_indexer.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_expands_call_chain_context_for_path_queries`
+- `PYTHONPATH=src pytest -q tests/test_qa.py::test_ask_builds_prompt_and_draft_answer tests/test_qa.py::test_ask_surfaces_path_bridge_summary_for_call_chain_questions tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions tests/test_answering.py::test_answer_uses_draft_when_llm_not_configured`
+- 结果：`6 passed`
+
+### 结论
+
+- 当前检索对“显式过程对路径题”已经不只会给：
+  - 起点过程
+  - 终点过程
+- 还会额外给：
+  - 中间桥接过程
+  - 明确的路径字符串
+
+- 当前 evidence 也更稳了：
+  - 同一上下文的多路命中会合流
+  - 精确路径信息不会在后续问答阶段被去重吃掉

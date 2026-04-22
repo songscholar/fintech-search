@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections import deque
 from typing import TYPE_CHECKING
 
 from .index_utils import json_loads_object
@@ -562,6 +563,53 @@ class ContextFetchService:
             items.append({"procedure_name": source_name, **semantic})
         return items
 
+    def find_shortest_call_path(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        source_procedure: str,
+        target_procedure: str,
+        max_depth: int = 4,
+    ) -> list[str] | None:
+        source_name = self.resolve_procedure_name(conn, source_procedure)
+        target_name = self.resolve_procedure_name(conn, target_procedure)
+        if not source_name or not target_name:
+            return None
+        if source_name == target_name:
+            return [source_name]
+
+        target_aliases = set(self.procedure_aliases(conn, procedure_name=target_name))
+        queue: deque[tuple[str, list[str]]] = deque([(source_name, [source_name])])
+        visited: set[str] = {source_name}
+
+        while queue:
+            current_name, path = queue.popleft()
+            if len(path) > max_depth + 1:
+                continue
+            rows = conn.execute(
+                """
+                SELECT DISTINCT target_name
+                FROM edges
+                WHERE source_name = ? AND edge_type = 'calls_procedure'
+                ORDER BY target_name
+                """,
+                (current_name,),
+            ).fetchall()
+            for row in rows:
+                neighbor_name = self.resolve_procedure_name(conn, str(row["target_name"]))
+                if not neighbor_name:
+                    continue
+                next_path = [*path, neighbor_name]
+                neighbor_aliases = set(self.procedure_aliases(conn, procedure_name=neighbor_name))
+                if target_aliases & neighbor_aliases:
+                    return next_path
+                if neighbor_name in visited or len(next_path) > max_depth + 1:
+                    continue
+                visited.add(neighbor_name)
+                queue.append((neighbor_name, next_path))
+
+        return None
+
     def procedure_aliases(
         self,
         conn: sqlite3.Connection,
@@ -576,8 +624,8 @@ class ContextFetchService:
                 """
                 SELECT name, chinese_name
                 FROM procedures
-                WHERE name = ? OR chinese_name = ?
-                ORDER BY CASE WHEN name = ? THEN 0 ELSE 1 END
+                WHERE lower(name) = lower(?) OR lower(COALESCE(chinese_name, '')) = lower(?)
+                ORDER BY CASE WHEN lower(name) = lower(?) THEN 0 ELSE 1 END
                 LIMIT 1
                 """,
                 (procedure_name, procedure_name, procedure_name),
@@ -638,8 +686,8 @@ class ContextFetchService:
             FROM procedures p
             JOIN files f ON f.id = p.file_id
             LEFT JOIN chunks c ON c.procedure_id = p.id
-            WHERE p.name = ? OR p.chinese_name = ?
-            ORDER BY CASE WHEN p.name = ? THEN 0 ELSE 1 END, c.seq
+            WHERE lower(p.name) = lower(?) OR lower(COALESCE(p.chinese_name, '')) = lower(?)
+            ORDER BY CASE WHEN lower(p.name) = lower(?) THEN 0 ELSE 1 END, c.seq
             LIMIT 1
             """,
             (procedure_name, procedure_name, procedure_name),

@@ -13,6 +13,7 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <outputParameters id="row_count" uuid="u2"/>
   <code><![CDATA[
   [AF_系统参数公用_证券代码获取][][usps_stkcode = @usps_stkcode]
+  [AF_DEEP][][]
   [获取记录][uses_fund_real(idx_x)][fund_account = @fund_account]
   @row_count = 1;
   ]]></code>
@@ -30,12 +31,21 @@ CALLER_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Service>
 """
 
+DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Function xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="AF_测试_深层" objectId="3">
+  <code><![CDATA[
+  @deep_flag = 1;
+  ]]></code>
+</business:Function>
+"""
+
 
 def _prepare_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
     source_dir = tmp_path / "src"
     source_dir.mkdir()
     (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
     (source_dir / "LS_FLOW.uftservice").write_text(CALLER_XML, encoding="utf-8")
+    (source_dir / "AF_DEEP.uftatomfunction").write_text(DEEP_XML, encoding="utf-8")
 
     db_path = tmp_path / "index.db"
     indexer = SQLiteIndexer()
@@ -94,3 +104,12 @@ def test_ask_tracks_primary_and_secondary_candidates(tmp_path: Path) -> None:
     assert result["draft_answer"]["primary_candidate"]
     assert result["draft_answer"]["primary_candidate"]["procedure_name"] in {"AF_SAMPLE", "LS_FLOW"}
     assert isinstance(result["draft_answer"]["secondary_candidates"], list)
+
+
+def test_ask_surfaces_path_bridge_summary_for_call_chain_questions(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "LS_FLOW 到 AF_DEEP 的调用链路", evidence_limit=3, context_window=1, related_limit=2)
+
+    summary_points = list(result["draft_answer"]["summary_points"])
+    assert any("调用链桥接路径" in item for item in summary_points)

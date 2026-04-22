@@ -30,7 +30,14 @@ def analyze_query(query: str) -> dict[str, object]:
     lowered = query.lower()
     tokens = tokenize_query(query)
     token_set = set(tokens)
-    procedure_terms = {match.group(0).lower() for match in QUERY_PROCEDURE_RE.finditer(query)}
+    procedure_terms_ordered: list[str] = []
+    seen_procedure_terms: set[str] = set()
+    for match in QUERY_PROCEDURE_RE.finditer(query):
+        token = match.group(0).lower()
+        if token not in seen_procedure_terms:
+            seen_procedure_terms.add(token)
+            procedure_terms_ordered.append(token)
+    procedure_terms = set(procedure_terms_ordered)
     variable_terms = {match.group(0).lower() for match in QUERY_VARIABLE_RE.finditer(query)}
     underscored_tokens = {
         token.lower()
@@ -105,6 +112,7 @@ def analyze_query(query: str) -> dict[str, object]:
         "tokens": tokens,
         "token_set": token_set,
         "procedure_terms": sorted(procedure_terms),
+        "procedure_terms_ordered": procedure_terms_ordered,
         "variable_terms": sorted(variable_terms),
         "table_terms": sorted(table_terms),
         "focus_terms": sorted(focus_terms),
@@ -554,6 +562,9 @@ def _intent_bonus(
         if hit_type == "procedure":
             bonus += 4.0 if query_analysis["wants_callers"] else 8.0
             reasons.append("intent_call_chain_procedure")
+            if candidate.get("retrieval_source") == "relation_path_bridge":
+                bonus += 18.0
+                reasons.append("intent_path_bridge")
             if candidate.get("retrieval_source") == "relation_multi_hop_context":
                 bonus += 10.0
                 reasons.append("intent_multi_hop_context")

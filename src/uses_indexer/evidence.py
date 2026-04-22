@@ -42,6 +42,7 @@ class EvidenceService:
 
         evidence_blocks: list[dict[str, object]] = []
         seen_contexts: set[tuple[int, int, int]] = set()
+        context_indexes: dict[tuple[int, int, int], int] = {}
         procedure_counts: dict[int, int] = {}
         pruned_events: list[dict[str, object]] = []
 
@@ -75,6 +76,19 @@ class EvidenceService:
                 int(context["line_end"]),
             )
             if context_key in seen_contexts:
+                existing_index = context_indexes.get(context_key)
+                if existing_index is not None:
+                    existing_block = evidence_blocks[existing_index]
+                    merged_reasons = list(existing_block.get("reasons") or [])
+                    for reason in candidate.get("reasons", []):
+                        if reason not in merged_reasons:
+                            merged_reasons.append(reason)
+                    existing_block["reasons"] = merged_reasons
+                    matched_via = list(existing_block.get("matched_via") or [existing_block["retrieval_source"]])
+                    retrieval_source = str(candidate["retrieval_source"])
+                    if retrieval_source not in matched_via:
+                        matched_via.append(retrieval_source)
+                    existing_block["matched_via"] = matched_via
                 if debug:
                     pruned_events.append(
                         {
@@ -88,6 +102,7 @@ class EvidenceService:
                 continue
 
             seen_contexts.add(context_key)
+            context_indexes[context_key] = len(evidence_blocks)
             procedure_counts[procedure_id] = procedure_counts.get(procedure_id, 0) + 1
 
             evidence_blocks.append(
@@ -96,6 +111,7 @@ class EvidenceService:
                     "score": round(float(candidate["score"]), 3),
                     "hit_type": candidate["hit_type"],
                     "retrieval_source": candidate["retrieval_source"],
+                    "matched_via": list(candidate.get("matched_via", [candidate["retrieval_source"]])),
                     "match_source": candidate["match_source"],
                     "procedure_name": candidate["procedure_name"],
                     "chinese_name": candidate.get("chinese_name"),

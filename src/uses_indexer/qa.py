@@ -157,11 +157,26 @@ class CodebaseQA:
                 f"另一个候选过程是 {item['procedure_name']}，命中的关键文本是 {item['matched_text']}。"
             )
 
+        path_hints = []
         related_hints = []
         for item in top_evidence:
             related = item.get("related_context", {})
             outgoing_calls = related.get("outgoing_calls") or []
             related_tables = related.get("related_tables") or []
+            path_reason = next(
+                (
+                    str(reason)
+                    for reason in item.get("reasons", [])
+                    if str(reason).startswith("path_bridge=")
+                ),
+                "",
+            )
+            if path_reason:
+                path_hints.append(
+                    "调用链桥接路径为 "
+                    + path_reason.removeprefix("path_bridge=")
+                    + "。"
+                )
             if outgoing_calls:
                 related_hints.append(
                     f"{item['procedure_name']} 还关联调用 {', '.join(outgoing_calls[:3])}。"
@@ -219,10 +234,11 @@ class CodebaseQA:
                 answer_lines.append(f"- {item}")
 
         confidence = self._estimate_confidence(top_evidence, related_hints, uncertainties)
+        prioritized_hints = [*path_hints, *related_hints]
         return {
             "status": "ok",
             "answer": "\n".join(answer_lines),
-            "summary_points": summary_points + related_hints[:2],
+            "summary_points": summary_points + prioritized_hints[:2],
             "supporting_locations": top_locations,
             "primary_candidate": primary_candidate,
             "secondary_candidates": secondary_candidates,

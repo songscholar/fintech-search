@@ -117,6 +117,16 @@ class RetrievalService:
         for candidate in relation_candidates:
             merge_candidate(candidates, candidate)
 
+        path_bridge_candidates = self._run_path_bridge_queries(
+            conn,
+            query_analysis=query_analysis,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["path_bridge"] = [self._trace_candidate(item) for item in path_bridge_candidates[:20]]
+        source_counts["path_bridge"] = len(path_bridge_candidates)
+        for candidate in path_bridge_candidates:
+            merge_candidate(candidates, candidate)
+
         neighbor_candidates = self._run_neighbor_expansion_queries(
             conn,
             query_analysis=query_analysis,
@@ -185,6 +195,88 @@ class RetrievalService:
             )
 
         return reranked, fts_query, vector_status, retrieval_debug
+
+    def _run_path_bridge_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        if not query_analysis.get("wants_call_chain"):
+            return []
+        ordered_terms = [str(term) for term in query_analysis.get("procedure_terms_ordered") or [] if str(term)]
+        if len(ordered_terms) < 2:
+            return []
+
+        context_fetch = self.owner._context_fetch_service
+        candidates: list[dict[str, object]] = []
+        seen_names: set[str] = set()
+
+        for index in range(len(ordered_terms) - 1):
+            source_name = ordered_terms[index]
+            target_name = ordered_terms[index + 1]
+            path = context_fetch.find_shortest_call_path(
+                conn,
+                source_procedure=source_name,
+                target_procedure=target_name,
+                max_depth=4,
+            )
+            if not path or len(path) <= 2:
+                continue
+            path_label = " -> ".join(path)
+            intermediates = path[1:-1]
+            for step_index, procedure_name in enumerate(intermediates, start=2):
+                if procedure_name in seen_names:
+                    continue
+                seen_names.add(procedure_name)
+                summary = context_fetch.lookup_procedure_summary(conn, procedure_name)
+                if summary is None:
+                    continue
+                row = conn.execute(
+                    """
+                    SELECT p.id, f.id, p.chinese_name, p.object_id, f.path
+                    FROM procedures p
+                    JOIN files f ON f.id = p.file_id
+                    WHERE lower(p.name) = lower(?) OR lower(COALESCE(p.chinese_name, '')) = lower(?)
+                    ORDER BY CASE WHEN lower(p.name) = lower(?) THEN 0 ELSE 1 END
+                    LIMIT 1
+                    """,
+                    (procedure_name, procedure_name, procedure_name),
+                ).fetchone()
+                if row is None:
+                    continue
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[4]),
+                        "procedure_name": str(summary["procedure_name"]),
+                        "chinese_name": row[2] if row[2] else None,
+                        "object_id": row[3] if row[3] else None,
+                        "line_start": summary.get("line_start"),
+                        "line_end": summary.get("line_end"),
+                        "matched_text": path_label,
+                        "match_source": "procedure_path_bridge",
+                        "retrieval_source": "relation_path_bridge",
+                        "base_score": 97.0,
+                        "source_rank": 9.7,
+                        "search_text": f"{path_label} {summary.get('summary_text') or ''}",
+                        "procedure_summary": str(summary.get("summary_text") or ""),
+                        "reasons": [
+                            f"path_bridge={path_label}",
+                            f"path_bridge_step={step_index}/{len(path)}",
+                            f"path_bridge_pair={source_name}->{target_name}",
+                        ],
+                    }
+                )
+                if len(candidates) >= limit:
+                    return candidates
+
+        return candidates[:limit]
 
     def _run_neighbor_expansion_queries(
         self,
