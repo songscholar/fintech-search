@@ -4190,3 +4190,52 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 topic / metadata 问题已经不只是“能命中”，而是开始具备更明确的专属精排配方
 - 当前 evidence 选择层也会配合 query type 收紧证据面，让最终输出更干净
 - 当前这类问题的优化仍然没有牺牲表链路、路径桥接和 exact focus 的已有准确度
+
+## [1.2.62] - 2026-04-23
+
+### Step 69: 让 evidence 选择按 query type 偏好证据块
+
+### 本步目标
+
+- 继续做正向增强，不只优化“检索结果是谁”，也优化“最终交给用户的第一块证据是什么”
+- 让 evidence assembly 本身开始按 query type 偏好更合适的证据块
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/evidence.py`
+   - 在 `assemble_evidence()` 中新增：
+     - `_sort_candidates_for_evidence()`
+     - `_evidence_priority_score()`
+   - 这层排序会根据 `query_type` 调整 evidence 候选顺序：
+     - 表问题优先 `table_access / relation_table_edge / relation_table_chain_context`
+     - 变量问题优先 `variable_flow / relation_variable_edge / relation_variable_chain_context`
+     - 调用链问题优先 `call_chain / relation_path_bridge / relation_multi_hop_context`
+     - topic / metadata 问题优先 `fts_procedure_feature / fts_action / fts_edge`
+
+2. evidence 选择策略说明
+   - 这层不是替代 retrieval 主排序
+   - 而是把“已经较大概率找对的候选过程”再往更适合展示的证据块上收口
+   - 目标是让最终 evidence block：
+     - 更贴近问题类型
+     - 更适合直接用于 QA / LLM / 前端展示
+
+3. 更新测试
+   - `tests/test_indexer.py`
+     - `test_assemble_evidence_prefers_table_access_context_for_table_queries`
+       - 验证表问题首证据会稳定携带表访问 reasons、画像和 SQL block 关系
+   - 同时继续回归：
+     - topic evidence 限制
+     - topic 聚合指标
+     - 表链路 / 路径桥接 / exact focus
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evidence.py tests/test_indexer.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_assemble_evidence_prefers_table_access_context_for_table_queries tests/test_indexer.py::test_assemble_evidence_limits_topic_queries_to_one_procedure_context tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_indexer.py::test_query_index_prefers_aggregate_topic_hits_without_hurting_table_focus tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_expands_table_chain_context_for_flow_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- 结果：`10 passed`
+
+### 结论
+
+- 当前系统不只是“谁排第一”更合理了，“第一块证据长什么样”也开始更合理
+- 当前 evidence 层已经开始按问题类型交付更贴近用户预期的证据面
+- 当前这轮优化仍然没有破坏已有的表链路、路径桥接和 exact focus 准确度

@@ -692,6 +692,24 @@ def test_assemble_evidence_limits_topic_queries_to_one_procedure_context(tmp_pat
     assert block["procedure_profile"].get("topic_role") == "publisher"
 
 
+def test_assemble_evidence_prefers_table_access_context_for_table_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.assemble_evidence(db_path, "uses_deep_table 在哪里更新", limit=3, context_window=1, related_limit=2)
+
+    assert result["evidence_count"] >= 1
+    top_block = result["evidence"][0]
+    assert top_block["procedure_name"] == "AF_DEEP"
+    assert "feature_table_access_chunk" in top_block["reasons"]
+    assert top_block["procedure_profile"].get("table_access_role") == "read_write"
+    assert any(
+        rel["edge_type"] == "writes_table" and rel["target_name"] == "uses_deep_table"
+        for block in top_block["recovered_blocks"]
+        for rel in block["relations"]
+    )
+    assert top_block["aggregate_hit_count"] >= 1
+
+
 def test_metadata_files_are_indexed_and_summarized(tmp_path: Path) -> None:
     indexer, db_path = _build_metadata_index(tmp_path)
 

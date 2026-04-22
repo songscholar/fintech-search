@@ -43,6 +43,7 @@ class EvidenceService:
         )
         query_analysis = analyze_query(query)
         query_type = str(query_analysis.get("query_type") or "")
+        candidates = _sort_candidates_for_evidence(candidates, query_type=query_type)
 
         evidence_blocks: list[dict[str, object]] = []
         seen_contexts: set[tuple[int, int, int]] = set()
@@ -303,3 +304,67 @@ def build_llm_context(query: str, evidence_blocks: list[dict[str, object]]) -> s
                 )
 
     return "\n".join(lines)
+
+
+def _sort_candidates_for_evidence(
+    candidates: list[dict[str, object]],
+    *,
+    query_type: str,
+) -> list[dict[str, object]]:
+    return sorted(
+        candidates,
+        key=lambda item: (
+            -_evidence_priority_score(item, query_type=query_type),
+            -float(item.get("score") or 0.0),
+            -float(item.get("aggregate_score") or 0.0),
+            -int(item.get("aggregate_hit_count") or 1),
+            str(item.get("procedure_name") or ""),
+            int(item.get("line_start") or 0),
+        ),
+    )
+
+
+def _evidence_priority_score(candidate: dict[str, object], *, query_type: str) -> float:
+    score = 0.0
+    hit_type = str(candidate.get("hit_type") or "")
+    retrieval_source = str(candidate.get("retrieval_source") or "")
+    match_source = str(candidate.get("match_source") or "")
+    chunk_role = str(candidate.get("chunk_role") or "")
+
+    if query_type in {"table_write", "table_read", "table_access"}:
+        if chunk_role == "table_access":
+            score += 20.0
+        if retrieval_source in {"relation_table_edge", "relation_table_chain_context"}:
+            score += 12.0
+        if match_source in {"table_edge_relation", "block_summary"}:
+            score += 6.0
+
+    if query_type in {"variable_write", "variable_read", "variable_flow"}:
+        if chunk_role == "variable_flow":
+            score += 20.0
+        if retrieval_source in {"relation_variable_edge", "relation_variable_chain_context"}:
+            score += 12.0
+        if match_source in {"variable_edge_relation", "assignment"}:
+            score += 6.0
+
+    if query_type in {"callers", "callees"}:
+        if chunk_role == "call_chain":
+            score += 18.0
+        if retrieval_source in {"relation_path_bridge", "relation_multi_hop_context"}:
+            score += 14.0
+        if hit_type == "procedure":
+            score += 4.0
+
+    if query_type == "topic_publish":
+        if retrieval_source in {"fts_action", "fts_edge", "fts_procedure_feature"}:
+            score += 12.0
+        if hit_type in {"action", "procedure"}:
+            score += 6.0
+
+    if query_type == "metadata_definition":
+        if retrieval_source in {"fts_edge", "fts_procedure_feature"}:
+            score += 12.0
+        if hit_type in {"procedure", "statement"}:
+            score += 6.0
+
+    return score

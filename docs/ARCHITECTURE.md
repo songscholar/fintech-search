@@ -311,6 +311,38 @@ evidence 选择层也开始跟上这个策略：
 
 这样最终给到 QA / LLM / 前端的证据面会更干净，不再被同一过程的多条相似片段占满。
 
+在此基础上，evidence 选择本身也开始按 query type 做“块级偏好”排序，而不是只吃 retrieval 的总分：
+
+- 表问题优先偏好：
+  - `feature_table_access_chunk`
+  - `relation_table_edge`
+  - `relation_table_chain_context`
+- 变量问题优先偏好：
+  - `variable_flow`
+  - `relation_variable_edge`
+  - `relation_variable_chain_context`
+- 调用链问题优先偏好：
+  - `call_chain`
+  - `relation_path_bridge`
+  - `relation_multi_hop_context`
+- topic / metadata 问题优先偏好：
+  - `fts_procedure_feature`
+  - `fts_action`
+  - `fts_edge`
+
+这层排序不替代 retrieval 的主排序，而是作为 evidence assembly 的二次收口：
+
+- 先保证主候选过程已经找对
+- 再尽量让“交给用户看的第一块证据”更贴近问题类型
+
+所以现在表问题的首证据，不一定名称上必须叫 `table_access`，但会更稳定地携带：
+
+- 表访问相关 reasons
+- 表访问角色画像
+- 相关 SQL/recovered block 关系
+
+这比单纯追求某个 chunk 名字更稳，也更接近用户真正需要的证据质量。
+
 ## 端到端问答链路
 
 ```mermaid
