@@ -420,6 +420,22 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
   --port 8000
 ```
 
+### 浏览器里直接打开
+
+启动 `serve-api` 后，可以直接访问：
+
+- `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/ui`
+
+当前内置前端提供：
+
+- 数据库概览卡片
+- 检索 / evidence / answer 工作台
+- query / evidence / answer / bundle 的结果分栏
+- trace 摘要面板
+
+适合做第一版本地可视化体验，而不需要额外起一套前端工程。
+
 ### 查候选
 
 ```bash

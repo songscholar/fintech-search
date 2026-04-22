@@ -2856,3 +2856,268 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 现在 release workflow archive 已经可以被统一列出和查看，不再只是散落目录
 - 这一步让 release 工作流从“可审计”进一步升级成了“可索引、可持续运营”的质量资产
+
+## [1.2.40] - 2026-04-21
+
+### Step 47: 增加第一版内置 Web UI
+
+### 本步目标
+
+- 为当前项目补一版真正可运行的本地前端页面
+- 不引入额外前端框架，直接复用现有 `serve-api`
+- 同时补齐前端设计文档、技术文档和回归测试
+
+### 本步改动
+
+1. 新增内置前端资源
+   - `src/uses_indexer/web/index.html`
+   - `src/uses_indexer/web/styles.css`
+   - `src/uses_indexer/web/app.js`
+   - 第一版页面包含：
+     - Hero 区
+     - 数据库概览
+     - 检索 / evidence / answer 工作台
+     - trace 摘要面板
+     - 项目能力与路由视图
+
+2. 更新 `src/uses_indexer/api.py`
+   - 新增静态页面入口：
+     - `GET /`
+     - `GET /ui`
+   - 新增静态资源托管：
+     - `GET /assets/styles.css`
+     - `GET /assets/app.js`
+   - 现有 JSON API 保持不变
+
+3. 更新 `pyproject.toml`
+   - 新增 package data 配置
+   - 确保 `web/*` 资源打包后仍可访问
+
+4. 更新测试
+   - `tests/test_api.py`
+   - 新增 Web UI 入口和静态资源回归：
+     - `/`
+     - `/assets/styles.css`
+     - `/assets/app.js`
+
+5. 更新文档
+   - 新增 `docs/FRONTEND_DESIGN.md`
+   - 新增 `docs/FRONTEND_TECHNICAL.md`
+   - 更新：
+     - `README.md`
+     - `docs/USAGE.md`
+     - `docs/DEPLOYMENT.md`
+
+### 设计结论
+
+- 第一版前端不做成营销官网，而是做成“本地检索控制台”
+- 视觉方向采用蓝白灰柔和配色，强调轻、静、现代
+- 动画以慢节奏背景漂浮、卡片浮入、数字缓动和面板 shimmer 为主
+- 页面重点放在真实使用链路，而不是堆砌展示型模块
+
+### 技术结论
+
+- 当前阶段使用零依赖静态前端最合适
+- 这样可以把前端直接并入现有 `serve-api`，不额外引入 Node / 构建链 / 部署链
+- 等后续页面复杂度进一步增长，再考虑独立前端工程
+
+## [1.2.41] - 2026-04-22
+
+### Step 48: 把长页面前端重构为单屏控制台
+
+### 本步目标
+
+- 去掉上一版依赖纵向滚动的长页面结构
+- 把首页收敛成真正的单屏工作台
+- 继续提升视觉质量、动效数量和交互流畅度
+
+### 本步改动
+
+1. 重写 `src/uses_indexer/web/index.html`
+   - 顶部导航改成视图切换按钮
+   - 首屏只保留：
+     - 品牌
+     - 服务状态
+     - 关键统计
+     - 主输入区
+   - 主工作区改成单个 `workspace-panel`
+   - 新增三类视图：
+     - `results-view`
+     - `system-view`
+     - `insights-view`
+   - 结果区再拆成四个可切换子面板：
+     - `query-panel`
+     - `evidence-panel`
+     - `answer-panel`
+     - `trace-panel`
+
+2. 重写 `src/uses_indexer/web/styles.css`
+   - 改成控制台式布局
+   - 默认 `body` 不滚动
+   - 使用固定工作区高度
+   - 新增更丰富的背景动效：
+     - mesh
+     - halo
+     - pulse grid
+   - 优化按钮、卡片、状态条、标签页和切换面板动效
+
+3. 重写 `src/uses_indexer/web/app.js`
+   - 新增视图切换逻辑：
+     - `setView`
+     - `setSubpanel`
+     - `activatePanelById`
+   - 让不同动作自动激活最合适的结果子面板
+   - 提升交互反馈和切换节奏
+
+4. 更新文档
+   - `docs/FRONTEND_DESIGN.md`
+   - `docs/FRONTEND_TECHNICAL.md`
+   - 补充单屏重构的设计与技术说明
+
+### 结论
+
+- 当前前端已经从“长页面原型”升级成“单屏可切换控制台”
+- 页面首屏噪音更低，信息组织更聚焦
+- 交互和动效都比上一版更贴近现代桌面产品，而不是 AI 模板页
+
+## [1.2.42] - 2026-04-22
+
+### Step 49: 修复视图切换失效并补回系统说明内容
+
+### 本步目标
+
+- 修复顶部菜单点击后内容区没有明显切换的问题
+- 把系统视图中丢失的接口说明和工作流说明补回来
+- 降低浏览器缓存导致的“页面没更新”错觉
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/web/app.js`
+   - `setView()` 现在会显式控制：
+     - `hidden`
+     - `workspace-view-active`
+   - `activatePanelById()` 现在会显式控制：
+     - `hidden`
+     - `subpanel-active`
+   - 初始化时会主动执行：
+     - `setView("results-view")`
+     - `activateDefaultPanels()`
+
+2. 更新 `src/uses_indexer/web/index.html`
+   - 为非激活子面板增加初始 `hidden`
+   - 补回系统视图内容：
+     - `Capabilities`
+     - `Interface Guide`
+   - 补充更多首屏小卡片，减少“元素变少”的空洞感
+
+3. 更新 `src/uses_indexer/web/styles.css`
+   - 为 `workspace-view[hidden]` 和 `subpanel[hidden]` 增加显式隐藏规则
+   - 增加：
+     - `mini-card`
+     - `capability-card`
+     - `guide-card`
+   - 系统视图改为更完整的多区块布局
+
+4. 更新 `src/uses_indexer/api.py`
+   - 所有响应头增加：
+     - `Cache-Control: no-store, max-age=0`
+   - 避免浏览器继续使用旧版静态资源
+
+5. 更新文档
+   - `docs/FRONTEND_TECHNICAL.md`
+   - 补充本轮交互修复说明
+
+### 结论
+
+- 现在顶部菜单和结果子面板都改成了更稳的显式切换
+- 系统视图重新补回了接口与工作流说明，不再只有空框架
+- 刷新后应能直接看到新资源，而不会继续命中旧缓存
+
+## [1.2.43] - 2026-04-22
+
+### Step 50: 把顶部菜单改成主页 + 三个独立页面
+
+### 本步目标
+
+- 解决横屏网页模式下“点按钮后内容需要往下滑但外层被锁住”的使用问题
+- 把导航从“同页切块”升级成“主页 + 三个独立详情页”
+- 保留固定框架，同时允许每个页面内容区单独滚动
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/web/index.html`
+   - 顶部导航改成：
+     - `主页`
+     - `结果视图`
+     - `系统视图`
+     - `设计说明`
+   - 新增 `home-view`
+   - 主页保留当前首屏语义
+   - 结果 / 系统 / 设计 继续作为三个详情页面
+
+2. 更新 `src/uses_indexer/web/app.js`
+   - 新增 `setPage(pageId)`
+   - 区分：
+     - `home`
+     - `results-view`
+     - `system-view`
+     - `insights-view`
+   - 运行 query/evidence/answer 时自动跳到 `结果视图`
+   - 路由信息同时同步到主页和系统页
+
+3. 更新 `src/uses_indexer/web/styles.css`
+   - 新增：
+     - `.page-home`
+     - `.page-detail`
+     - `.home-board`
+   - 详情页内容区支持单独滚动
+   - 主页和详情页在横屏模式下不再混在一个不可滚动视野里
+
+### 结论
+
+- 现在顶部按钮语义已经变成真正的页面切换，而不是只切块
+- 主页回到当前首屏
+- 三个详情页都可以在固定框架内独立滚动
+
+## [1.2.44] - 2026-04-22
+
+### Step 51: 清理重复说明并收口主页布局
+
+### 本步目标
+
+- 去掉主页里和详情页重复的说明模块
+- 让主页真正回到“概览 + 输入 + 主操作”的单屏结构
+- 继续压缩无关说明文字，保留和项目直接相关的信息
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/web/index.html`
+   - 删除主页底部重复区：
+     - `Home Overview`
+     - `Quick Routes`
+   - 保留：
+     - 左侧索引概览
+     - 右侧查询与分析入口
+   - 主页不再重复展示系统页里已经存在的接口说明
+
+2. 更新 `src/uses_indexer/web/app.js`
+   - `setPage("home")` 改成真正的首页模式
+   - 主页模式下不再尝试激活已删除的 `home-view`
+   - 删除：
+     - `home-route-cloud`
+     - 对应的空状态和渲染逻辑
+
+3. 更新 `src/uses_indexer/web/styles.css`
+   - 主页模式下隐藏 `workspace-panel`
+   - 主页改成只占用双栏主舞台
+   - 删除：
+     - `.home-board`
+     - `.home-overview`
+     - `.home-routes`
+   - 调整首页高度分配，让左右主区在 16:9 横屏里更自然撑满
+
+### 结论
+
+- 当前主页已经从“首页 + 一段重复详情区”收口成真正的入口页
+- 结果 / 系统 / 设计说明三个页面继续承担深入信息展示
+- 页面结构更符合桌面单屏工作台，而不是拼接型长页面

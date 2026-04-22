@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>USES Indexer Console</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="page-backdrop">
+      <div class="mesh mesh-a"></div>
+      <div class="mesh mesh-b"></div>
+      <div class="halo halo-a"></div>
+      <div class="halo halo-b"></div>
+      <div class="halo halo-c"></div>
+      <div class="noise"></div>
+    </div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-cluster">
+          <div class="brand-mark-wrap">
+            <span class="brand-mark-core"></span>
+            <span class="brand-mark-ring"></span>
+          </div>
+          <div>
+            <p class="eyebrow">USES INDEXER CONSOLE</p>
+            <h1>单屏代码检索工作台</h1>
+          </div>
+        </div>
+
+        <div class="topbar-center">
+          <button class="nav-pill nav-pill-active" data-page-target="home" aria-selected="true">主页</button>
+          <button class="nav-pill" data-page-target="results-view" aria-selected="false">结果视图</button>
+          <button class="nav-pill" data-page-target="system-view" aria-selected="false">系统视图</button>
+          <button class="nav-pill" data-page-target="insights-view" aria-selected="false">设计说明</button>
+        </div>
+
+        <div class="topbar-right">
+          <div class="server-pill" id="server-pill">
+            <span class="server-dot"></span>
+            <span id="server-status-text">连接中</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="console-grid">
+        <section class="hero-panel panel reveal home-only">
+          <div class="hero-head">
+            <div>
+              <p class="eyebrow">PROJECT SNAPSHOT</p>
+              <h2>当前索引库与主分析入口</h2>
+            </div>
+            <div class="hero-badge-stack">
+              <span>SQLite 索引</span>
+              <span>混合检索</span>
+              <span>证据组装</span>
+            </div>
+          </div>
+
+          <div class="hero-body">
+            <div class="hero-copy">
+              <div class="hero-metrics">
+                <article class="metric-card highlight">
+                  <span>默认数据库</span>
+                  <strong id="metric-db-path">等待加载</strong>
+                </article>
+                <article class="metric-card">
+                  <span>文件规模</span>
+                  <strong data-counter id="metric-files">0</strong>
+                </article>
+                <article class="metric-card">
+                  <span>语义块</span>
+                  <strong data-counter id="metric-chunks">0</strong>
+                </article>
+                <article class="metric-card">
+                  <span>调用关系</span>
+                  <strong data-counter id="metric-calls">0</strong>
+                </article>
+              </div>
+            </div>
+
+            <div class="hero-visual">
+              <div class="pulse-grid">
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+              </div>
+              <div class="hero-floating-card">
+                <p class="eyebrow">Current Focus</p>
+                <h3>先定位命中位置，再看证据块和最终回答。</h3>
+                <p>适合排查逻辑位置、失败路径、调用链、表访问和参数来源。</p>
+              </div>
+              <div class="hero-quickstrip">
+                <article class="mini-card">
+                  <span>主链路</span>
+                  <strong>检索 / 证据 / 回答</strong>
+                </article>
+                <article class="mini-card">
+                  <span>默认动作</span>
+                  <strong>整套分析</strong>
+                </article>
+                <article class="mini-card">
+                  <span>辅助能力</span>
+                  <strong>Debug Bundle / Trace</strong>
+                </article>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="command-panel panel reveal home-only">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Command Deck</p>
+              <h3>查询与分析入口</h3>
+            </div>
+            <button class="ghost-button small-button" id="hero-refresh">刷新概览</button>
+          </div>
+
+          <div class="command-layout">
+            <div class="field-group">
+              <label class="field">
+                <span>数据库路径</span>
+                <input id="db-path" type="text" placeholder="留空时使用 serve-api 的默认数据库" />
+              </label>
+              <label class="field question-field">
+                <span>问题 / 查询</span>
+                <textarea
+                  id="question-input"
+                  rows="4"
+                  placeholder="例如：证券代码获取的逻辑在哪里，失败时会走哪条路径？"
+                ></textarea>
+              </label>
+            </div>
+
+            <div class="side-controls">
+              <div class="prompt-bank compact-prompts">
+                <button class="prompt-chip" data-prompt="证券代码获取的逻辑在哪里">证券代码获取</button>
+                <button class="prompt-chip" data-prompt="某个失败处理块里做了什么">失败处理块</button>
+                <button class="prompt-chip" data-prompt="谁调用了某个过程">调用链查询</button>
+                <button class="prompt-chip" data-prompt="某张表在哪里被写入">表写入路径</button>
+              </div>
+
+              <div class="config-grid">
+                <label class="field compact-field">
+                  <span>Limit</span>
+                  <input id="limit-input" type="number" min="1" max="20" value="6" />
+                </label>
+                <label class="field compact-field">
+                  <span>Context</span>
+                  <input id="context-window-input" type="number" min="1" max="8" value="2" />
+                </label>
+                <label class="field compact-field">
+                  <span>Related</span>
+                  <input id="related-limit-input" type="number" min="1" max="8" value="3" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-button run-button" data-action="all">整套分析</button>
+            <button class="secondary-button run-button" data-action="query">检索</button>
+            <button class="secondary-button run-button" data-action="evidence">证据</button>
+            <button class="secondary-button run-button" data-action="answer">回答</button>
+            <button class="ghost-button run-button" data-action="bundle">Bundle</button>
+          </div>
+
+          <div class="status-strip" id="status-strip">
+            <span class="status-badge">就绪</span>
+            <span id="status-text">按下 `Cmd/Ctrl + Enter` 也可以直接运行整套分析。</span>
+          </div>
+        </section>
+
+        <section class="workspace-panel panel reveal">
+          <div class="view-stack">
+            <section class="workspace-view" id="results-view" hidden>
+              <div class="results-board">
+                <div class="results-main">
+                  <div class="subtabs">
+                    <button class="subtab subtab-active" data-panel-target="query-panel">命中结果</button>
+                    <button class="subtab" data-panel-target="evidence-panel">证据块</button>
+                  </div>
+
+                  <div class="subpanel-wrap">
+                    <section class="subpanel subpanel-active result-panel" id="query-panel">
+                      <div class="section-head">
+                        <div>
+                          <p class="eyebrow">Retrieval</p>
+                          <h4>命中结果</h4>
+                        </div>
+                        <span class="panel-note" id="query-meta">等待运行</span>
+                      </div>
+                      <div class="result-list" id="query-results"></div>
+                      <div class="result-footer">
+                        <span>这里会展示命中来源、文件路径、摘要文本。</span>
+                      </div>
+                    </section>
+
+                    <section class="subpanel result-panel" id="evidence-panel" hidden>
+                      <div class="section-head">
+                        <div>
+                          <p class="eyebrow">Evidence</p>
+                          <h4>证据块</h4>
+                        </div>
+                        <span class="panel-note" id="evidence-meta">等待运行</span>
+                      </div>
+                      <div class="result-list" id="evidence-results"></div>
+                      <div class="result-footer">
+                        <span>这里会展示证据块、相关表和相关调用。</span>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+
+                <div class="results-side">
+                  <div class="subtabs side-subtabs">
+                    <button class="subtab subtab-active" data-panel-target="answer-panel">回答</button>
+                    <button class="subtab" data-panel-target="trace-panel">Trace</button>
+                  </div>
+
+                  <div class="subpanel-wrap side-panels">
+                    <section class="subpanel subpanel-active result-panel" id="answer-panel">
+                      <div class="section-head">
+                        <div>
+                          <p class="eyebrow">Answer</p>
+                          <h4>最终回答</h4>
+                        </div>
+                        <span class="panel-note" id="answer-meta">等待运行</span>
+                      </div>
+                      <div class="answer-body" id="answer-results"></div>
+                      <div class="result-footer">
+                        <span>这里会展示 grounded answer、supporting locations 和不确定点。</span>
+                      </div>
+                    </section>
+
+                    <section class="subpanel result-panel" id="trace-panel" hidden>
+                      <div class="section-head">
+                        <div>
+                          <p class="eyebrow">Trace</p>
+                          <h4>调试与摘要</h4>
+                        </div>
+                        <span class="panel-note">解释这次命中为什么成立</span>
+                      </div>
+                      <div class="trace-grid" id="trace-results"></div>
+                      <div class="result-footer">
+                        <span>这里会展示 query type、candidate count、pruning 等调试摘要。</span>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="workspace-view" id="system-view" hidden>
+              <div class="system-board">
+                <div class="system-summary panel-inset summary-panel">
+                  <div class="section-head">
+                    <div>
+                      <p class="eyebrow">Index Snapshot</p>
+                      <h4>索引数据库概览</h4>
+                    </div>
+                    <button class="ghost-button small-button" id="refresh-summary">刷新概览</button>
+                  </div>
+                  <div class="summary-grid" id="summary-grid">
+                    <article class="summary-tile">
+                      <p>procedures</p>
+                      <strong data-counter id="summary-procedures">0</strong>
+                    </article>
+                    <article class="summary-tile">
+                      <p>statements</p>
+                      <strong data-counter id="summary-statements">0</strong>
+                    </article>
+                    <article class="summary-tile">
+                      <p>chunks</p>
+                      <strong data-counter id="summary-chunks">0</strong>
+                    </article>
+                    <article class="summary-tile">
+                      <p>blocks</p>
+                      <strong data-counter id="summary-blocks">0</strong>
+                    </article>
+                    <article class="summary-tile">
+                      <p>calls_procedure</p>
+                      <strong data-counter id="summary-calls">0</strong>
+                    </article>
+                    <article class="summary-tile">
+                      <p>publishes_mc_topic</p>
+                      <strong data-counter id="summary-topics">0</strong>
+                    </article>
+                  </div>
+                </div>
+
+                <div class="system-routes panel-inset">
+                  <div class="section-head">
+                    <div>
+                      <p class="eyebrow">Live Routes</p>
+                      <h4>服务接口</h4>
+                    </div>
+                  </div>
+                  <div class="route-cloud" id="route-cloud"></div>
+                </div>
+
+                <div class="system-capabilities panel-inset">
+                  <div class="section-head">
+                    <div>
+                      <p class="eyebrow">Capabilities</p>
+                      <h4>当前前端能调用什么</h4>
+                    </div>
+                  </div>
+                  <div class="capability-list">
+                    <article class="capability-card">
+                      <h5>检索</h5>
+                      <p>调用 `/query`，查看候选命中、来源和摘要文本。</p>
+                    </article>
+                    <article class="capability-card">
+                      <h5>证据</h5>
+                      <p>调用 `/evidence`，查看证据块、相关表、相关调用和上下文。</p>
+                    </article>
+                    <article class="capability-card">
+                      <h5>回答</h5>
+                      <p>调用 `/answer`，查看 grounded 回答、supporting locations 和不确定点。</p>
+                    </article>
+                    <article class="capability-card">
+                      <h5>Bundle</h5>
+                      <p>调用 `/debug-bundle`，把 query、evidence、answer 打包到一起做复盘。</p>
+                    </article>
+                  </div>
+                </div>
+
+                <div class="system-guide panel-inset">
+                  <div class="section-head">
+                    <div>
+                      <p class="eyebrow">Interface Guide</p>
+                      <h4>当前项目工作流</h4>
+                    </div>
+                  </div>
+                  <div class="guide-grid">
+                    <article class="guide-card">
+                      <span class="guide-index">01</span>
+                      <h5>先看库</h5>
+                      <p>先确认当前默认数据库和索引规模，再开始提问。</p>
+                    </article>
+                    <article class="guide-card">
+                      <span class="guide-index">02</span>
+                      <h5>再问问题</h5>
+                      <p>先跑 `整套分析`，如果结果太散，再切到单独的检索或证据视图收敛。</p>
+                    </article>
+                    <article class="guide-card">
+                      <span class="guide-index">03</span>
+                      <h5>用 Trace 复盘</h5>
+                      <p>遇到结果不稳定时，先看 query type、candidate count 和 evidence pruning。</p>
+                    </article>
+                    <article class="guide-card">
+                      <span class="guide-index">04</span>
+                      <h5>用系统视图查接口</h5>
+                      <p>这里会保留当前服务路由和能力说明，不再像上一版那样丢掉接口信息。</p>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="workspace-view" id="insights-view" hidden>
+              <div class="insight-board">
+                <article class="insight-card">
+                  <p class="eyebrow">Scope</p>
+                  <h4>当前前端覆盖的能力</h4>
+                  <p>这一版前端主要覆盖当前项目已经具备的数据库摘要、检索、证据、回答和 HTTP 路由展示，还没有去碰 baseline、release workflow 这些更后面的能力。</p>
+                </article>
+                <article class="insight-card">
+                  <p class="eyebrow">Query</p>
+                  <h4>适合问什么问题</h4>
+                  <p>更适合查“逻辑在哪里”“谁调用了谁”“哪张表在哪里被访问”“失败时走哪条路径”这类仓库定位问题，而不是当作完整运维平台来用。</p>
+                </article>
+                <article class="insight-card">
+                  <p class="eyebrow">Data</p>
+                  <h4>页面数据从哪里来</h4>
+                  <p>所有页面内容都直接来自当前 `serve-api` 服务，包括 `/db-summary`、`/query`、`/evidence`、`/answer` 和 `/health`，没有单独造一套前端假数据。</p>
+                </article>
+                <article class="insight-card">
+                  <p class="eyebrow">Result</p>
+                  <h4>结果页怎么理解</h4>
+                  <p>结果页左边偏原始事实，右边偏总结与调试：命中结果和证据块用于定位实现，回答和 Trace 用于快速判断当前结果是否可信。</p>
+                </article>
+                <article class="insight-card">
+                  <p class="eyebrow">System</p>
+                  <h4>系统页怎么理解</h4>
+                  <p>系统页不是运维监控页，而是“当前索引库和 HTTP 接口能力概览页”，方便你确认库规模、调用入口和现阶段前端已接入的能力。</p>
+                </article>
+                <article class="insight-card">
+                  <p class="eyebrow">Next</p>
+                  <h4>下一步还可以补什么</h4>
+                  <p>后面如果要继续扩，可以优先补 debug bundle、baseline 和 release workflow 的可视化页面，但这些不应该再挤进当前主页里，而应该继续作为独立页面扩展。</p>
+                </article>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="empty-state-template">
+      <div class="empty-state">
+        <span class="empty-icon">·</span>
+        <p></p>
+      </div>
+    </template>
+
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

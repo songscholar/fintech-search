@@ -61,12 +61,19 @@ curl -s http://127.0.0.1:8000/health
 
 核心接口：
 
+- `GET /`
+- `GET /ui`
 - `GET /health`
 - `GET /db-summary`
 - `POST /query`
 - `POST /evidence`
 - `POST /ask`
 - `POST /answer`
+
+如果你只是想直接打开一版本地前端，不需要自己再写页面，启动后访问：
+
+- `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/ui`
 
 ### 3. stdio MCP 模式
 

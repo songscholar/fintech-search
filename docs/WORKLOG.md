@@ -218,9 +218,56 @@
 - 新增 `blocks_fts`
 - 当前已恢复的结构块包括：
   - `transaction`
-  - `sql_query`
-  - `sql_execute`
-  - `failure_handler`
+
+## 2026-04-21
+
+### 阶段 47：第一版本地前端控制台
+
+- 新增内置 Web UI：
+  - `GET /`
+  - `GET /ui`
+- 新增静态资源：
+  - `src/uses_indexer/web/index.html`
+  - `src/uses_indexer/web/styles.css`
+  - `src/uses_indexer/web/app.js`
+- 页面定位不是营销官网，而是本地检索工作台
+- 页面当前已支持：
+  - 数据库摘要概览
+  - query / evidence / answer 工作流
+  - trace 摘要视图
+  - 当前 API 路由展示
+- 新增前端设计与技术文档：
+  - `docs/FRONTEND_DESIGN.md`
+  - `docs/FRONTEND_TECHNICAL.md`
+
+### 阶段 48：单屏工作台重构
+
+- 把前端从纵向长页面改成单屏控制台
+- 顶部改成视图切换导航
+- 工作区改成固定舞台，避免依赖滚动
+- 结果区改成：
+  - 命中结果 / 证据块 切换
+  - 回答 / trace 切换
+- 背景和动效升级为：
+  - mesh
+  - halo
+  - pulse grid
+- 当前桌面端优先保证单屏体验，窄屏自动回退为可滚动布局
+
+### 阶段 49：主页去重与入口收口
+
+- 删除主页底部重复说明区：
+  - `Home Overview`
+  - `Quick Routes`
+- 主页重新收口成：
+  - 左侧索引概览
+  - 右侧查询与分析入口
+- 系统说明、接口说明和设计说明继续保留在对应独立页面
+- `setPage("home")` 现在不再依赖已删除的 `home-view`
+- 主页模式下直接隐藏底部 `workspace-panel`
+- `sql_query`
+- `sql_execute`
+- `failure_handler`
   - `record_loop`
   - `record_pool_loop`
   - `component_loop`

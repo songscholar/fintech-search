@@ -371,6 +371,26 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         host, port = server.server_address
         conn = HTTPConnection(host, port, timeout=5)
 
+        conn.request("GET", "/")
+        response = conn.getresponse()
+        body = response.read().decode("utf-8")
+        assert response.status == 200
+        assert "USES Indexer Console" in body
+        assert response.getheader("Content-Type", "").startswith("text/html")
+
+        conn.request("GET", "/assets/styles.css")
+        response = conn.getresponse()
+        body = response.read().decode("utf-8")
+        assert response.status == 200
+        assert ":root" in body
+        assert response.getheader("Content-Type", "").startswith("text/css")
+
+        conn.request("GET", "/assets/app.js")
+        response = conn.getresponse()
+        body = response.read().decode("utf-8")
+        assert response.status == 200
+        assert "initializeConsole" in body
+
         conn.request("GET", "/health")
         response = conn.getresponse()
         body = json.loads(response.read().decode("utf-8"))

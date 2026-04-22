@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,6 +34,13 @@ from .debug_bundle import (
 from .indexer import SQLiteIndexer
 from .llm import LlmConfigError, LlmRequestError
 from .qa import CodebaseQA
+
+WEB_DIR = Path(__file__).with_name("web")
+WEB_INDEX_PATH = WEB_DIR / "index.html"
+WEB_ASSET_PATHS = {
+    "/assets/styles.css": WEB_DIR / "styles.css",
+    "/assets/app.js": WEB_DIR / "app.js",
+}
 
 
 class ApiError(Exception):
@@ -80,6 +88,8 @@ class CodebaseApi:
                 "service": "uses-indexer-api",
                 "default_db_path": self.default_db_path,
                 "routes": [
+                    "GET /",
+                    "GET /ui",
                     "GET /health",
                     "GET /db-summary",
                     "POST /query",
@@ -502,6 +512,17 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
             return
 
         def _dispatch(self) -> None:
+            static_asset = None
+            if self.command == "GET":
+                static_asset = _resolve_web_response(self.path)
+            if static_asset is not None:
+                status_code, content_type, payload = static_asset
+                self.send_response(int(status_code))
+                self._write_common_headers(content_type=content_type, content_length=len(payload))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+
             body = None
             if self.command == "POST":
                 length = int(self.headers.get("Content-Length", "0"))
@@ -518,16 +539,17 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
 
             encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(int(status_code))
-            self._write_common_headers(content_length=len(encoded))
+            self._write_common_headers(content_type="application/json; charset=utf-8", content_length=len(encoded))
             self.end_headers()
             self.wfile.write(encoded)
 
-        def _write_common_headers(self, *, content_length: int) -> None:
-            self.send_header("Content-Type", "application/json; charset=utf-8")
+        def _write_common_headers(self, *, content_type: str, content_length: int) -> None:
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(content_length))
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Cache-Control", "no-store, max-age=0")
 
     return ApiHandler
 
@@ -571,3 +593,26 @@ def _coerce_named_int_mapping(value: Any, field_name: str) -> dict[str, int] | N
             raise ApiError(HTTPStatus.BAD_REQUEST, f"{field_name} keys must be non-empty strings")
         result[key.strip()] = _optional_nonnegative_int(raw_value, f"{field_name}.{key}") or 0
     return result
+
+
+def _resolve_web_response(path: str) -> tuple[int, str, bytes] | None:
+    parsed = urlparse(path)
+    route = parsed.path
+    if route in {"", "/", "/ui"}:
+        return _read_static_file(WEB_INDEX_PATH)
+    asset_path = WEB_ASSET_PATHS.get(route)
+    if asset_path is None:
+        return None
+    return _read_static_file(asset_path)
+
+
+def _read_static_file(path: Path) -> tuple[int, str, bytes]:
+    if not path.exists():
+        return HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", f"Not found: {path.name}".encode("utf-8")
+    payload = path.read_bytes()
+    content_type, _ = mimetypes.guess_type(path.name)
+    if content_type is None:
+        content_type = "application/octet-stream"
+    if content_type.startswith("text/") or content_type in {"application/javascript", "application/json"}:
+        content_type = f"{content_type}; charset=utf-8"
+    return HTTPStatus.OK, content_type, payload
