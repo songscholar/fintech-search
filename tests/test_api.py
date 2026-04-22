@@ -46,6 +46,47 @@ class StubLlm:
         raise AssertionError("complete should not be called when is_configured is false")
 
 
+class StubAgentGateway:
+    def list_providers(self) -> dict[str, object]:
+        return {
+            "response_kind": "agent_providers",
+            "default_provider": "hermes",
+            "count": 1,
+            "items": [
+                {
+                    "name": "hermes",
+                    "label": "Hermes",
+                    "adapter": "openai-compatible",
+                    "configured": True,
+                    "default": True,
+                    "description": "stub provider",
+                    "model": "stub-hermes",
+                    "base_url": "http://agent.local/chat",
+                }
+            ],
+        }
+
+    def chat(self, **kwargs: object) -> dict[str, object]:
+        return {
+            "response_kind": "agent_chat",
+            "provider": {
+                "name": str(kwargs.get("provider_name") or "hermes"),
+                "label": "Hermes",
+                "adapter": "openai-compatible",
+                "model": "stub-hermes",
+                "base_url": "http://agent.local/chat",
+            },
+            "message": kwargs.get("message"),
+            "reply": "stub agent reply",
+            "latency_ms": 12,
+            "context_bundle": {
+                "db_path": kwargs.get("db_path"),
+                "question": kwargs.get("message"),
+            },
+            "raw_response": {"choices": []},
+        }
+
+
 def _build_api(tmp_path: Path) -> tuple[CodebaseApi, Path]:
     source_dir = tmp_path / "src"
     source_dir.mkdir()
@@ -57,7 +98,13 @@ def _build_api(tmp_path: Path) -> tuple[CodebaseApi, Path]:
     indexer.build_index(source_dir, db_path)
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa=qa, llm=StubLlm())
-    api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=db_path)
+    api = CodebaseApi(
+        indexer=indexer,
+        qa=qa,
+        answerer=answerer,
+        agent_gateway=StubAgentGateway(),
+        default_db_path=db_path,
+    )
     return api, db_path
 
 
@@ -99,6 +146,20 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert status == 200
     assert answer["final_answer"]["source"] in {"draft", "draft_fallback", "llm"}
     assert answer["response_kind"] == "answer"
+
+    status, providers = api.handle_request("GET", "/agent/providers")
+    assert status == 200
+    assert providers["response_kind"] == "agent_providers"
+    assert providers["items"][0]["name"] == "hermes"
+
+    status, agent = api.handle_request(
+        "POST",
+        "/agent/chat",
+        json.dumps({"message": "帮我解释当前失败路径", "provider": "hermes", "limit": 2}).encode("utf-8"),
+    )
+    assert status == 200
+    assert agent["response_kind"] == "agent_chat"
+    assert agent["reply"] == "stub agent reply"
 
     status, bundle = api.handle_request(
         "POST",
@@ -397,6 +458,12 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         assert response.status == 200
         assert body["service"] == "uses-indexer-api"
 
+        conn.request("GET", "/agent/providers")
+        response = conn.getresponse()
+        body = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert body["response_kind"] == "agent_providers"
+
         payload = json.dumps({"question": "证券代码获取的逻辑在哪里", "evidence_limit": 2})
         conn.request("POST", "/ask", body=payload, headers={"Content-Type": "application/json"})
         response = conn.getresponse()
@@ -410,6 +477,13 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         body = json.loads(response.read().decode("utf-8"))
         assert response.status == 200
         assert "final_answer" in body
+
+        agent_payload = json.dumps({"message": "请解释失败路径", "provider": "hermes"})
+        conn.request("POST", "/agent/chat", body=agent_payload, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        body = json.loads(response.read().decode("utf-8"))
+        assert response.status == 200
+        assert body["response_kind"] == "agent_chat"
 
         panel_cases = tmp_path / "http_panel_cases.json"
         panel_cases.write_text(

@@ -1,5 +1,6 @@
 """USES indexer package."""
 
+from .agent_gateway import AgentConfigError, AgentGateway, AgentRequestError
 from .api import CodebaseApi
 from .answering import CodebaseAnswerer
 from .embeddings import (
@@ -24,6 +25,9 @@ __all__ = [
     "CodexIntegrationInstaller",
     "CodebaseMcpServer",
     "CodebaseQA",
+    "AgentConfigError",
+    "AgentGateway",
+    "AgentRequestError",
     "create_embedder_from_env",
     "EmbeddingConfigError",
     "EmbeddingInfo",

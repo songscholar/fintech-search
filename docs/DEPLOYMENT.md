@@ -65,15 +65,44 @@ curl -s http://127.0.0.1:8000/health
 - `GET /ui`
 - `GET /health`
 - `GET /db-summary`
+- `GET /agent/providers`
 - `POST /query`
 - `POST /evidence`
 - `POST /ask`
 - `POST /answer`
+- `POST /agent/chat`
 
 如果你只是想直接打开一版本地前端，不需要自己再写页面，启动后访问：
 
 - `http://127.0.0.1:8000/`
 - `http://127.0.0.1:8000/ui`
+
+如果你要把服务器上部署的 Hermes / OpenClaw 接给当前前端，不要让浏览器直接请求它们，而是配置当前后端的 agent gateway：
+
+```bash
+cp /Users/songzuoqiang/Documents/agent/condex/codes/.env.example \
+  /Users/songzuoqiang/Documents/agent/condex/codes/.env
+
+# 三选一或多选一
+export USES_INDEXER_AGENT_OPENAI_MODEL="gpt-4.1-mini"
+export USES_INDEXER_AGENT_OPENAI_BASE_URL="https://api.openai.com/v1/chat/completions"
+export USES_INDEXER_AGENT_OPENAI_API_KEY="..."
+
+export USES_INDEXER_AGENT_HERMES_MODEL="hermes-prod"
+export USES_INDEXER_AGENT_HERMES_BASE_URL="http://127.0.0.1:9001/v1/chat/completions"
+export USES_INDEXER_AGENT_HERMES_API_KEY=""
+
+export USES_INDEXER_AGENT_OPENCLAW_MODEL="openclaw-prod"
+export USES_INDEXER_AGENT_OPENCLAW_BASE_URL="http://127.0.0.1:9002/v1/chat/completions"
+export USES_INDEXER_AGENT_OPENCLAW_API_KEY=""
+```
+
+前端智能体页随后只调用：
+
+- `GET /agent/providers`
+- `POST /agent/chat`
+
+这样外部智能体拿到的不是裸问题，而是带当前代码检索上下文的问题。
 
 ### 3. stdio MCP 模式
 

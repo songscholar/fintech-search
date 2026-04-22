@@ -3121,3 +3121,73 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前主页已经从“首页 + 一段重复详情区”收口成真正的入口页
 - 结果 / 系统 / 设计说明三个页面继续承担深入信息展示
 - 页面结构更符合桌面单屏工作台，而不是拼接型长页面
+
+## [1.2.45] - 2026-04-22
+
+### Step 52: 增加智能体页面与 Agent Gateway
+
+### 本步目标
+
+- 给当前前端增加一个真正可用的智能体页面
+- 新增后端 `/agent/providers` 和 `/agent/chat`
+- 用后端代理的方式接外部 Hermes / OpenClaw / OpenAI-compatible 服务
+
+### 本步改动
+
+1. 新增 `src/uses_indexer/agent_gateway.py`
+   - 新增 `AgentGateway`
+   - 支持从 `.env` 加载 3 类 provider：
+     - `openai-compatible`
+     - `hermes`
+     - `openclaw`
+   - 当前 Hermes / OpenClaw 先按 `openai-compatible` HTTP chat 协议接入
+   - 发送到外部智能体前，会先组装：
+     - retrieval
+     - evidence
+     - answer draft
+
+2. 更新 `src/uses_indexer/api.py`
+   - 新增：
+     - `GET /agent/providers`
+     - `POST /agent/chat`
+   - `CodebaseApi` 支持注入 `agent_gateway`
+   - `/health.routes` 里补回 agent 接口，前端系统页能直接看到
+
+3. 更新内置前端
+   - `src/uses_indexer/web/index.html`
+   - `src/uses_indexer/web/styles.css`
+   - `src/uses_indexer/web/app.js`
+   - 顶部导航新增：
+     - `智能体`
+   - 新增独立 `agent-view`
+   - 页面包含：
+     - provider 选择
+     - 会话区
+     - retrieval / evidence / draft 开关
+     - context preview
+
+4. 更新配置与导出
+   - `.env.example` 补充：
+     - `USES_INDEXER_AGENT_OPENAI_*`
+     - `USES_INDEXER_AGENT_HERMES_*`
+     - `USES_INDEXER_AGENT_OPENCLAW_*`
+   - `src/uses_indexer/__init__.py` 导出：
+     - `AgentGateway`
+     - `AgentConfigError`
+     - `AgentRequestError`
+
+5. 更新测试与文档
+   - `tests/test_api.py` 增加 `/agent/providers` 和 `/agent/chat` 回归
+   - 更新：
+     - `README.md`
+     - `docs/USAGE.md`
+     - `docs/DEPLOYMENT.md`
+     - `docs/FRONTEND_DESIGN.md`
+     - `docs/FRONTEND_TECHNICAL.md`
+
+### 结论
+
+- 当前前端已经不只是“检索工作台”，还多了一条“把本地代码上下文交给外部智能体”的入口
+- 推荐的接法已经固定成：
+  - `前端 -> uses-indexer API -> 外部 Hermes/OpenClaw`
+- 这样后续继续扩协议、流式输出或多 provider 路由都更容易

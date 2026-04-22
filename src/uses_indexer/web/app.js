@@ -5,6 +5,9 @@ const state = {
   evidence: null,
   answer: null,
   bundle: null,
+  agentProviders: [],
+  agentConversation: [],
+  agentLastResponse: null,
   currentView: "home",
 };
 
@@ -48,6 +51,19 @@ function bindNodes() {
     "evidence-meta",
     "answer-meta",
     "route-cloud",
+    "agent-meta",
+    "agent-transcript",
+    "agent-input",
+    "agent-send",
+    "agent-clear",
+    "agent-provider-select",
+    "agent-include-retrieval",
+    "agent-include-evidence",
+    "agent-include-answer-draft",
+    "agent-limit-input",
+    "agent-context-window-input",
+    "agent-related-limit-input",
+    "agent-context-preview",
   ].forEach((id) => {
     nodes[id] = document.getElementById(id);
   });
@@ -149,10 +165,45 @@ function bindEvents() {
     refreshSummary();
   });
 
+  nodes["agent-send"].addEventListener("click", () => {
+    runAgentChat();
+  });
+
+  nodes["agent-clear"].addEventListener("click", () => {
+    state.agentConversation = [];
+    state.agentLastResponse = null;
+    nodes["agent-input"].value = "";
+    renderAgentConversation();
+    renderAgentContextPreview();
+    nodes["agent-meta"].textContent = "会话已清空";
+  });
+
+  nodes["agent-provider-select"].addEventListener("change", () => {
+    renderAgentContextPreview();
+    renderAgentMeta();
+  });
+
+  [
+    "agent-include-retrieval",
+    "agent-include-evidence",
+    "agent-include-answer-draft",
+    "agent-limit-input",
+    "agent-context-window-input",
+    "agent-related-limit-input",
+  ].forEach((id) => {
+    nodes[id].addEventListener("change", () => {
+      renderAgentContextPreview();
+    });
+  });
+
   document.addEventListener("keydown", (event) => {
     const modifier = event.metaKey || event.ctrlKey;
     if (modifier && event.key === "Enter") {
       event.preventDefault();
+      if (state.currentView === "agent-view") {
+        runAgentChat();
+        return;
+      }
       runAction("all");
     }
   });
@@ -172,6 +223,9 @@ async function initializeConsole() {
   try {
     await loadHealth();
     await refreshSummary();
+    await loadAgentProviders();
+    renderAgentConversation();
+    renderAgentContextPreview();
     setStatus("控制台已就绪，可以直接开始检索。", "ready");
   } catch (error) {
     setStatus(error.message, "error");
@@ -203,6 +257,12 @@ async function refreshSummary() {
   } finally {
     document.querySelectorAll(".summary-panel").forEach((panel) => panel.classList.remove("is-loading"));
   }
+}
+
+async function loadAgentProviders() {
+  const payload = await fetchJson("/agent/providers", { method: "GET" });
+  state.agentProviders = payload.items || [];
+  renderAgentProviders(payload);
 }
 
 async function runAction(action) {
@@ -309,6 +369,24 @@ async function fetchBundle(question) {
       context_window: numberValue(nodes["context-window-input"], 2),
       related_limit: numberValue(nodes["related-limit-input"], 3),
       db_path: currentDbPathOrUndefined(),
+    }),
+  });
+}
+
+async function fetchAgentChat(message) {
+  return fetchJson("/agent/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      provider: nodes["agent-provider-select"].value || undefined,
+      message,
+      history: state.agentConversation.slice(-6),
+      db_path: currentDbPathOrUndefined(),
+      include_retrieval: nodes["agent-include-retrieval"].checked,
+      include_evidence: nodes["agent-include-evidence"].checked,
+      include_answer_draft: nodes["agent-include-answer-draft"].checked,
+      limit: numberValue(nodes["agent-limit-input"], 6),
+      context_window: numberValue(nodes["agent-context-window-input"], 2),
+      related_limit: numberValue(nodes["agent-related-limit-input"], 3),
     }),
   });
 }
@@ -494,6 +572,86 @@ function renderTrace(query, evidence, answer, bundle) {
   nodes["trace-results"].innerHTML = cards.join("");
 }
 
+function renderAgentProviders(payload) {
+  const providers = payload.items || [];
+  const select = nodes["agent-provider-select"];
+  if (!providers.length) {
+    select.innerHTML = `<option value="">未配置可用智能体</option>`;
+    select.disabled = true;
+    nodes["agent-send"].disabled = true;
+    nodes["agent-meta"].textContent = "当前还没有配置智能体服务";
+    return;
+  }
+
+  const defaultProvider = payload.default_provider || providers[0].name;
+  select.innerHTML = providers
+    .map((provider) => {
+      const selected = provider.name === defaultProvider ? " selected" : "";
+      return `<option value="${escapeHtml(provider.name)}"${selected}>${escapeHtml(provider.label)} · ${escapeHtml(provider.model)}</option>`;
+    })
+    .join("");
+  select.disabled = false;
+  nodes["agent-send"].disabled = false;
+  renderAgentMeta();
+}
+
+function renderAgentConversation() {
+  const transcript = nodes["agent-transcript"];
+  if (!state.agentConversation.length) {
+    renderEmpty(transcript, "这里会显示你和外部智能体的往返消息，以及它实际拿到的本地代码证据摘要。");
+    return;
+  }
+  transcript.innerHTML = state.agentConversation
+    .map((item, index) => {
+      const roleLabel = item.role === "assistant" ? "智能体" : "你";
+      const extra = item.meta ? escapeHtml(item.meta) : `第 ${index + 1} 条消息`;
+      return `
+        <article class="agent-message ${escapeHtml(item.role)}">
+          <div class="agent-message-header">
+            <strong>${escapeHtml(roleLabel)}</strong>
+            <span>${extra}</span>
+          </div>
+          <p>${escapeHtml(item.content)}</p>
+        </article>
+      `;
+    })
+    .join("");
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+function renderAgentContextPreview() {
+  const cards = [
+    traceCard("Provider", selectedAgentProviderLabel(), "当前前端会把请求发给这个外部智能体"),
+    traceCard(
+      "Retrieval",
+      nodes["agent-include-retrieval"].checked ? "included" : "off",
+      nodes["agent-include-retrieval"].checked ? "会附带 query 命中和 query type" : "不附带 query 命中"
+    ),
+    traceCard(
+      "Evidence",
+      nodes["agent-include-evidence"].checked ? "included" : "off",
+      nodes["agent-include-evidence"].checked ? "会附带证据块、相关表和调用" : "不附带证据块"
+    ),
+    traceCard(
+      "Draft",
+      nodes["agent-include-answer-draft"].checked ? "included" : "off",
+      nodes["agent-include-answer-draft"].checked ? "会附带本地 draft answer" : "只给外部智能体检索证据"
+    ),
+    traceCard("Window", String(numberValue(nodes["agent-context-window-input"], 2)), "控制证据展开的上下文范围"),
+    traceCard("Related", String(numberValue(nodes["agent-related-limit-input"], 3)), "控制 related context 的条数"),
+  ];
+  nodes["agent-context-preview"].innerHTML = cards.join("");
+}
+
+function renderAgentMeta() {
+  const provider = selectedAgentProvider();
+  if (!provider) {
+    nodes["agent-meta"].textContent = "当前还没有配置智能体服务";
+    return;
+  }
+  nodes["agent-meta"].textContent = `${provider.label} · ${provider.model}`;
+}
+
 function renderRoutes(routes) {
   if (!routes.length) {
     renderEmpty(nodes["route-cloud"], "当前没有可展示的接口。");
@@ -529,6 +687,8 @@ function renderEmptyStates() {
   renderEmpty(nodes["answer-results"], "运行 answer 后，这里会展示 grounded 回答。");
   renderEmpty(nodes["trace-results"], "Bundle、query debug 和 evidence pruning 摘要会显示在这里。");
   renderEmpty(nodes["route-cloud"], "正在读取 API 路由。");
+  renderEmpty(nodes["agent-transcript"], "正在初始化智能体面板。");
+  nodes["agent-context-preview"].innerHTML = "";
 }
 
 function renderEmpty(node, message) {
@@ -578,6 +738,57 @@ function labelForAction(action) {
     answer: "回答生成",
     bundle: "Bundle 打包",
   }[action] || action;
+}
+
+async function runAgentChat() {
+  const message = nodes["agent-input"].value.trim();
+  if (!message) {
+    setStatus("先输入一个问题，再发送给智能体。", "error");
+    nodes["agent-input"].focus();
+    return;
+  }
+  if (!selectedAgentProvider()) {
+    setStatus("当前没有可用的智能体 provider，请先配置 .env。", "error");
+    setPage("agent-view");
+    return;
+  }
+
+  setPage("agent-view");
+  state.agentConversation.push({ role: "user", content: message, meta: "本次问题" });
+  renderAgentConversation();
+  setStatus("正在把问题和本地代码证据一起发送给智能体…", "loading");
+  nodes["agent-send"].disabled = true;
+
+  try {
+    const response = await fetchAgentChat(message);
+    state.agentLastResponse = response;
+    state.agentConversation.push({
+      role: "assistant",
+      content: response.reply || "智能体没有返回文本内容。",
+      meta: `${response.provider?.label || response.provider?.name || "agent"} · ${response.latency_ms || 0}ms`,
+    });
+    nodes["agent-input"].value = "";
+    renderAgentConversation();
+    renderAgentMeta();
+    setStatus("智能体回答已返回。", "ready");
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    nodes["agent-send"].disabled = !selectedAgentProvider();
+  }
+}
+
+function selectedAgentProvider() {
+  const value = nodes["agent-provider-select"].value;
+  return state.agentProviders.find((item) => item.name === value) || null;
+}
+
+function selectedAgentProviderLabel() {
+  const provider = selectedAgentProvider();
+  if (!provider) {
+    return "not configured";
+  }
+  return `${provider.label} (${provider.model})`;
 }
 
 function escapeHtml(value) {

@@ -431,10 +431,41 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 
 - 数据库概览卡片
 - 检索 / evidence / answer 工作台
+- 智能体页，可把当前检索上下文转发给外部 provider
 - query / evidence / answer / bundle 的结果分栏
 - trace 摘要面板
 
 适合做第一版本地可视化体验，而不需要额外起一套前端工程。
+
+### 智能体页怎么接外部 Hermes / OpenClaw
+
+当前前端不会直接调用外部大模型，而是通过当前后端做代理。
+
+前端调用：
+
+- `GET /agent/providers`
+- `POST /agent/chat`
+
+后端再去调用你配置好的外部服务。
+
+典型配置方式：
+
+```bash
+export USES_INDEXER_AGENT_HERMES_MODEL="hermes-prod"
+export USES_INDEXER_AGENT_HERMES_BASE_URL="http://127.0.0.1:9001/v1/chat/completions"
+
+export USES_INDEXER_AGENT_OPENCLAW_MODEL="openclaw-prod"
+export USES_INDEXER_AGENT_OPENCLAW_BASE_URL="http://127.0.0.1:9002/v1/chat/completions"
+```
+
+如果你的 Hermes / OpenClaw 服务兼容 OpenAI Chat Completions 协议，这一版就可以直接接上。  
+前端发送到 `/agent/chat` 时，还可以决定是否附带：
+
+- 检索命中
+- 证据块
+- 本地 draft answer
+
+这样智能体回答会更贴近当前代码库，而不是裸聊。
 
 ### 查候选
 

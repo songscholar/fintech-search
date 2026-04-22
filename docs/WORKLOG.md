@@ -265,6 +265,26 @@
 - 系统说明、接口说明和设计说明继续保留在对应独立页面
 - `setPage("home")` 现在不再依赖已删除的 `home-view`
 - 主页模式下直接隐藏底部 `workspace-panel`
+
+### 阶段 50：智能体页与 Agent Gateway
+
+- 新增 `src/uses_indexer/agent_gateway.py`
+- 新增接口：
+  - `GET /agent/providers`
+  - `POST /agent/chat`
+- 当前 provider 配置支持：
+  - 通用 OpenAI-compatible
+  - Hermes
+  - OpenClaw
+- Hermes / OpenClaw 当前先按 OpenAI-compatible HTTP chat 协议接入
+- 前端顶部新增：
+  - `智能体`
+- 智能体页当前支持：
+  - provider 选择
+  - 会话区
+  - retrieval / evidence / draft 开关
+  - context preview
+- `.env.example` 已补齐 agent 相关变量
 - `sql_query`
 - `sql_execute`
 - `failure_handler`

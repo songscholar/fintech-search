@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from .agent_gateway import AgentConfigError, AgentGateway, AgentRequestError
 from .answering import CodebaseAnswerer
 from .debug_bundle import (
     DebugBundlePanelThresholds,
@@ -57,11 +58,13 @@ class CodebaseApi:
         indexer: SQLiteIndexer | None = None,
         qa: CodebaseQA | None = None,
         answerer: CodebaseAnswerer | None = None,
+        agent_gateway: AgentGateway | None = None,
         default_db_path: str | Path | None = None,
     ) -> None:
         self.indexer = indexer or SQLiteIndexer()
         self.qa = qa or CodebaseQA(self.indexer)
         self.answerer = answerer or CodebaseAnswerer(self.qa)
+        self.agent_gateway = agent_gateway or AgentGateway.from_env(indexer=self.indexer, qa=self.qa)
         self.default_db_path = str(default_db_path) if default_db_path else None
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000) -> None:
@@ -96,6 +99,8 @@ class CodebaseApi:
                     "POST /evidence",
                     "POST /ask",
                     "POST /answer",
+                    "GET /agent/providers",
+                    "POST /agent/chat",
                     "POST /debug-bundle",
                     "POST /compare-debug-bundles",
                     "POST /compare-debug-bundle-panel",
@@ -178,6 +183,42 @@ class CodebaseApi:
             except LlmConfigError as exc:
                 raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
             except LlmRequestError as exc:
+                raise ApiError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+            return HTTPStatus.OK, result
+
+        if route == "/agent/providers" and method == "GET":
+            return HTTPStatus.OK, self.agent_gateway.list_providers()
+
+        if route == "/agent/chat" and method == "POST":
+            payload = self._parse_json_body(body)
+            db_path = self._resolve_db_path(payload.get("db_path"))
+            message = self._require_string(payload, "message")
+            provider = payload.get("provider")
+            if provider is not None and not isinstance(provider, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "provider must be a string")
+            history = payload.get("history")
+            if history is not None and not isinstance(history, list):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "history must be a list")
+            system_prompt = payload.get("system_prompt")
+            if system_prompt is not None and not isinstance(system_prompt, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "system_prompt must be a string")
+            try:
+                result = self.agent_gateway.chat(
+                    db_path=db_path,
+                    message=message,
+                    provider_name=provider,
+                    history=history if isinstance(history, list) else None,
+                    include_retrieval=bool(payload.get("include_retrieval", True)),
+                    include_evidence=bool(payload.get("include_evidence", True)),
+                    include_answer_draft=bool(payload.get("include_answer_draft", False)),
+                    limit=_coerce_int(payload.get("limit", 6), "limit"),
+                    context_window=_coerce_int(payload.get("context_window", 2), "context_window"),
+                    related_limit=_coerce_int(payload.get("related_limit", 3), "related_limit"),
+                    system_prompt=system_prompt,
+                )
+            except AgentConfigError as exc:
+                raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+            except AgentRequestError as exc:
                 raise ApiError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
             return HTTPStatus.OK, result
 
@@ -461,10 +502,10 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
+        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
-        if route in {"/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow"} and method != "GET":
+        if route in {"/agent/providers", "/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow"} and method != "GET":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")
@@ -505,7 +546,7 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
 
         def do_OPTIONS(self) -> None:  # noqa: N802
             self.send_response(HTTPStatus.NO_CONTENT)
-            self._write_common_headers(content_length=0)
+            self._write_common_headers(content_type="application/json; charset=utf-8", content_length=0)
             self.end_headers()
 
         def log_message(self, format: str, *args: object) -> None:

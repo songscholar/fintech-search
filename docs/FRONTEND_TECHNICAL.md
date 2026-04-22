@@ -38,10 +38,12 @@
 
 - `GET /health`
 - `GET /db-summary`
+- `GET /agent/providers`
 - `POST /query`
 - `POST /evidence`
 - `POST /ask`
 - `POST /answer`
+- `POST /agent/chat`
 - `POST /debug-bundle`
 
 所以最自然的做法，是先做一个能直连这些接口的控制台。
@@ -95,6 +97,15 @@ JSON API 保持不变。
 
 继续复用现有接口，不另外引入 UI 专用 API。
 
+### 智能体代理路由
+
+新增：
+
+- `GET /agent/providers`
+- `POST /agent/chat`
+
+这里不是让前端直连外部模型，而是让当前 Python 服务做代理层。这样前端永远只认识本地 `/agent/*` 协议。
+
 ## 页面模块
 
 ### 1. Hero
@@ -145,6 +156,22 @@ JSON API 保持不变。
 用途：
 
 - 以轻量卡片方式显示 query type、candidate count、evidence count、pruned blocks、answer source 等摘要
+
+### 5. Agent Workspace
+
+数据来源：
+
+- `/agent/providers`
+- `/agent/chat`
+
+说明：
+
+- provider 列表来自后端环境配置
+- 发送消息时可附带：
+  - retrieval
+  - evidence
+  - answer draft
+- 当前 Hermes / OpenClaw 预留适配都先按 `openai-compatible` HTTP chat 协议接入
 
 ## 交互说明
 
@@ -207,6 +234,43 @@ JSON API 保持不变。
 - 本地使用路径不变
 - 文档路径不变
 - 现有 CLI/API 用户不受影响
+
+## 2026-04-22 Agent Gateway 技术说明
+
+### 新增模块
+
+- [agent_gateway.py](/Users/songzuoqiang/Documents/agent/condex/codes/src/uses_indexer/agent_gateway.py)
+
+### 当前职责
+
+1. 从 `.env` 读取 provider 配置
+2. 向前端暴露可选 provider 列表
+3. 在发送到外部智能体前拼接本地代码库上下文
+4. 统一代理：
+   - OpenAI-compatible
+   - Hermes
+   - OpenClaw
+
+### 当前环境变量
+
+- 通用 provider：
+  - `USES_INDEXER_AGENT_OPENAI_*`
+- Hermes：
+  - `USES_INDEXER_AGENT_HERMES_*`
+- OpenClaw：
+  - `USES_INDEXER_AGENT_OPENCLAW_*`
+
+### 为什么 Hermes / OpenClaw 现在先按 OpenAI-compatible 接
+
+因为这一步的目标是先把：
+
+- 前端入口
+- 后端代理
+- 上下文注入
+- provider 切换
+
+这一整条链路打通。  
+如果你的 Hermes / OpenClaw 服务已经兼容 Chat Completions 协议，这一版就能直接挂上；后面如果它们有自己独立的协议，再继续把适配层做深。
 
 ## 2026-04-22 单屏技术调整
 

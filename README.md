@@ -546,6 +546,7 @@ python3 -m uses_indexer serve-api \
 
 - 数据库摘要概览
 - 检索 / 证据 / 回答工作台
+- 智能体页（对接外部 Hermes / OpenClaw / OpenAI-compatible 服务）
 - trace 摘要面板
 - 当前服务路由视图
 
@@ -652,6 +653,40 @@ python3 -m uses_indexer install-codex-integration --force
 - `USES_INDEXER_LLM_MAX_TOKENS`
 
 如果只设置了 `OPENAI_API_KEY`，仍然需要显式设置 `USES_INDEXER_LLM_MODEL`。
+
+## 智能体页与 Agent Gateway
+
+当前前端已经内置一个 `智能体` 页面，但它不会让浏览器直接连外部模型，而是走当前后端做代理：
+
+`前端 /agent 页面 -> uses_indexer serve-api -> 外部 Hermes / OpenClaw / OpenAI-compatible 服务`
+
+这样做的好处是：
+
+- 不把模型地址和鉴权直接暴露给前端
+- 可以先把本地检索结果、证据块、draft answer 组装好再交给外部智能体
+- 后面更换 provider 时不需要重新改前端协议
+
+当前新增接口：
+
+- `GET /agent/providers`
+- `POST /agent/chat`
+
+`.env` 里对应的配置入口是：
+
+- 通用 OpenAI-compatible：
+  - `USES_INDEXER_AGENT_OPENAI_MODEL`
+  - `USES_INDEXER_AGENT_OPENAI_BASE_URL`
+  - `USES_INDEXER_AGENT_OPENAI_API_KEY`
+- Hermes 预留适配：
+  - `USES_INDEXER_AGENT_HERMES_MODEL`
+  - `USES_INDEXER_AGENT_HERMES_BASE_URL`
+  - `USES_INDEXER_AGENT_HERMES_API_KEY`
+- OpenClaw 预留适配：
+  - `USES_INDEXER_AGENT_OPENCLAW_MODEL`
+  - `USES_INDEXER_AGENT_OPENCLAW_BASE_URL`
+  - `USES_INDEXER_AGENT_OPENCLAW_API_KEY`
+
+这三类 provider 当前都按 `openai-compatible` HTTP 聊天协议接入，适合先把你自己部署的 Hermes / OpenClaw 服务挂上来。
 
 ## 技能安装
 

@@ -32,6 +32,7 @@
         <div class="topbar-center">
           <button class="nav-pill nav-pill-active" data-page-target="home" aria-selected="true">主页</button>
           <button class="nav-pill" data-page-target="results-view" aria-selected="false">结果视图</button>
+          <button class="nav-pill" data-page-target="agent-view" aria-selected="false">智能体</button>
           <button class="nav-pill" data-page-target="system-view" aria-selected="false">系统视图</button>
           <button class="nav-pill" data-page-target="insights-view" aria-selected="false">设计说明</button>
         </div>
@@ -253,6 +254,90 @@
               </div>
             </section>
 
+            <section class="workspace-view" id="agent-view" hidden>
+              <div class="agent-board">
+                <div class="agent-chat panel-inset">
+                  <div class="section-head">
+                    <div>
+                      <p class="eyebrow">Agent Workspace</p>
+                      <h4>带代码证据的智能体对话</h4>
+                    </div>
+                    <span class="panel-note" id="agent-meta">等待加载 provider</span>
+                  </div>
+
+                  <div class="agent-transcript" id="agent-transcript"></div>
+
+                  <div class="agent-composer">
+                    <label class="field agent-field">
+                      <span>发给智能体的问题</span>
+                      <textarea
+                        id="agent-input"
+                        rows="4"
+                        placeholder="例如：请结合当前代码库证据，解释证券代码获取失败时最可能经过哪条路径。"
+                      ></textarea>
+                    </label>
+                    <div class="agent-actions">
+                      <button class="primary-button" id="agent-send">发送给智能体</button>
+                      <button class="ghost-button" id="agent-clear">清空会话</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="agent-side">
+                  <div class="panel-inset agent-config">
+                    <div class="section-head">
+                      <div>
+                        <p class="eyebrow">Provider</p>
+                        <h4>连接配置</h4>
+                      </div>
+                    </div>
+                    <label class="field">
+                      <span>智能体提供方</span>
+                      <select id="agent-provider-select" class="select-input"></select>
+                    </label>
+                    <div class="toggle-list">
+                      <label class="toggle-card">
+                        <input id="agent-include-retrieval" type="checkbox" checked />
+                        <span>附带检索命中</span>
+                      </label>
+                      <label class="toggle-card">
+                        <input id="agent-include-evidence" type="checkbox" checked />
+                        <span>附带证据块</span>
+                      </label>
+                      <label class="toggle-card">
+                        <input id="agent-include-answer-draft" type="checkbox" />
+                        <span>附带本地 draft</span>
+                      </label>
+                    </div>
+                    <div class="config-grid">
+                      <label class="field compact-field">
+                        <span>Limit</span>
+                        <input id="agent-limit-input" type="number" min="1" max="12" value="6" />
+                      </label>
+                      <label class="field compact-field">
+                        <span>Context</span>
+                        <input id="agent-context-window-input" type="number" min="1" max="8" value="2" />
+                      </label>
+                      <label class="field compact-field">
+                        <span>Related</span>
+                        <input id="agent-related-limit-input" type="number" min="1" max="8" value="3" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="panel-inset agent-context">
+                    <div class="section-head">
+                      <div>
+                        <p class="eyebrow">Context Preview</p>
+                        <h4>本次会附带什么</h4>
+                      </div>
+                    </div>
+                    <div class="trace-grid" id="agent-context-preview"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <section class="workspace-view" id="system-view" hidden>
               <div class="system-board">
                 <div class="system-summary panel-inset summary-panel">
@@ -324,6 +409,10 @@
                     <article class="capability-card">
                       <h5>Bundle</h5>
                       <p>调用 `/debug-bundle`，把 query、evidence、answer 打包到一起做复盘。</p>
+                    </article>
+                    <article class="capability-card">
+                      <h5>智能体</h5>
+                      <p>调用 `/agent/providers` 和 `/agent/chat`，把当前检索证据转交给外部 Hermes / OpenClaw / OpenAI-compatible 服务。</p>
                     </article>
                   </div>
                 </div>
