@@ -148,6 +148,16 @@ class RetrievalService:
         for candidate in focus_chain_candidates:
             merge_candidate(candidates, candidate)
 
+        entity_path_candidates = self._run_entity_path_queries(
+            conn,
+            query_analysis=query_analysis,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["entity_path"] = [self._trace_candidate(item) for item in entity_path_candidates[:20]]
+        source_counts["entity_path"] = len(entity_path_candidates)
+        for candidate in entity_path_candidates:
+            merge_candidate(candidates, candidate)
+
         neighbor_candidates = self._run_neighbor_expansion_queries(
             conn,
             query_analysis=query_analysis,
@@ -570,6 +580,133 @@ class RetrievalService:
             add_table_bridge(str(table_name))
         for variable_name in query_analysis.get("variable_terms", [])[:3]:
             add_variable_bridge(str(variable_name))
+        return candidates[:limit]
+
+    def _run_entity_path_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        tokens = {str(token) for token in query_analysis.get("tokens") or []}
+        if not any(
+            any(keyword in token for keyword in ("链路", "路径", "流转", "透传"))
+            for token in tokens
+        ):
+            return []
+
+        context_fetch = self.owner._context_fetch_service
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[str, str]] = set()
+
+        def load_seed_procedures(*, mode: str, term: str) -> list[str]:
+            if mode == "table":
+                rows = conn.execute(
+                    """
+                    SELECT DISTINCT source_name
+                    FROM edges
+                    WHERE lower(target_name) = lower(?)
+                      AND edge_type IN ('reads_table', 'writes_table', 'reads_dynamic_table', 'writes_dynamic_table')
+                    ORDER BY source_name
+                    LIMIT 6
+                    """,
+                    (term,),
+                ).fetchall()
+                return [str(row[0]) for row in rows]
+            rows = conn.execute(
+                """
+                SELECT DISTINCT source_name
+                FROM edges
+                WHERE edge_type IN ('reads_variable', 'writes_variable')
+                  AND (
+                    lower(target_name) = lower(?)
+                    OR lower(replace(target_name, '@', '')) = lower(replace(?, '@', ''))
+                  )
+                ORDER BY source_name
+                LIMIT 6
+                """,
+                (term, term),
+            ).fetchall()
+            return [str(row[0]) for row in rows]
+
+        def add_path_candidates(*, mode: str, term: str) -> None:
+            seed_names = load_seed_procedures(mode=mode, term=term)
+            if len(seed_names) < 2:
+                return
+            for source_name in seed_names:
+                for target_name in seed_names:
+                    if source_name == target_name:
+                        continue
+                    path = context_fetch.find_shortest_call_path(
+                        conn,
+                        source_procedure=source_name,
+                        target_procedure=target_name,
+                        max_depth=4,
+                    )
+                    if not path or len(path) < 2:
+                        continue
+                    path_label = " -> ".join(path)
+                    for step_index, procedure_name in enumerate(path, start=1):
+                        row = conn.execute(
+                            """
+                            SELECT p.id, f.id, p.chinese_name, p.object_id, f.path, pf.summary_text, pf.feature_flags_json, pf.profile_json
+                            FROM procedures p
+                            JOIN files f ON f.id = p.file_id
+                            JOIN procedure_features pf ON pf.procedure_id = p.id
+                            WHERE lower(p.name) = lower(?) OR lower(COALESCE(p.chinese_name, '')) = lower(?)
+                            ORDER BY CASE WHEN lower(p.name) = lower(?) THEN 0 ELSE 1 END
+                            LIMIT 1
+                            """,
+                            (procedure_name, procedure_name, procedure_name),
+                        ).fetchone()
+                        if row is None:
+                            continue
+                        key = (mode, f"{procedure_name}::{path_label}")
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        candidates.append(
+                            {
+                                "hit_type": "procedure",
+                                "entity_id": int(row[0]),
+                                "procedure_id": int(row[0]),
+                                "file_id": int(row[1]),
+                                "statement_id": None,
+                                "file_path": str(row[4]),
+                                "procedure_name": procedure_name,
+                                "chinese_name": row[2] if row[2] else None,
+                                "object_id": row[3] if row[3] else None,
+                                "line_start": None,
+                                "line_end": None,
+                                "matched_text": path_label,
+                                "match_source": f"{mode}_flow_path",
+                                "retrieval_source": f"relation_{mode}_flow_path",
+                                "base_score": 96.0 if mode == "table" else 92.0,
+                                "source_rank": 9.6 if mode == "table" else 9.2,
+                                "search_text": f"{term} {path_label} {row[5]}",
+                                "procedure_summary": str(row[5]),
+                                "feature_flags": json.loads(str(row[6] or "{}")),
+                                "procedure_profile": json.loads(str(row[7] or "{}")),
+                                "reasons": [
+                                    f"{mode}_flow_path={path_label}",
+                                    f"{mode}_flow_focus={term}",
+                                    f"{mode}_flow_step={step_index}/{len(path)}",
+                                ],
+                            }
+                        )
+                        if len(candidates) >= limit:
+                            return
+
+        for table_name in query_analysis.get("table_terms", [])[:2]:
+            add_path_candidates(mode="table", term=str(table_name))
+            if len(candidates) >= limit:
+                return candidates[:limit]
+        for variable_name in query_analysis.get("variable_terms", [])[:2]:
+            add_path_candidates(mode="variable", term=str(variable_name))
+            if len(candidates) >= limit:
+                return candidates[:limit]
+
         return candidates[:limit]
 
     def _run_path_bridge_queries(

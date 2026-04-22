@@ -1063,3 +1063,77 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 为什么需要人工复核
 
 这让回答决策开始从“基于分数的隐式策略”，逐步变成“显式可解释的决策系统”。
+
+## 最新 flow-graph 与决策系统推进
+
+在上一轮把：
+
+- `relation_variable_flow_bridge`
+- `relation_table_flow_bridge`
+- `relation_graph`
+- `decision.state`
+
+这些能力打底之后，这一轮又继续把三件事往“系统级能力”推了一层。
+
+### 1. 变量流 / 表流开始具备“跨过程路径”能力
+
+现在不只会告诉你：
+
+- 哪些过程读 / 写了某个变量
+- 哪些过程读 / 写了某张表
+
+还会在出现“链路 / 路径 / 流转 / 透传”类问题时，主动构造：
+
+- `relation_variable_flow_path`
+- `relation_table_flow_path`
+
+也就是说，系统会：
+
+- 先按变量 / 表找到相关过程集合
+- 再基于调用图搜索这些过程之间的最短调用路径
+- 把路径中的过程也作为更高价值的候选注入检索结果
+
+这让关系索引不再只是“单点命中 + 邻居扩展”，而开始具备更明确的 flow-graph 检索能力。
+
+### 2. evidence / QA 也开始理解 flow path
+
+仅仅把 flow path 找出来还不够，最终还要让用户看得懂。
+
+所以这轮继续把下游也收紧了：
+
+- evidence 选择层对：
+  - `relation_variable_flow_path`
+  - `relation_table_flow_path`
+  开始给更高优先级
+- QA 草答会直接把：
+  - `变量链路为 ...`
+  - `表访问链路为 ...`
+  写进摘要点
+
+这样“跨过程路径”不只是存在于调试 trace 里，而是已经开始进入用户可读答案。
+
+### 3. 回答决策开始显式区分 conflict kind
+
+之前 `decision` 已经能表达：
+
+- `resolved`
+- `competitive`
+- `guarded`
+
+现在又往前推进了一层，开始区分：
+
+- `candidate_competition`
+- `evidence_divergence`
+- `low_confidence`
+
+并且会带：
+
+- `recommendation`
+
+也就是说，系统不仅能说“需要人工复核”，还会说明：
+
+- 是因为两个候选分差太近
+- 还是因为证据来源出现分歧
+- 还是因为整体证据不足
+
+这一步让回答决策从“状态判断”进一步变成“冲突分类 + 建议动作”。

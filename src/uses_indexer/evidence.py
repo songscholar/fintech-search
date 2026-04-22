@@ -334,16 +334,20 @@ def _evidence_priority_score(candidate: dict[str, object], *, query_type: str) -
     if query_type in {"table_write", "table_read", "table_access"}:
         if chunk_role == "table_access":
             score += 20.0
-        if retrieval_source in {"relation_table_edge", "relation_table_chain_context"}:
+        if retrieval_source in {"relation_table_edge", "relation_table_chain_context", "relation_table_flow_bridge"}:
             score += 12.0
+        if retrieval_source == "relation_table_flow_path":
+            score += 18.0
         if match_source in {"table_edge_relation", "block_summary"}:
             score += 6.0
 
     if query_type in {"variable_write", "variable_read", "variable_flow"}:
         if chunk_role == "variable_flow":
             score += 20.0
-        if retrieval_source in {"relation_variable_edge", "relation_variable_chain_context"}:
+        if retrieval_source in {"relation_variable_edge", "relation_variable_chain_context", "relation_variable_flow_bridge"}:
             score += 12.0
+        if retrieval_source == "relation_variable_flow_path":
+            score += 18.0
         if match_source in {"variable_edge_relation", "assignment"}:
             score += 6.0
 

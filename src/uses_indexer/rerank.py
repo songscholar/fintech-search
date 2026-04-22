@@ -514,6 +514,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_table_flow_bridge":
             bonus += 18.0
             reasons.append("intent_table_flow_bridge")
+        elif candidate.get("retrieval_source") == "relation_table_flow_path":
+            bonus += 22.0
+            reasons.append("intent_table_flow_path")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
             bonus += 30.0
             reasons.append("intent_sql_block")
@@ -557,6 +560,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_variable_flow_bridge":
             bonus += 16.0
             reasons.append("intent_variable_flow_bridge")
+        elif candidate.get("retrieval_source") == "relation_variable_flow_path":
+            bonus += 20.0
+            reasons.append("intent_variable_flow_path")
         if query_analysis.get("wants_variable_read") and ("reads_variable" in combined or match_source == "read"):
             bonus += 14.0
             reasons.append("variable_read_match")

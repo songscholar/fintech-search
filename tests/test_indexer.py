@@ -898,6 +898,34 @@ def test_query_index_expands_table_flow_bridge_for_table_queries(tmp_path: Path)
     assert any("table_flow_bridge=uses_deep_table" in " ".join(hit["reasons"]) for hit in bridge_hits)
 
 
+def test_query_index_expands_variable_flow_path_for_path_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@fund_account 变量透传路径", limit=20)
+
+    path_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_variable_flow_path"
+        or "relation_variable_flow_path" in hit.get("matched_via", [])
+    ]
+    assert path_hits
+    assert any("variable_flow_path=" in " ".join(hit["reasons"]) for hit in path_hits)
+
+
+def test_query_index_expands_table_flow_path_for_path_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_fund_real 表访问路径", limit=20)
+
+    path_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_table_flow_path"
+        or "relation_table_flow_path" in hit.get("matched_via", [])
+    ]
+    assert path_hits
+    assert any("table_flow_path=" in " ".join(hit["reasons"]) for hit in path_hits)
+
+
 def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

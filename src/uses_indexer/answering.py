@@ -123,6 +123,9 @@ class CodebaseAnswerer:
         if decision.get("conflict_summary"):
             lines.append("决策提示:")
             lines.append(f"- {decision['conflict_summary']}")
+        if decision.get("recommendation"):
+            lines.append("处理建议:")
+            lines.append(f"- {decision['recommendation']}")
         secondary_candidates = list(draft_answer.get("secondary_candidates") or [])
         if secondary_candidates:
             lines.append("其他近似候选:")

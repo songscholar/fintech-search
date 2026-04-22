@@ -4458,3 +4458,85 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前变量流 / 表流已经开始具备更像“一等关系对象”的检索入口，而不再只是靠普通语句命中
 - 当前知识底座开始从 profile 摘要继续推进到结构化 `relation_graph`
 - 当前回答层已经不只给候选和置信度，而是开始显式表达决策状态和冲突说明
+
+## [1.2.66] - 2026-04-23
+
+### Step 73: 推进跨过程 flow path 检索与 conflict-kind 决策
+
+### 本步目标
+
+- 把变量流 / 表流从“bridge”进一步推进到“跨过程路径”
+- 让 evidence / QA 真正消费这些 flow path，而不只是检索层内部知道
+- 让回答决策不只停留在 `state`，继续升级成可分类的 conflict system
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 新增 `_run_entity_path_queries()`
+   - 在出现：
+     - `链路`
+     - `路径`
+     - `流转`
+     - `透传`
+   - 且问题指向 table / variable 时，新增：
+     - `relation_variable_flow_path`
+     - `relation_table_flow_path`
+   - 这类候选不再只是单点 bridge，而是会携带：
+     - `variable_flow_path=...`
+     - `table_flow_path=...`
+     - `..._flow_step=i/n`
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 对：
+     - `relation_variable_flow_path`
+     - `relation_table_flow_path`
+   - 补专属 intent bonus
+   - 保证它们在真正的 path 问题里比普通 bridge / 普通 chunk 更有机会排到前面
+
+3. 更新 `src/uses_indexer/evidence.py`
+   - evidence 选择层也开始优先考虑：
+     - `relation_variable_flow_path`
+     - `relation_table_flow_path`
+   - 让最终展示给 QA / LLM / 前端的第一块证据更像“链路证据”，而不只是单条读写命中
+
+4. 更新 `src/uses_indexer/qa.py`
+   - 草答开始显式提取：
+     - `变量链路为 ...`
+     - `表访问链路为 ...`
+   - `decision` 结构新增：
+     - `conflict_kind`
+     - `recommendation`
+   - 当前可表达的冲突类型包括：
+     - `candidate_competition`
+     - `evidence_divergence`
+     - `low_confidence`
+
+5. 更新 `src/uses_indexer/answering.py`
+   - guarded draft 现在会把：
+     - `recommendation`
+   - 也显式写进最终答案
+   - 这样低置信度和多候选接近时，不只是“告诉你不稳”，还会告诉你下一步该怎么查
+
+6. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_expands_variable_flow_path_for_path_queries`
+     - `test_query_index_expands_table_flow_path_for_path_queries`
+   - `tests/test_qa.py`
+     - `test_ask_surfaces_flow_path_summary_for_variable_path_queries`
+   - `tests/test_answering.py`
+     - 验证 guarded answer 会输出 `处理建议`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/evidence.py src/uses_indexer/qa.py src/uses_indexer/answering.py tests/test_indexer.py tests/test_qa.py tests/test_answering.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_expands_variable_flow_path_for_path_queries tests/test_indexer.py::test_query_index_expands_table_flow_path_for_path_queries tests/test_indexer.py::test_query_index_expands_variable_flow_bridge_for_flow_queries tests/test_indexer.py::test_query_index_expands_table_flow_bridge_for_table_queries tests/test_qa.py::test_ask_surfaces_flow_path_summary_for_variable_path_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+- 结果：`6 passed`
+- 额外回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前变量流 / 表流已经不只是“读写角色桥接”，而是开始具备明确的跨过程路径召回
+- 当前 flow path 已经贯通到 evidence 和 QA，而不是停留在检索内部
+- 当前回答决策已经从 `state` 进一步升级成 `conflict_kind + recommendation`

@@ -238,7 +238,9 @@ def test_answer_uses_guarded_draft_for_close_multi_candidate_table_question(tmp_
                         "primary_score": 120.0,
                         "secondary_score": 115.0,
                         "score_gap": 5.0,
+                        "conflict_kind": "candidate_competition",
                         "conflict_summary": "主候选 AF_SAMPLE 与次候选 LS_FLOW 分差较小，需要人工复核最终落点。",
+                        "recommendation": "优先查看主候选的上下游调用和相同实体的链路证据。",
                     },
                 },
                 "llm_context": "Use only the following indexed evidence when answering.\n[Evidence 1]",
@@ -259,4 +261,5 @@ def test_answer_uses_guarded_draft_for_close_multi_candidate_table_question(tmp_
     assert result["final_answer"]["review_required"] is True
     assert "其他近似候选:" in result["final_answer"]["text"]
     assert "决策提示:" in result["final_answer"]["text"]
+    assert "处理建议:" in result["final_answer"]["text"]
     assert result["final_answer"]["grounding"]["decision"]["state"] == "competitive"

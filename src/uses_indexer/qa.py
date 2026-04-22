@@ -193,6 +193,7 @@ class CodebaseQA:
         path_hints = []
         bridge_candidates: list[str] = []
         failure_hints: list[str] = []
+        flow_path_hints: list[str] = []
         retrieval_sources = {str(item.get("retrieval_source") or "") for item in top_evidence}
 
         candidate_groups: OrderedDict[tuple[str, str], dict[str, object]] = OrderedDict()
@@ -308,6 +309,30 @@ class CodebaseQA:
                 path_steps = [step.strip() for step in path_value.split("->") if step.strip()]
                 if len(path_steps) > 2:
                     bridge_candidates.extend(path_steps[1:-1])
+            table_flow_path_reason = next(
+                (
+                    str(reason)
+                    for reason in item.get("reasons", [])
+                    if str(reason).startswith("table_flow_path=")
+                ),
+                "",
+            )
+            if table_flow_path_reason:
+                flow_path_hints.append(
+                    "表访问链路为 " + table_flow_path_reason.removeprefix("table_flow_path=") + "。"
+                )
+            variable_flow_path_reason = next(
+                (
+                    str(reason)
+                    for reason in item.get("reasons", [])
+                    if str(reason).startswith("variable_flow_path=")
+                ),
+                "",
+            )
+            if variable_flow_path_reason:
+                flow_path_hints.append(
+                    "变量链路为 " + variable_flow_path_reason.removeprefix("variable_flow_path=") + "。"
+                )
             if outgoing_calls:
                 related_hints.append(
                     f"{item['procedure_name']} 还关联调用 {', '.join(outgoing_calls[:3])}。"
@@ -418,7 +443,7 @@ class CodebaseQA:
             secondary_candidates=secondary_candidates,
             primary_candidate=primary_candidate,
         )
-        prioritized_hints = [*path_hints, *profile_hints, *related_hints]
+        prioritized_hints = [*path_hints, *flow_path_hints, *profile_hints, *related_hints]
         review_required = self._should_require_review(
             query_type=query_type,
             primary_candidate=primary_candidate,
@@ -572,27 +597,48 @@ class CodebaseQA:
         primary_score = float(primary_candidate.get("aggregate_score") or 0.0)
         secondary_score = float(secondary_candidates[0].get("aggregate_score") or 0.0) if secondary_candidates else 0.0
         score_gap = round(primary_score - secondary_score, 3) if secondary_score else round(primary_score, 3)
+        primary_sources = {str(item) for item in primary_candidate.get("matched_via") or [] if str(item)}
+        secondary_sources = (
+            {str(item) for item in secondary_candidates[0].get("matched_via") or [] if str(item)}
+            if secondary_candidates
+            else set()
+        )
         if not secondary_candidates:
             state = "resolved"
             conflict_summary = ""
+            conflict_kind = "none"
         elif review_required:
             state = "competitive"
             conflict_summary = (
                 f"主候选 {primary_candidate.get('procedure_name')} 与次候选 {secondary_candidates[0].get('procedure_name')} 分差较小，"
                 "需要人工复核最终落点。"
             )
+            conflict_kind = "candidate_competition"
+            if primary_sources and secondary_sources and primary_sources != secondary_sources:
+                conflict_kind = "evidence_divergence"
         else:
             state = "resolved"
             conflict_summary = ""
+            conflict_kind = "none"
         if float(confidence.get("score") or 0.0) < 0.45:
             state = "guarded"
             if not conflict_summary:
                 conflict_summary = "当前证据整体偏弱，需要保守解释并继续核验上下文。"
+            conflict_kind = "low_confidence"
+        recommendation = (
+            "优先查看主候选的上下游调用和相同实体的链路证据。"
+            if conflict_kind in {"candidate_competition", "evidence_divergence"}
+            else "补充更多直接证据后再形成最终结论。"
+            if conflict_kind == "low_confidence"
+            else "当前可以按主候选继续展开。"
+        )
         return {
             "state": state,
             "query_type": query_type,
             "primary_score": round(primary_score, 3),
             "secondary_score": round(secondary_score, 3),
             "score_gap": score_gap,
+            "conflict_kind": conflict_kind,
             "conflict_summary": conflict_summary,
+            "recommendation": recommendation,
         }

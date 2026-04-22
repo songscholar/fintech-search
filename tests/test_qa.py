@@ -243,3 +243,12 @@ def test_ask_marks_decision_competitive_for_close_candidates(tmp_path: Path) -> 
     assert result["draft_answer"]["decision"]["state"] in {"competitive", "resolved"}
     if result["draft_answer"]["review_required"]:
         assert "需要人工复核" in result["draft_answer"]["decision"]["conflict_summary"]
+
+
+def test_ask_surfaces_flow_path_summary_for_variable_path_queries(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "@fund_account 变量透传路径", evidence_limit=4, context_window=1, related_limit=2)
+
+    summary_points = list(result["draft_answer"]["summary_points"])
+    assert any("变量链路为" in item for item in summary_points)
