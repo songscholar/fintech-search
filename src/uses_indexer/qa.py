@@ -20,6 +20,23 @@ SYSTEM_PROMPT = """你是一个面向 USES/UFT DSL 代码库的问答助手。
 """
 
 
+QUERY_SECTION_LABELS = {
+    "implementation_location": "实现位置",
+    "location": "实现位置",
+    "callers": "上游调用",
+    "callees": "下游调用",
+    "table_write": "表写入",
+    "table_read": "表读取",
+    "table_access": "表访问",
+    "variable_write": "变量写入",
+    "variable_read": "变量读取",
+    "variable_flow": "变量链路",
+    "metadata_definition": "Metadata 定义",
+    "topic_publish": "Topic 发布",
+    "failure_flow": "失败处理路径",
+}
+
+
 ANSWER_FORMAT = """请按下面结构回答：
 
 结论:
@@ -110,6 +127,23 @@ class CodebaseQA:
             }
 
         top_evidence = evidence[:3]
+        top_unique_evidence: list[dict[str, object]] = []
+        seen_candidates: set[tuple[str, str, int, int]] = set()
+        for item in evidence:
+            key = (
+                str(item["procedure_name"]),
+                str(item["file_path"]),
+                int(item["line_start"]),
+                int(item["line_end"]),
+            )
+            if key in seen_candidates:
+                continue
+            seen_candidates.add(key)
+            top_unique_evidence.append(item)
+            if len(top_unique_evidence) >= 3:
+                break
+        if top_unique_evidence:
+            top_evidence = top_unique_evidence
         top_locations = []
         unique_locations: OrderedDict[tuple[str, int, int], dict[str, object]] = OrderedDict()
         for item in top_evidence:
@@ -211,18 +245,18 @@ class CodebaseQA:
                 )
                 related_hints.append(f"{item['procedure_name']} 涉及表访问 {table_desc}。")
             profile = dict(item.get("procedure_profile") or {})
-            if query_type in {"table_write", "table_read"} and (profile.get("core_write_tables") or profile.get("core_read_tables")):
+            if query_type in {"table_write", "table_read", "table_access"} and (profile.get("core_write_tables") or profile.get("core_read_tables")):
                 table_names = list(profile.get("core_write_tables") or []) or list(profile.get("core_read_tables") or [])
                 profile_hints.append(
                     f"{item['procedure_name']} 的核心表访问包括 {', '.join(str(name) for name in table_names[:3])}。"
                 )
-            if query_type in {"variable_write", "variable_read", "variable"} and profile.get("core_variable_writes"):
+            if query_type in {"variable_write", "variable_read", "variable_flow"} and profile.get("core_variable_writes"):
                 profile_hints.append(
                     f"{item['procedure_name']} 的主要变量写入包括 {', '.join(str(name) for name in profile.get('core_variable_writes')[:3])}。"
                 )
-            if query_type == "metadata" and str(profile.get("metadata_role") or "") == "referencer":
+            if query_type == "metadata_definition" and str(profile.get("metadata_role") or "") == "referencer":
                 profile_hints.append(f"{item['procedure_name']} 属于 metadata 引用过程。")
-            if query_type == "topic" and str(profile.get("topic_role") or "") == "publisher":
+            if query_type == "topic_publish" and str(profile.get("topic_role") or "") == "publisher":
                 profile_hints.append(f"{item['procedure_name']} 属于 topic 发布过程。")
             if query_type == "failure_flow":
                 recovered_blocks = list(item.get("recovered_blocks") or [])
@@ -237,20 +271,19 @@ class CodebaseQA:
                     )
 
         answer_lines = [f"结论: 围绕“{question}”，当前索引最优先命中的实现位置是 {lead['procedure_name']}。"]
+        section_label = QUERY_SECTION_LABELS.get(query_type, "实现位置")
         if query_type in {"callers", "callees"}:
-            answer_lines.append("主调用链:")
-        elif query_type in {"table_write", "table_read"}:
-            answer_lines.append("表访问:")
+            answer_lines.append(f"{section_label}:")
+        elif query_type in {"table_write", "table_read", "table_access"}:
+            answer_lines.append(f"{section_label}:")
         elif query_type == "failure_flow":
             answer_lines.append("失败处理路径:")
-        elif query_type in {"variable_write", "variable_read", "variable"}:
-            answer_lines.append("变量流向:")
-        elif query_type == "metadata":
-            answer_lines.append("元数据关系:")
-        elif query_type == "topic":
-            answer_lines.append("主题关系:")
+        elif query_type in {"variable_write", "variable_read", "variable_flow"}:
+            answer_lines.append(f"{section_label}:")
+        elif query_type in {"metadata_definition", "topic_publish"}:
+            answer_lines.append(f"{section_label}:")
         else:
-            answer_lines.append("实现位置:")
+            answer_lines.append(f"{section_label}:")
         for line in summary_points:
             answer_lines.append(f"- {line}")
         for line in failure_hints[:2]:
@@ -300,6 +333,7 @@ class CodebaseQA:
             uncertainties,
             query_type=query_type,
             failure_hints=failure_hints,
+            secondary_candidates=secondary_candidates,
         )
         prioritized_hints = [*path_hints, *profile_hints, *related_hints]
         return {
@@ -323,8 +357,11 @@ class CodebaseQA:
         *,
         query_type: str,
         failure_hints: list[str],
+        secondary_candidates: list[dict[str, object]],
     ) -> dict[str, object]:
         score = 0.35 + min(len(evidence), 3) * 0.15
+        top_score = float(evidence[0].get("score") or 0.0) if evidence else 0.0
+        second_score = float(evidence[1].get("score") or 0.0) if len(evidence) > 1 else 0.0
         if related_hints:
             score += 0.1
         if any(
@@ -339,6 +376,11 @@ class CodebaseQA:
                 score += 0.12
             if failure_hints:
                 score += 0.08
+        if top_score and second_score:
+            if top_score - second_score >= 8.0:
+                score += 0.08
+            elif top_score - second_score <= 2.0 and secondary_candidates:
+                score -= 0.06
         if uncertainties:
             score -= min(len(uncertainties), 2) * 0.08
         score = max(0.1, min(round(score, 2), 0.95))

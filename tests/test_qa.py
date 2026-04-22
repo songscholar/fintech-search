@@ -112,6 +112,17 @@ def test_ask_tracks_primary_and_secondary_candidates(tmp_path: Path) -> None:
     assert result["draft_answer"]["primary_candidate"]
     assert result["draft_answer"]["primary_candidate"]["procedure_name"] in {"AF_SAMPLE", "LS_FLOW"}
     assert isinstance(result["draft_answer"]["secondary_candidates"], list)
+    secondary_names = [item["procedure_name"] for item in result["draft_answer"]["secondary_candidates"]]
+    assert len(secondary_names) == len(set(secondary_names))
+
+
+def test_ask_uses_query_specific_section_for_callers(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "AF_DEEP 被谁调用", evidence_limit=3, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["query_type"] == "callers"
+    assert "上游调用:" in result["draft_answer"]["answer"]
 
 
 def test_ask_surfaces_path_bridge_summary_for_call_chain_questions(tmp_path: Path) -> None:

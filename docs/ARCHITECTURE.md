@@ -193,7 +193,9 @@ flowchart LR
 - `callees`
 - `table_read`
 - `table_write`
+- `table_access`
 - `variable_write`
+- `variable_read`
 - `variable_flow`
 - `metadata_definition`
 - `topic_publish`
@@ -213,6 +215,24 @@ flowchart LR
 - metadata / topic 问题优先输出角色型 hints
 
 并且 `secondary_candidates` 也开始做稳定去重，避免同一过程被多路召回后在草答里重复出现。
+
+最新一轮又把“query type -> rerank -> draft answer”这一条链路对齐得更紧：
+
+- rerank 不再只看 feature flags
+  - 也会直接读取 `procedure_profile`
+  - 对表问题做 `profile_exact_table_focus`
+  - 对变量问题做 `profile_exact_variable_focus`
+  - 对调用链问题做 `profile_exact_caller_focus / profile_exact_callee_focus`
+- QA 草答不再把所有问题都塞进同一类标题
+  - `上游调用`
+  - `下游调用`
+  - `表写入 / 表读取 / 表访问`
+  - `变量写入 / 变量读取 / 变量链路`
+  - `Metadata 定义`
+  - `Topic 发布`
+- 候选判定也开始结合主次候选分差做轻量置信度修正
+  - 主候选明显领先时，提高可信度
+  - 多个候选分数咬得很近时，主动更保守
 
 ## 端到端问答链路
 

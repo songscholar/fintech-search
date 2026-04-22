@@ -644,7 +644,7 @@ def _feature_bonus(
     reasons: list[str] = []
     query_type = str(query_analysis.get("query_type") or "")
 
-    if query_type in {"table_write", "table_read"}:
+    if query_type in {"table_write", "table_read", "table_access"}:
         if chunk_role == "table_access":
             bonus += 10.0
             reasons.append("feature_table_access_chunk")
@@ -655,7 +655,7 @@ def _feature_bonus(
             bonus += 6.0
             reasons.append("feature_table_access_role")
 
-    if query_type in {"variable_write", "variable_read", "variable"}:
+    if query_type in {"variable_write", "variable_read", "variable_flow"}:
         if chunk_role == "variable_flow":
             bonus += 12.0
             reasons.append("feature_variable_flow_chunk")
@@ -707,14 +707,14 @@ def _feature_bonus(
             )
             reasons.append("feature_failure_handler_counts")
 
-    if query_type == "metadata" and bool(feature_flags.get("has_metadata_refs")):
+    if query_type == "metadata_definition" and bool(feature_flags.get("has_metadata_refs")):
         bonus += 10.0
         reasons.append("feature_metadata_procedure")
         if str(procedure_profile.get("metadata_role") or "") == "referencer":
             bonus += 4.0
             reasons.append("feature_metadata_role")
 
-    if query_type == "topic" and bool(feature_flags.get("has_mc_topics")):
+    if query_type == "topic_publish" and bool(feature_flags.get("has_mc_topics")):
         bonus += 12.0
         reasons.append("feature_topic_procedure")
         if str(procedure_profile.get("topic_role") or "") == "publisher":
@@ -724,6 +724,66 @@ def _feature_bonus(
     if hit_type == "chunk" and float(chunk_features.get("action_density") or 0.0) >= 0.5:
         bonus += 2.0
         reasons.append("feature_dense_chunk")
+
+    profile_bonus, profile_reasons = _profile_focus_bonus(
+        query_analysis=query_analysis,
+        procedure_profile=procedure_profile,
+    )
+    bonus += profile_bonus
+    reasons.extend(profile_reasons)
+
+    return bonus, reasons
+
+
+def _profile_focus_bonus(
+    *,
+    query_analysis: dict[str, object],
+    procedure_profile: dict[str, object],
+) -> tuple[float, list[str]]:
+    bonus = 0.0
+    reasons: list[str] = []
+    query_type = str(query_analysis.get("query_type") or "")
+
+    table_terms = {str(term).lower() for term in query_analysis.get("table_terms") or [] if str(term)}
+    variable_terms = {str(term).lower() for term in query_analysis.get("variable_terms") or [] if str(term)}
+    procedure_terms = {str(term).lower() for term in query_analysis.get("procedure_terms") or [] if str(term)}
+    core_tables = {
+        str(name).lower()
+        for key in ("core_read_tables", "core_write_tables", "dynamic_tables")
+        for name in procedure_profile.get(key) or []
+        if str(name)
+    }
+    core_variables = {
+        str(name).lower()
+        for name in procedure_profile.get("core_variable_writes") or []
+        if str(name)
+    }
+    core_calls = {str(name).lower() for name in procedure_profile.get("core_calls") or [] if str(name)}
+    core_callers = {str(name).lower() for name in procedure_profile.get("core_callers") or [] if str(name)}
+
+    if query_type in {"table_write", "table_read", "table_access"}:
+        matched = sorted(table_terms & core_tables)
+        if matched:
+            bonus += 8.0
+            reasons.append(f"profile_exact_table_focus={matched[0]}")
+
+    if query_type in {"variable_write", "variable_read", "variable_flow"}:
+        matched = sorted(variable_terms & core_variables)
+        if matched:
+            bonus += 8.0
+            reasons.append(f"profile_exact_variable_focus={matched[0]}")
+
+    if query_type == "callers":
+        matched = sorted(procedure_terms & core_callers)
+        if matched:
+            bonus += 6.0
+            reasons.append(f"profile_exact_caller_focus={matched[0]}")
+
+    if query_type == "callees":
+        matched = sorted(procedure_terms & core_calls)
+        if matched:
+            bonus += 6.0
+            reasons.append(f"profile_exact_callee_focus={matched[0]}")
 
     return bonus, reasons
 
@@ -749,22 +809,24 @@ def _classify_query_type(
 ) -> str:
     if wants_failure_flow:
         return "failure_flow"
+    if wants_metadata:
+        return "metadata_definition"
+    if wants_topic:
+        return "topic_publish"
     if wants_table_sql and wants_table_write:
         return "table_write"
     if wants_table_sql and wants_table_read:
         return "table_read"
+    if wants_table_sql:
+        return "table_access"
     if wants_variable_write:
         return "variable_write"
     if wants_variable_read:
         return "variable_read"
+    if wants_variable:
+        return "variable_flow"
     if wants_call_chain:
         return "callers" if wants_callers else "callees"
-    if wants_metadata:
-        return "metadata"
-    if wants_topic:
-        return "topic"
-    if wants_variable:
-        return "variable"
     if wants_procedure:
-        return "procedure"
+        return "implementation_location"
     return "location"

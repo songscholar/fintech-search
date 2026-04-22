@@ -3938,3 +3938,66 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前“检索流程”不再只支持过程对桥接，也开始支持表访问链和变量传递链的正向扩展
 - 当前“问答流程”在草答阶段就能显式输出更贴近业务语义的过程画像提示
 - 当前“构建索引”在增量场景下也开始做更细粒度的过程画像局部刷新，避免每次都全量重算
+
+## [1.2.58] - 2026-04-22
+
+### Step 65: 对齐 query type、过程画像精排与问题类型草答模板
+
+### 本步目标
+
+- 继续做正向增强，不碰失败路径专项优化
+- 让 query type 更细、更稳定地传导到 rerank 和草答
+- 让主候选 / 次候选判定更稳，避免重复候选和同质化回答
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/rerank.py`
+   - query type 进一步细化：
+     - `table_access`
+     - `variable_flow`
+     - `implementation_location`
+     - `metadata_definition`
+     - `topic_publish`
+   - `feature_bonus` 开始更完整接入新的 query type
+   - 新增 `procedure_profile` 精排：
+     - `profile_exact_table_focus`
+     - `profile_exact_variable_focus`
+     - `profile_exact_caller_focus`
+     - `profile_exact_callee_focus`
+   - 这样 exact focus 不只看命中文本，也会看过程画像里是否真的覆盖对应核心表、变量和调用目标
+
+2. 更新 `src/uses_indexer/qa.py`
+   - 新增 query-type 对应的段落标题：
+     - `上游调用`
+     - `下游调用`
+     - `表写入 / 表读取 / 表访问`
+     - `变量写入 / 变量读取 / 变量链路`
+     - `Metadata 定义`
+     - `Topic 发布`
+   - `top_evidence` 先按候选唯一性去重，避免多路召回把同一过程重复带进草答
+   - `secondary_candidates` 增加稳定去重
+   - 置信度开始参考主次候选分差：
+     - 主候选明显领先时更自信
+     - 多候选分数咬得很近时更保守
+
+3. 更新测试
+   - `tests/test_qa.py`
+     - `test_ask_tracks_primary_and_secondary_candidates`
+       - 验证次候选不重复
+     - `test_ask_uses_query_specific_section_for_callers`
+       - 验证“被谁调用”问题会走 `上游调用` 模板
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/rerank.py src/uses_indexer/qa.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_qa.py::test_ask_tracks_primary_and_secondary_candidates tests/test_qa.py::test_ask_uses_query_specific_section_for_callers tests/test_qa.py::test_ask_surfaces_profile_hints_for_table_queries tests/test_qa.py::test_ask_surfaces_path_bridge_summary_for_call_chain_questions tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_expands_table_chain_context_for_flow_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context`
+- 结果：`9 passed`
+
+### 结论
+
+- 当前“检索流程”不再只做召回和通用重排，而是开始更稳定地区分问题类型并利用过程画像做 exact focus 精排
+- 当前“问答流程”也更像真正的产品回答层：
+  - 不同问题类型有不同标题和表达方式
+  - 次候选更干净
+  - 置信度也不再只看命中数量
