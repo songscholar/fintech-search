@@ -4239,3 +4239,70 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前系统不只是“谁排第一”更合理了，“第一块证据长什么样”也开始更合理
 - 当前 evidence 层已经开始按问题类型交付更贴近用户预期的证据面
 - 当前这轮优化仍然没有破坏已有的表链路、路径桥接和 exact focus 准确度
+
+## [1.2.63] - 2026-04-23
+
+### Step 70: 收紧 topic 意图识别并统一 query-type 摘要模板
+
+### 本步目标
+
+- 继续做正向增强，进一步减少 query type 误判
+- 让 table / variable / metadata / topic 这几类问题在：
+  - 意图识别
+  - rerank 配方
+  - 草答首句
+  三层更一致
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/rerank.py`
+   - topic 意图识别不再直接用宽泛的 `mc` 子串命中
+   - 改为：
+     - 先看显式 topic 关键词：
+       - `topic / 消息 / 发布 / 消息中心 / 主题`
+     - 再看 token 级单独的 `mc`
+   - 这样像：
+     - `CNST_MC_UFT_OPTSYNC metadata 定义`
+   - 不会再被误分进 `topic_publish`
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - table / variable 的专属精排继续细化：
+     - `intent_table_feature_source`
+     - `intent_variable_feature_source`
+   - metadata / topic 的专属精排也继续细化：
+     - `intent_metadata_feature_source`
+     - `intent_topic_feature_source`
+     - `feature_metadata_profile`
+     - `feature_topic_profile`
+
+3. 更新 `src/uses_indexer/qa.py`
+   - 首句摘要标签进一步产品化：
+     - `最关键的表访问过程`
+     - `最关键的变量链路过程`
+     - `最关键的 metadata 定义过程`
+     - `最关键的 topic 发布过程`
+   - 不再让不同 query type 共用同一种“实现位置”式表达
+
+4. 更新测试
+   - `tests/test_qa.py`
+     - 新增 `test_ask_uses_metadata_specific_summary_for_metadata_queries`
+       - 验证 metadata 问题不会误分到 topic
+       - 验证会走 `Metadata 定义` 模板
+   - 继续回归：
+     - topic profile hints
+     - table profile hints
+     - primary/secondary candidates
+     - topic 聚合指标
+     - exact table / exact focus
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/rerank.py src/uses_indexer/qa.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_qa.py::test_ask_surfaces_profile_hints_for_table_queries tests/test_qa.py::test_ask_tracks_primary_and_secondary_candidates tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context`
+- 结果：`8 passed`
+
+### 结论
+
+- 当前 query type 的误判面又收窄了一层，尤其是 metadata / topic 之间
+- 当前 table / variable / metadata / topic 四类问题的产品化表达更统一
+- 当前优化仍然没有破坏既有的 exact focus 和表链路准确度

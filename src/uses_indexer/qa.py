@@ -37,6 +37,23 @@ QUERY_SECTION_LABELS = {
 }
 
 
+LEAD_SUMMARY_LABELS = {
+    "implementation_location": "最可能的实现过程",
+    "location": "最可能的实现过程",
+    "callers": "最关键的上游调用过程",
+    "callees": "最关键的下游调用过程",
+    "table_write": "最关键的表写入过程",
+    "table_read": "最关键的表读取过程",
+    "table_access": "最关键的表访问过程",
+    "variable_write": "最关键的变量写入过程",
+    "variable_read": "最关键的变量读取过程",
+    "variable_flow": "最关键的变量链路过程",
+    "metadata_definition": "最关键的 metadata 定义过程",
+    "topic_publish": "最关键的 topic 发布过程",
+    "failure_flow": "最关键的失败处理过程",
+}
+
+
 ANSWER_FORMAT = """请按下面结构回答：
 
 结论:
@@ -233,8 +250,9 @@ class CodebaseQA:
             }
             for item in grouped_candidates[1:3]
         ]
+        lead_label = LEAD_SUMMARY_LABELS.get(query_type, "最直接的证据过程")
         lead_desc = (
-            f"最直接的证据位于过程 {lead['procedure_name']}，"
+            f"{lead_label}是 {lead['procedure_name']}，"
             f"文件 {lead['file_path']} 的 {lead['line_start']}-{lead['line_end']} 行附近。"
         )
 

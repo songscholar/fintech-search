@@ -343,6 +343,41 @@ evidence 选择层也开始跟上这个策略：
 
 这比单纯追求某个 chunk 名字更稳，也更接近用户真正需要的证据质量。
 
+最新一轮又把“问题类型识别”和“问题类型摘要模板”继续收紧了一层：
+
+- `topic_publish` 的意图识别不再被常量名里的 `mc` 误触发
+  - 只有显式出现：
+    - `topic`
+    - `消息`
+    - `发布`
+    - `消息中心`
+    - `主题`
+  - 或 token 级单独出现 `mc`
+  - 才会进入 topic 问题
+- 这样像 `CNST_MC_UFT_OPTSYNC metadata 定义` 这类问题，不会再被错误分进 topic
+
+与此同时，table / variable / metadata / topic 的专属精排也继续细化：
+
+- 表问题：
+  - `intent_table_feature_source`
+- 变量问题：
+  - `intent_variable_feature_source`
+- metadata 问题：
+  - `intent_metadata_feature_source`
+  - `feature_metadata_profile`
+- topic 问题：
+  - `intent_topic_feature_source`
+  - `feature_topic_profile`
+
+QA 层也开始把这些差异显式体现在首句摘要里，而不是都说成“实现位置”：
+
+- `最关键的表访问过程`
+- `最关键的变量链路过程`
+- `最关键的 metadata 定义过程`
+- `最关键的 topic 发布过程`
+
+这让“问题分类 -> 检索加权 -> 证据选择 -> 草答表述”四层开始更像一条统一的产品链路，而不是四段各自独立的规则。
+
 ## 端到端问答链路
 
 ```mermaid

@@ -66,7 +66,9 @@ def analyze_query(query: str) -> dict[str, object]:
     wants_failure_flow = contains_any(lowered, FAILURE_INTENT_KEYWORDS)
     wants_procedure = bool(procedure_terms) or contains_any(lowered, PROCEDURE_INTENT_KEYWORDS)
     wants_metadata = contains_any(lowered, METADATA_INTENT_KEYWORDS)
-    wants_topic = contains_any(lowered, TOPIC_INTENT_KEYWORDS)
+    wants_topic = contains_any(lowered, tuple(keyword for keyword in TOPIC_INTENT_KEYWORDS if keyword != "mc"))
+    if not wants_topic and "mc" in token_set:
+        wants_topic = True
     wants_variable_write = wants_variable and contains_any(lowered, WRITE_INTENT_KEYWORDS + ("赋值",))
     wants_variable_read = wants_variable and contains_any(lowered, READ_INTENT_KEYWORDS + ("读取",))
     query_type = _classify_query_type(
@@ -510,6 +512,9 @@ def _intent_bonus(
         elif hit_type == "action" and _looks_like_sql_evidence(combined):
             bonus += 8.0
             reasons.append("intent_sql_action")
+        if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
+            bonus += 5.0
+            reasons.append("intent_table_feature_source")
 
         if query_analysis["wants_table_write"] and contains_any(combined, SQL_WRITE_HINTS):
             bonus += 12.0
@@ -547,6 +552,9 @@ def _intent_bonus(
         if query_analysis.get("wants_variable_write") and ("writes_variable" in combined or match_source == "write"):
             bonus += 10.0
             reasons.append("variable_write_focus")
+        if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_statement"}:
+            bonus += 5.0
+            reasons.append("intent_variable_feature_source")
 
     if query_analysis["wants_failure_flow"]:
         if hit_type == "block":

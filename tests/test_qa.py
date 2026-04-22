@@ -66,6 +66,12 @@ MC_PUBLISH_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Service>
 """
 
+TOPIC_METADATA_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<uftmetadataext:TopicItemList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:uftmetadataext="http://www.hundsun.com/ares/studio/uft/uftmetadataext/1.0.0">
+  <items xsi:type="uftmetadataext:TopicItem" aliasName="CNST_MC_UFT_OPTSYNC" topicName="uft30.optsync" condition1="branch_no" condition2="fund_account"/>
+</uftmetadataext:TopicItemList>
+"""
+
 
 def _prepare_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
     source_dir = tmp_path / "src"
@@ -86,6 +92,18 @@ def _prepare_topic_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
     (source_dir / "LS_MC_PUBLISH.uftservice").write_text(MC_PUBLISH_XML, encoding="utf-8")
 
     db_path = tmp_path / "topic_index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    return CodebaseQA(indexer), db_path
+
+
+def _prepare_metadata_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
+    source_dir = tmp_path / "metadata_src"
+    metadata_dir = source_dir / "upub_codes" / "metadata"
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / "topic.xml").write_text(TOPIC_METADATA_XML, encoding="utf-8")
+
+    db_path = tmp_path / "metadata_index.db"
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     return CodebaseQA(indexer), db_path
@@ -194,3 +212,14 @@ def test_ask_surfaces_topic_profile_hints_for_topic_queries(tmp_path: Path) -> N
     assert result["draft_answer"]["query_type"] == "topic_publish"
     summary_points = list(result["draft_answer"]["summary_points"])
     assert any("发布主题包括" in item for item in summary_points)
+
+
+def test_ask_uses_metadata_specific_summary_for_metadata_queries(tmp_path: Path) -> None:
+    qa, db_path = _prepare_metadata_qa(tmp_path)
+
+    result = qa.ask(db_path, "CNST_MC_UFT_OPTSYNC metadata 定义", evidence_limit=3, context_window=0, related_limit=2)
+
+    assert result["draft_answer"]["query_type"] == "metadata_definition"
+    assert "Metadata 定义:" in result["draft_answer"]["answer"]
+    summary_points = list(result["draft_answer"]["summary_points"])
+    assert any("metadata 定义过程" in item for item in summary_points)
