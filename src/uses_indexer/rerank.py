@@ -554,6 +554,9 @@ def _intent_bonus(
         if hit_type == "procedure":
             bonus += 4.0 if query_analysis["wants_callers"] else 8.0
             reasons.append("intent_call_chain_procedure")
+            if candidate.get("retrieval_source") == "relation_multi_hop_context":
+                bonus += 10.0
+                reasons.append("intent_multi_hop_context")
         has_procedure_focus = any(str(term) in combined for term in query_analysis["procedure_terms"])
         has_text_focus = focus_terms_present(query_analysis, combined)
         has_call_signal = "call_flow" in combined or "call_block" in combined or "calls_procedure" in combined

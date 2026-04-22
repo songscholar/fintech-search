@@ -3579,3 +3579,61 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - 当前检索已经开始具备“主证据 + 一跳上下文”的组合能力，更适合回答带路径感的问题
 - 当前增量建库除了 `noop` 和 `metadata_only` 之外，连状态写回阶段也不再会把未变文件重新 parse 一遍
+
+## [1.2.53] - 2026-04-22
+
+### Step 60: 增加受控多跳链路扩展与低置信度回答降级
+
+### 本步目标
+
+- 让调用链问题在出现“链路 / 路径”语义时，可以补充 2 到 3 跳上下文
+- 让低置信度问题不再硬走 LLM 或普通 draft，而是显式降级成 guarded draft
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 新增 `_run_multi_hop_expansion_queries()`
+   - 当问题满足：
+     - `wants_call_chain = true`
+     - 且 query token 包含 `链路 / 路径 / 调用链 / 上游 / 下游`
+   - 会补充：
+     - `relation_multi_hop_context`
+   - 多跳候选只作为辅助链路证据，不替代直连调用边
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 新增 `intent_multi_hop_context`
+   - 让多跳过程能进入结果区，但仍然弱于直连 `calls_procedure`
+
+3. 更新 `src/uses_indexer/strategy_config.py`
+   - `AnswerExecutionPolicy` 新增：
+     - `low_confidence_threshold`
+     - `prefer_guarded_draft_on_low_confidence`
+
+4. 更新 `src/uses_indexer/answering.py`
+   - 当 draft confidence 低于阈值时：
+     - 不再继续走普通最终回答
+     - 返回 `guarded_draft`
+   - `final_answer` 新增：
+     - `tier = guarded_low_confidence`
+     - `review_required = true`
+
+5. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_expands_multi_hop_context_for_call_chain_paths`
+   - `tests/test_answering.py`
+     - `test_answer_uses_guarded_draft_for_low_confidence_questions`
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py -k "multi_hop_context_for_call_chain_paths or expands_neighbor_context_for_table_flow_queries" tests/test_answering.py -k "guarded_draft_for_low_confidence_questions or uses_draft_when_llm_not_configured"`
+- 结果：`2 passed`
+
+### 结论
+
+- 当前检索已经具备：
+  - 直连关系证据
+  - 一跳邻居上下文
+  - 受控多跳链路补充
+- 当前回答层也开始区分：
+  - 正常 grounded answer
+  - 低置信度 guarded draft

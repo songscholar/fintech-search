@@ -120,6 +120,7 @@ flowchart LR
   - 变量写入边
   - 失败处理块
   - 一跳邻居上下文过程
+  - 受控多跳链路上下文
 - rerank：
   - query type 感知
   - feature flag 感知
@@ -173,6 +174,20 @@ sequenceDiagram
   - `secondary_candidates`
   - `citations`
   - `uncertainties`
+
+另外，回答层现在还有低置信度降级机制：
+
+- 如果 draft confidence 低于阈值
+- 且策略允许 `prefer_guarded_draft_on_low_confidence`
+- 系统会直接返回 `guarded_draft`
+
+这类结果的特征是：
+
+- `tier = guarded_low_confidence`
+- `review_required = true`
+- 明确提示“当前证据不足”
+
+目标不是把弱证据问题答得更像，而是让不确定性暴露得更稳定。
 
 ## 运行形态
 

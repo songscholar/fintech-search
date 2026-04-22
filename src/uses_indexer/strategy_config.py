@@ -13,6 +13,8 @@ class QaPolicy:
 @dataclass(frozen=True, slots=True)
 class AnswerExecutionPolicy:
     allow_draft_fallback: bool = True
+    low_confidence_threshold: float = 0.45
+    prefer_guarded_draft_on_low_confidence: bool = True
 
 
 @dataclass(frozen=True, slots=True)

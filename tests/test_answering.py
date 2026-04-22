@@ -154,3 +154,14 @@ def test_answer_execution_policy_controls_fallback(tmp_path: Path) -> None:
         assert "allow_draft_fallback is false" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("Expected fallback-disabled answer call to raise")
+
+
+def test_answer_uses_guarded_draft_for_low_confidence_questions(tmp_path: Path) -> None:
+    answerer, db_path = _build_answerer(tmp_path, llm=StubLlm("这是一条本不该被使用的模型答案。"))
+
+    result = answerer.answer(db_path, "完全不存在的业务问题", evidence_limit=2)
+
+    assert result["answer_source"] == "guarded_draft"
+    assert result["final_answer"]["tier"] == "guarded_low_confidence"
+    assert result["final_answer"]["review_required"] is True
+    assert "当前证据不足" in result["final_answer"]["text"]

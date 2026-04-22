@@ -790,6 +790,20 @@ def test_query_index_expands_neighbor_context_for_table_flow_queries(tmp_path: P
     )
 
 
+def test_query_index_expands_multi_hop_context_for_call_chain_paths(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "LS_FLOW 到 AF_DEEP 的调用链路", limit=20)
+
+    multi_hop_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_multi_hop_context"
+        or "relation_multi_hop_context" in hit.get("matched_via", [])
+    ]
+    assert multi_hop_hits
+    assert any("multi_hop" in " ".join(hit["reasons"]) or "relation_multi_hop_context" in hit.get("matched_via", []) for hit in multi_hop_hits)
+
+
 def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

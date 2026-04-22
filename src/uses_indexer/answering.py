@@ -48,6 +48,20 @@ class CodebaseAnswerer:
         prompt_package = self.strategy.build_prompt_package(qa_bundle)
         qa_bundle["prompt_package"] = prompt_package
         llm_enabled = self.llm.is_configured()
+        draft_answer = dict(qa_bundle.get("draft_answer") or {})
+        confidence = dict(draft_answer.get("confidence") or {})
+        confidence_score = float(confidence.get("score") or 0.0)
+        low_confidence = confidence_score < float(self.policy.low_confidence_threshold)
+
+        if low_confidence and self.policy.prefer_guarded_draft_on_low_confidence:
+            guarded_text = self._build_guarded_low_confidence_answer(qa_bundle)
+            return self._build_result(
+                qa_bundle,
+                answer_text=guarded_text,
+                answer_source="guarded_draft",
+                model_response=None,
+                error=None,
+            )
 
         if llm_enabled:
             try:
@@ -87,6 +101,27 @@ class CodebaseAnswerer:
             error=None,
         )
 
+    def _build_guarded_low_confidence_answer(self, qa_bundle: dict[str, object]) -> str:
+        draft_answer = dict(qa_bundle.get("draft_answer") or {})
+        supporting_locations = list(draft_answer.get("supporting_locations") or [])
+        lead = supporting_locations[0] if supporting_locations else None
+        lines = [
+            "结论: 当前证据不足以支持一个高置信度的最终结论，下面只给出最可能的候选位置和明确的不确定点。",
+        ]
+        if lead:
+            lines.append("候选位置:")
+            lines.append(
+                f"- {lead['procedure_name']} {lead['file_path']}:{lead['line_start']}-{lead['line_end']}"
+            )
+        uncertainties = list(draft_answer.get("uncertainties") or [])
+        if uncertainties:
+            lines.append("不确定点:")
+            for item in uncertainties[:3]:
+                lines.append(f"- {item}")
+        lines.append("建议:")
+        lines.append("- 继续查看主候选过程的上下游调用、相关表访问和失败处理分支。")
+        return "\n".join(lines)
+
     def _build_result(
         self,
         qa_bundle: dict[str, object],
@@ -116,7 +151,11 @@ class CodebaseAnswerer:
         result["final_answer"] = {
             "text": answer_text,
             "source": answer_source,
-            "tier": draft_answer.get("tier") if answer_source != "llm" else "llm_grounded",
+            "tier": (
+                "guarded_low_confidence"
+                if answer_source == "guarded_draft"
+                else draft_answer.get("tier") if answer_source != "llm" else "llm_grounded"
+            ),
             "confidence": draft_answer.get("confidence"),
             "grounding": {
                 "citations": citations,
@@ -125,6 +164,7 @@ class CodebaseAnswerer:
                 "secondary_candidates": list(draft_answer.get("secondary_candidates") or []),
                 "uncertainties": list(draft_answer.get("uncertainties") or []),
             },
+            "review_required": answer_source == "guarded_draft",
             "used_model": model_response["model"] if model_response else None,
             "provider": model_response["provider"] if model_response else None,
             "error": error,

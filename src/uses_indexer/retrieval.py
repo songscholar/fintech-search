@@ -143,6 +143,24 @@ class RetrievalService:
         reranked.sort(
             key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"]))
         )
+        multi_hop_candidates = self._run_multi_hop_expansion_queries(
+            conn,
+            query_analysis=query_analysis,
+            ranked_candidates=reranked,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["multi_hop"] = [self._trace_candidate(item) for item in multi_hop_candidates[:20]]
+        source_counts["multi_hop"] = len(multi_hop_candidates)
+        if multi_hop_candidates:
+            for candidate in multi_hop_candidates:
+                merge_candidate(candidates, candidate)
+            reranked = [
+                rerank_candidate(candidate, query=query, query_analysis=query_analysis)
+                for candidate in candidates.values()
+            ]
+            reranked.sort(
+                key=lambda item: (-float(item["score"]), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"]))
+            )
         reranked = apply_call_chain_rerank(
             reranked,
             seed_limit=min(candidate_limit, 12),
@@ -259,6 +277,90 @@ class RetrievalService:
                             "reasons": [f"neighbor_{direction}={procedure_name}"],
                         }
                     )
+        return candidates[:limit]
+
+    def _run_multi_hop_expansion_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        ranked_candidates: list[dict[str, object]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        if not query_analysis.get("wants_call_chain"):
+            return []
+        tokens = {str(token) for token in query_analysis.get("tokens") or []}
+        if not any(token in {"链路", "路径", "调用链", "上游", "下游"} for token in tokens):
+            return []
+
+        context_fetch = self.owner._context_fetch_service
+        seeds: list[str] = []
+        for item in ranked_candidates[:6]:
+            procedure_name = str(item.get("procedure_name") or "")
+            if procedure_name and procedure_name not in seeds:
+                seeds.append(procedure_name)
+            if len(seeds) >= 2:
+                break
+        if not seeds:
+            return []
+
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[str, int, str]] = set()
+        for procedure_name in seeds:
+            outgoing_hops, incoming_hops = context_fetch.procedure_call_neighbors(
+                conn,
+                procedure_name=procedure_name,
+                max_depth=3,
+            )
+            for direction, hop_map in (("incoming", incoming_hops), ("outgoing", outgoing_hops)):
+                for depth in (2, 3):
+                    for neighbor_name in sorted(hop_map.get(depth, set())):
+                        if neighbor_name == procedure_name:
+                            continue
+                        key = (neighbor_name, depth, direction)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        summary = context_fetch.lookup_procedure_summary(conn, neighbor_name)
+                        if summary is None:
+                            continue
+                        row = conn.execute(
+                            """
+                            SELECT p.id, f.id, p.chinese_name, p.object_id, f.path
+                            FROM procedures p
+                            JOIN files f ON f.id = p.file_id
+                            WHERE p.name = ? OR p.chinese_name = ?
+                            ORDER BY CASE WHEN p.name = ? THEN 0 ELSE 1 END
+                            LIMIT 1
+                            """,
+                            (neighbor_name, neighbor_name, neighbor_name),
+                        ).fetchone()
+                        if row is None:
+                            continue
+                        matched_text = f"{neighbor_name} {'->' if direction == 'incoming' else '<-'} ... ({depth}-hop) {procedure_name}"
+                        candidates.append(
+                            {
+                                "hit_type": "procedure",
+                                "entity_id": int(row[0]),
+                                "procedure_id": int(row[0]),
+                                "file_id": int(row[1]),
+                                "statement_id": None,
+                                "file_path": str(row[4]),
+                                "procedure_name": str(summary["procedure_name"]),
+                                "chinese_name": row[2] if row[2] else None,
+                                "object_id": row[3] if row[3] else None,
+                                "line_start": summary.get("line_start"),
+                                "line_end": summary.get("line_end"),
+                                "matched_text": matched_text,
+                                "match_source": f"multi_hop_{direction}_{depth}",
+                                "retrieval_source": "relation_multi_hop_context",
+                                "base_score": 76.0 - depth,
+                                "source_rank": 7.6 - depth * 0.2,
+                                "search_text": f"{matched_text} {summary.get('summary_text') or ''}",
+                                "procedure_summary": str(summary.get("summary_text") or ""),
+                                "reasons": [f"multi_hop_{direction}_depth={depth}", f"seed={procedure_name}"],
+                            }
+                        )
         return candidates[:limit]
 
     def _run_vector_queries(
