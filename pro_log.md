@@ -3311,3 +3311,51 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   - 最后才弹配置层
 - 聊天页的主视觉重心重新回到消息区
 - `设计说明` 页也不再有明显的“悬空感”和未填满工作区的问题
+
+## [1.2.48] - 2026-04-22
+
+### Step 55: 强化检索关系召回与精确意图排序
+
+### 本步目标
+
+- 让 `表写入 / 变量写入 / 失败路径` 这三类问题拥有更直接的关系召回入口
+- 保持原有 `assignment / failure block / call edge` 的高质量 top hit 不被新关系召回反压
+- 给后续检索继续调优留下一组更贴近业务问题类型的回归测试
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 新增精确关系边召回：
+     - `relation_table_edge`
+     - `relation_variable_edge`
+   - 新增失败处理块关系召回：
+     - `relation_failure_block`
+   - 让表名、变量名和失败处理块能够直接从 `edges / blocks` 进入第一层候选集合，而不只依赖 `procedure_features` 或 FTS 命中
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 新增：
+     - `intent_exact_table_edge`
+     - `intent_exact_variable_edge`
+     - `intent_exact_failure_block`
+   - 下调变量边关系的抢位权重，保证 `@var 在哪里赋值` 这类问题仍然优先落到真正的赋值语句上
+
+3. 更新 `tests/test_indexer.py`
+   - 新增回归：
+     - `test_query_index_uses_exact_table_edge_relation_for_table_write_queries`
+     - `test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries`
+     - `test_query_index_uses_failure_block_relation_for_failure_queries`
+   - 同时保住原有：
+     - `intent_aware_rerank`
+     - `direct_call_edge_relation`
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py -k "direct_call_edge_relation or exact_table_edge_relation or exact_variable_edge_relation or failure_block_relation or intent_aware_rerank"`
+- 结果：`5 passed`
+
+### 结论
+
+- 当前检索链路已经不再只对“调用链”具备强关系召回，`表写入 / 变量写入 / 失败路径` 也有了更直接的第一层候选来源
+- 新增关系召回没有破坏原本高质量的 top hit：
+  - 变量赋值问题仍然优先命中真实赋值语句
+  - 失败路径问题仍然优先命中真正的失败处理块

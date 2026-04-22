@@ -485,6 +485,9 @@ def _intent_bonus(
         if hit_type == "edge" and match_source in {"reads_table", "writes_table", "reads_dynamic_table", "writes_dynamic_table"}:
             bonus += 28.0
             reasons.append("intent_table_edge")
+        elif hit_type == "edge" and match_source == "table_edge_relation":
+            bonus += 26.0 if query_analysis["wants_table_write"] else 22.0
+            reasons.append("intent_exact_table_edge")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
             bonus += 30.0
             reasons.append("intent_sql_block")
@@ -513,6 +516,9 @@ def _intent_bonus(
         if "=" in combined or "writes_variable" in combined or match_source == "write":
             bonus += 8.0
             reasons.append("variable_write_match")
+        if hit_type == "edge" and match_source == "variable_edge_relation":
+            bonus += 12.0 if query_analysis.get("wants_variable_write") else 8.0
+            reasons.append("intent_exact_variable_edge")
         if query_analysis.get("wants_variable_read") and match_source == "read":
             bonus += 10.0
             reasons.append("variable_read_match")
@@ -524,6 +530,9 @@ def _intent_bonus(
         if hit_type == "block":
             bonus += 36.0
             reasons.append("intent_failure_block")
+            if match_source == "failure_block_relation":
+                bonus += 14.0
+                reasons.append("intent_exact_failure_block")
         elif hit_type == "chunk" and contains_any(combined, FAILURE_MATCH_HINTS):
             bonus += 4.0
             reasons.append("intent_failure_chunk")

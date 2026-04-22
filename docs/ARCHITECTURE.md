@@ -44,6 +44,11 @@
   - 视为消息中心跨核心发布
 - 提供两跳调用链扩展与重排
 - 提供意图感知重排
+- 提供关系型直连召回：
+  - 调用边 `calls_procedure`
+  - 表访问边 `reads_table / writes_table / reads_dynamic_table / writes_dynamic_table`
+  - 变量写入边 `writes_variable`
+  - 失败处理块 `failure_handler / exception_handler / when_others_handler`
 - 提供块级关系摘要
 - 提供本地 HTTP API
 - 提供最终回答层
@@ -100,6 +105,21 @@ flowchart LR
 - 中间是 SQLite 索引、embedding 与混合检索核心
 - 右侧是问答输出、HTTP 服务、MCP 与 Codex 接入层
 - 下方是独立的评测闭环，用于验证每次检索调优是否真的变好
+
+当前检索已经不是“只靠 FTS + 向量 + 模糊 rerank”的单一路径，而是更偏多路召回：
+
+- FTS：块、chunk、过程、动作、语句、边
+- 向量：chunk embedding 相似度召回
+- 关系召回：
+  - 过程摘要特征
+  - 调用边
+  - 表访问边
+  - 变量写入边
+  - 失败处理块
+- rerank：
+  - query type 感知
+  - feature flag 感知
+  - 调用链邻居加权
 
 ## 端到端问答链路
 

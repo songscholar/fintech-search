@@ -731,6 +731,43 @@ def test_query_index_uses_direct_call_edge_relation_for_callers(tmp_path: Path) 
     assert any("caller_relation=af_deep" in " ".join(hit["reasons"]).lower() for hit in edge_relation_hits)
 
 
+def test_query_index_uses_exact_table_edge_relation_for_table_write_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_deep_table 在哪里更新", limit=10)
+
+    table_edge_hits = [hit for hit in result["hits"] if hit["retrieval_source"] == "relation_table_edge"]
+    assert table_edge_hits
+    assert any(hit["procedure_name"] == "AF_DEEP" for hit in table_edge_hits)
+    assert any("intent_exact_table_edge" in hit["reasons"] for hit in table_edge_hits)
+
+
+def test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@deep_flag 在哪里赋值", limit=10)
+
+    variable_edge_hits = [hit for hit in result["hits"] if hit["retrieval_source"] == "relation_variable_edge"]
+    assert variable_edge_hits
+    assert any(hit["procedure_name"] == "AF_DEEP" for hit in variable_edge_hits)
+    assert any("intent_exact_variable_edge" in hit["reasons"] for hit in variable_edge_hits)
+
+
+def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "查询交易资金表失败在哪里处理", limit=10)
+
+    failure_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_failure_block"
+        or "relation_failure_block" in hit.get("matched_via", [])
+    ]
+    assert failure_hits
+    assert any(hit["procedure_name"] == "AF_SAMPLE" for hit in failure_hits)
+    assert any(hit["match_source"] in {"block_summary", "failure_block_relation"} for hit in failure_hits)
+
+
 def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

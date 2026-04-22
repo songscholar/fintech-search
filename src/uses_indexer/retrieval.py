@@ -964,6 +964,140 @@ class RetrievalService:
                     }
                 )
 
+        def add_exact_edge_candidates(
+            term: str,
+            *,
+            edge_types: tuple[str, ...],
+            field_name: str,
+            retrieval_source: str,
+            reason: str,
+            score: float,
+        ) -> None:
+            placeholders = ",".join("?" for _ in edge_types)
+            rows = conn.execute(
+                f"""
+                SELECT
+                  e.id,
+                  e.procedure_id,
+                  e.file_id,
+                  e.statement_id,
+                  e.edge_type,
+                  e.target_name,
+                  e.source_name,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  p.name,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  s.line_start,
+                  s.line_end
+                FROM edges e
+                JOIN procedures p ON p.id = e.procedure_id
+                JOIN files f ON f.id = e.file_id
+                JOIN procedure_features pf ON pf.procedure_id = e.procedure_id
+                LEFT JOIN statements s ON s.id = e.statement_id
+                WHERE e.edge_type IN ({placeholders})
+                  AND lower(e.target_name) = lower(?)
+                LIMIT ?
+                """,
+                (*edge_types, term, limit),
+            ).fetchall()
+            for row in rows:
+                key = (int(row[0]), field_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                edge_label = f"{row[6]} -> {row[5]}"
+                candidates.append(
+                    {
+                        "hit_type": "edge",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[1]),
+                        "file_id": int(row[2]),
+                        "statement_id": int(row[3]) if row[3] is not None else None,
+                        "file_path": str(row[12]),
+                        "procedure_name": str(row[9]),
+                        "chinese_name": row[10] if row[10] else None,
+                        "object_id": row[11] if row[11] else None,
+                        "line_start": int(row[13]) if row[13] is not None else None,
+                        "line_end": int(row[14]) if row[14] is not None else None,
+                        "matched_text": edge_label,
+                        "match_source": field_name,
+                        "retrieval_source": retrieval_source,
+                        "base_score": score,
+                        "source_rank": score / 10.0,
+                        "search_text": f"{edge_label} {row[4]} {row[7]}",
+                        "procedure_summary": str(row[7]),
+                        "feature_flags": json.loads(str(row[8] or "{}")),
+                        "reasons": [f"{reason}={term}", f"edge_type={row[4]}"],
+                    }
+                )
+
+        def add_failure_block_candidates() -> None:
+            rows = conn.execute(
+                """
+                SELECT
+                  b.id,
+                  b.procedure_id,
+                  b.file_id,
+                  b.anchor_statement_id,
+                  b.block_type,
+                  b.summary_text,
+                  b.excerpt,
+                  b.line_start,
+                  b.line_end,
+                  p.name,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  pf.feature_flags_json
+                FROM blocks b
+                JOIN procedures p ON p.id = b.procedure_id
+                JOIN files f ON f.id = b.file_id
+                JOIN procedure_features pf ON pf.procedure_id = b.procedure_id
+                WHERE b.block_type IN ('failure_handler', 'exception_handler', 'when_others_handler')
+                ORDER BY
+                  CASE b.block_type
+                    WHEN 'failure_handler' THEN 0
+                    WHEN 'exception_handler' THEN 1
+                    ELSE 2
+                  END,
+                  b.line_start
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            for row in rows:
+                key = (int(row[0]), "failure_block_relation")
+                if key in seen:
+                    continue
+                seen.add(key)
+                summary = str(row[5] or row[4])
+                candidates.append(
+                    {
+                        "hit_type": "block",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[1]),
+                        "file_id": int(row[2]),
+                        "statement_id": int(row[3]) if row[3] is not None else None,
+                        "file_path": str(row[12]),
+                        "procedure_name": str(row[9]),
+                        "chinese_name": row[10] if row[10] else None,
+                        "object_id": row[11] if row[11] else None,
+                        "line_start": int(row[7]),
+                        "line_end": int(row[8]),
+                        "matched_text": summary,
+                        "match_source": "failure_block_relation",
+                        "retrieval_source": "relation_failure_block",
+                        "base_score": 99.0,
+                        "source_rank": 9.9,
+                        "search_text": f"{summary} {row[6]} {row[4]}",
+                        "feature_flags": json.loads(str(row[13] or "{}")),
+                        "reasons": [f"failure_block={row[4]}"],
+                    }
+                )
+
         if query_analysis.get("wants_call_chain"):
             for term in query_analysis.get("procedure_terms", []):
                 add_call_edge_candidates(str(term), callers=bool(query_analysis.get("wants_callers")))
@@ -985,6 +1119,14 @@ class RetrievalService:
             )
         for term in query_analysis.get("table_terms", []):
             lowered = f"%{str(term).lower()}%"
+            add_exact_edge_candidates(
+                str(term),
+                edge_types=("reads_table", "writes_table", "reads_dynamic_table", "writes_dynamic_table"),
+                field_name="table_edge_relation",
+                retrieval_source="relation_table_edge",
+                reason="table_edge_relation",
+                score=96.0 if query_analysis.get("wants_table_write") else 94.0,
+            )
             add_procedure_candidates(
                 str(term),
                 "table_relation",
@@ -999,6 +1141,14 @@ class RetrievalService:
             )
         for term in query_analysis.get("variable_terms", []):
             lowered = f"%{str(term).lower()}%"
+            add_exact_edge_candidates(
+                str(term),
+                edge_types=("writes_variable",),
+                field_name="variable_edge_relation",
+                retrieval_source="relation_variable_edge",
+                reason="variable_edge_relation",
+                score=84.0 if query_analysis.get("wants_variable_write") else 80.0,
+            )
             add_procedure_candidates(
                 str(term),
                 "variable_relation",
@@ -1011,6 +1161,8 @@ class RetrievalService:
                 """,
                 params=(lowered, lowered, lowered),
             )
+        if query_analysis.get("wants_failure_flow"):
+            add_failure_block_candidates()
         if query_analysis.get("wants_metadata"):
             for term in query_analysis.get("focus_terms", [])[:6]:
                 lowered = f"%{str(term).lower()}%"
