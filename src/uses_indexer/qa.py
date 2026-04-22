@@ -127,6 +127,25 @@ class CodebaseQA:
         top_locations = list(unique_locations.values())
 
         lead = top_evidence[0]
+        primary_candidate = {
+            "procedure_name": lead["procedure_name"],
+            "file_path": lead["file_path"],
+            "line_start": lead["line_start"],
+            "line_end": lead["line_end"],
+            "retrieval_source": lead["retrieval_source"],
+            "match_source": lead["match_source"],
+        }
+        secondary_candidates = [
+            {
+                "procedure_name": item["procedure_name"],
+                "file_path": item["file_path"],
+                "line_start": item["line_start"],
+                "line_end": item["line_end"],
+                "retrieval_source": item["retrieval_source"],
+                "match_source": item["match_source"],
+            }
+            for item in top_evidence[1:]
+        ]
         lead_desc = (
             f"最直接的证据位于过程 {lead['procedure_name']}，"
             f"文件 {lead['file_path']} 的 {lead['line_start']}-{lead['line_end']} 行附近。"
@@ -178,6 +197,16 @@ class CodebaseQA:
             answer_lines.append(
                 f"- {item['procedure_name']} {item['file_path']}:{item['line_start']}-{item['line_end']}"
             )
+        answer_lines.append("主候选:")
+        answer_lines.append(
+            f"- {primary_candidate['procedure_name']} {primary_candidate['file_path']}:{primary_candidate['line_start']}-{primary_candidate['line_end']}"
+        )
+        if secondary_candidates:
+            answer_lines.append("次候选:")
+            for item in secondary_candidates[:2]:
+                answer_lines.append(
+                    f"- {item['procedure_name']} {item['file_path']}:{item['line_start']}-{item['line_end']}"
+                )
 
         uncertainties = []
         if len(top_evidence) > 1:
@@ -195,6 +224,8 @@ class CodebaseQA:
             "answer": "\n".join(answer_lines),
             "summary_points": summary_points + related_hints[:2],
             "supporting_locations": top_locations,
+            "primary_candidate": primary_candidate,
+            "secondary_candidates": secondary_candidates,
             "uncertainties": uncertainties,
             "tier": "grounded_summary",
             "query_type": query_type,

@@ -107,6 +107,8 @@ class CodebaseAnswerer:
                 "line_start": int(item["line_start"]),
                 "line_end": int(item["line_end"]),
                 "matched_text": str(item["matched_text"]),
+                "retrieval_source": str(item["retrieval_source"]),
+                "match_source": str(item["match_source"]),
             }
             for item in evidence[:3]
         ]
@@ -119,6 +121,8 @@ class CodebaseAnswerer:
             "grounding": {
                 "citations": citations,
                 "supporting_locations": list(draft_answer.get("supporting_locations") or []),
+                "primary_candidate": dict(draft_answer.get("primary_candidate") or {}),
+                "secondary_candidates": list(draft_answer.get("secondary_candidates") or []),
                 "uncertainties": list(draft_answer.get("uncertainties") or []),
             },
             "used_model": model_response["model"] if model_response else None,

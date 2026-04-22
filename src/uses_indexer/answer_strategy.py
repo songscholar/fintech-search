@@ -91,13 +91,24 @@ class AdaptiveAnswerStrategy:
         if len(llm_context) <= profile.max_context_chars and len(evidence) <= profile.max_evidence_blocks:
             return llm_context
 
+        query_type = str(question_plan.get("query_type") or "location")
+        ranked_evidence = sorted(
+            evidence,
+            key=lambda item: self._evidence_priority(query_type, item),
+            reverse=True,
+        )
         selected: list[dict[str, object]] = []
         seen_locations: set[tuple[str, int, int]] = set()
-        for item in evidence:
+        seen_procedures: dict[str, int] = {}
+        for item in ranked_evidence:
             key = (str(item["file_path"]), int(item["line_start"]), int(item["line_end"]))
             if key in seen_locations:
                 continue
+            procedure_name = str(item["procedure_name"])
+            if seen_procedures.get(procedure_name, 0) >= 2:
+                continue
             seen_locations.add(key)
+            seen_procedures[procedure_name] = seen_procedures.get(procedure_name, 0) + 1
             selected.append(item)
             if len(selected) >= profile.max_evidence_blocks:
                 break
@@ -105,6 +116,7 @@ class AdaptiveAnswerStrategy:
         for item in selected:
             related = dict(item.get("related_context") or {})
             relation_lines: list[str] = []
+            evidence_strength = self._evidence_strength(query_type, item)
             if question_plan["query_type"] in {"callers", "callees"} and related.get("outgoing_calls"):
                 relation_lines.append(f"Call chain: {', '.join(str(name) for name in related['outgoing_calls'][:4])}")
             if question_plan["query_type"] in {"table_write", "table_read"} and related.get("related_tables"):
@@ -131,6 +143,7 @@ class AdaptiveAnswerStrategy:
             lines.extend(
                 [
                     f"[Evidence {item['rank']}] {item['procedure_name']} {item['file_path']}:{item['line_start']}-{item['line_end']}",
+                    f"Evidence strength: {evidence_strength}",
                     f"Matched text: {item['matched_text']}",
                     f"Why relevant: {', '.join(item['reasons'][:4])}",
                     f"Snippet: {str(item['excerpt'])[:400]}",
@@ -142,6 +155,47 @@ class AdaptiveAnswerStrategy:
         if len(compressed) > profile.max_context_chars:
             return compressed[: profile.max_context_chars - 3].rstrip() + "..."
         return compressed
+
+    def _evidence_priority(self, query_type: str, item: dict[str, object]) -> tuple[float, float, int]:
+        retrieval_source = str(item.get("retrieval_source") or "")
+        match_source = str(item.get("match_source") or "")
+        hit_type = str(item.get("hit_type") or "")
+        score = float(item.get("score") or 0.0)
+        direct_bonus = 0.0
+
+        if query_type in {"callers", "callees"} and retrieval_source == "relation_call_edge":
+            direct_bonus += 40.0
+        if query_type in {"table_write", "table_read"} and retrieval_source == "relation_table_edge":
+            direct_bonus += 38.0
+        if query_type in {"variable_write", "variable_read", "variable"} and match_source == "assignment":
+            direct_bonus += 42.0
+        elif query_type in {"variable_write", "variable_read", "variable"} and retrieval_source == "relation_variable_edge":
+            direct_bonus += 30.0
+        if query_type == "failure_flow" and retrieval_source == "relation_failure_block":
+            direct_bonus += 40.0
+        elif query_type == "failure_flow" and hit_type == "block":
+            direct_bonus += 26.0
+        if retrieval_source.startswith("fts_block"):
+            direct_bonus += 8.0
+
+        return (direct_bonus + score, score, -int(item.get("rank") or 0))
+
+    def _evidence_strength(self, query_type: str, item: dict[str, object]) -> str:
+        retrieval_source = str(item.get("retrieval_source") or "")
+        match_source = str(item.get("match_source") or "")
+        hit_type = str(item.get("hit_type") or "")
+        if query_type in {"variable_write", "variable_read", "variable"} and match_source == "assignment":
+            return "direct_assignment"
+        if retrieval_source in {
+            "relation_call_edge",
+            "relation_table_edge",
+            "relation_variable_edge",
+            "relation_failure_block",
+        }:
+            return "direct_relation"
+        if hit_type == "block":
+            return "structural_block"
+        return "contextual"
 
     def _named_profile(self, name: str) -> PromptProfile:
         config = self.config.profile(name)

@@ -80,6 +80,8 @@ def test_answer_uses_draft_when_llm_not_configured(tmp_path: Path) -> None:
     assert result["final_answer"]["tier"] == "grounded_summary"
     assert result["final_answer"]["confidence"]["label"] in {"medium", "high"}
     assert result["final_answer"]["grounding"]["citations"]
+    assert result["final_answer"]["grounding"]["citations"][0]["retrieval_source"]
+    assert result["final_answer"]["grounding"]["primary_candidate"]
     assert "AF_SAMPLE" in result["final_answer"]["text"]
 
 

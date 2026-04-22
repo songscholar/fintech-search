@@ -3422,3 +3422,59 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 这一步带来的直接收益是：
   - metadata-only 改动不再触发 statements/chunks/blocks/edges 重建
   - 向量填充和向量复用逻辑也不会被无意义地触发
+
+## [1.2.50] - 2026-04-22
+
+### Step 57: 强化问答证据压缩与 grounded answer 结构
+
+### 本步目标
+
+- 让回答层不只是“有 citations”，而是更明确地区分主候选、次候选和证据强度
+- 让不同 query type 在压缩证据时优先保留更直接的证据
+- 保持 `draft / llm_grounded` 两档行为不变
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/answer_strategy.py`
+   - 新增 `_evidence_priority()`
+   - 新增 `_evidence_strength()`
+   - 证据压缩不再简单按原始顺序截断，而是按 `query_type` 优先保留：
+     - 调用链直连边
+     - 表访问直连边
+     - 变量赋值语句
+     - 失败处理块
+   - 压缩上下文中新增 `Evidence strength`
+
+2. 更新 `src/uses_indexer/qa.py`
+   - `draft_answer` 新增：
+     - `primary_candidate`
+     - `secondary_candidates`
+   - 回答正文新增：
+     - `主候选`
+     - `次候选`
+
+3. 更新 `src/uses_indexer/answering.py`
+   - `final_answer.grounding.citations` 现在会带：
+     - `retrieval_source`
+     - `match_source`
+   - `final_answer.grounding` 现在会带：
+     - `primary_candidate`
+     - `secondary_candidates`
+
+4. 更新测试
+   - `tests/test_qa.py`
+   - `tests/test_answering.py`
+   - 验证主候选、次候选和 grounding 引用结构
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_qa.py tests/test_answering.py`
+- 结果：`9 passed`
+
+### 结论
+
+- 当前问答链路已经不只是“基于 evidence 生成一段话”，而是开始产出可直接复核的回答结构：
+  - 主候选
+  - 次候选
+  - 引用来源
+  - 证据强度

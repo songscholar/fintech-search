@@ -56,6 +56,7 @@ def test_ask_builds_prompt_and_draft_answer(tmp_path: Path) -> None:
     assert result["draft_answer"]["confidence"]["label"] in {"medium", "high"}
     assert "AF_SAMPLE" in result["draft_answer"]["answer"]
     assert result["draft_answer"]["supporting_locations"]
+    assert result["draft_answer"]["primary_candidate"]["procedure_name"] == "AF_SAMPLE"
 
 
 def test_ask_returns_insufficient_evidence_when_no_hits(tmp_path: Path) -> None:
@@ -83,3 +84,13 @@ def test_qa_policy_supplies_default_limits(tmp_path: Path) -> None:
         "context_window": 1,
         "related_limit": 1,
     }
+
+
+def test_ask_tracks_primary_and_secondary_candidates(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "AF_SAMPLE 被谁调用", evidence_limit=3, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["primary_candidate"]
+    assert result["draft_answer"]["primary_candidate"]["procedure_name"] in {"AF_SAMPLE", "LS_FLOW"}
+    assert isinstance(result["draft_answer"]["secondary_candidates"], list)

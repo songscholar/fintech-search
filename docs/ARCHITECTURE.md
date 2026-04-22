@@ -160,6 +160,19 @@ sequenceDiagram
 - `draft_answer` 始终存在，所以即使没有外部模型也能完成一次可解释回答
 - CLI、HTTP API、MCP 只是不同入口，底层复用的是同一套索引与问答逻辑
 
+当前回答层已经不只是“把 evidence 原样丢给模型”。它还有两层约束：
+
+- 证据压缩会按 `query_type` 优先保留更直接的证据
+  - 变量问题优先赋值语句
+  - 表访问问题优先表边和 SQL 块
+  - 失败路径问题优先失败处理块
+  - 调用链问题优先直连调用边
+- grounded answer 会显式区分：
+  - `primary_candidate`
+  - `secondary_candidates`
+  - `citations`
+  - `uncertainties`
+
 ## 运行形态
 
 当前项目支持 4 种运行形态：
