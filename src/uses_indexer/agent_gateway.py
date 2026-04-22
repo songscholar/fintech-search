@@ -36,6 +36,16 @@ class AgentProviderConfig:
     description: str = ""
 
 
+@dataclass(slots=True)
+class AgentAttachment:
+    name: str
+    media_kind: str
+    mime_type: str
+    size_bytes: int = 0
+    text_content: str | None = None
+    data_url: str | None = None
+
+
 class AgentGateway:
     def __init__(
         self,
@@ -106,8 +116,11 @@ class AgentGateway:
         context_window: int = 2,
         related_limit: int = 3,
         system_prompt: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        provider_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        config = self._resolve_provider(provider_name)
+        attachment_models = _coerce_attachments(attachments)
+        config = self._resolve_provider(provider_name, provider_override)
         context_bundle = self._build_context(
             db_path=db_path,
             message=message,
@@ -118,6 +131,17 @@ class AgentGateway:
             context_window=context_window,
             related_limit=related_limit,
         )
+        if attachment_models:
+            context_bundle["attachments"] = [
+                {
+                    "name": item.name,
+                    "media_kind": item.media_kind,
+                    "mime_type": item.mime_type,
+                    "size_bytes": item.size_bytes,
+                    "text_excerpt": _truncate_attachment_text(item.text_content),
+                }
+                for item in attachment_models
+            ]
 
         messages: list[dict[str, str]] = [
             {
@@ -130,7 +154,7 @@ class AgentGateway:
         messages.append(
             {
                 "role": "user",
-                "content": _build_user_prompt(message=message, context_bundle=context_bundle),
+                "content": _build_user_prompt(message=message, context_bundle=context_bundle, attachments=attachment_models),
             }
         )
 
@@ -155,7 +179,10 @@ class AgentGateway:
             "raw_response": model_response["raw_response"],
         }
 
-    def _resolve_provider(self, provider_name: str | None) -> AgentProviderConfig:
+    def _resolve_provider(self, provider_name: str | None, provider_override: dict[str, Any] | None = None) -> AgentProviderConfig:
+        if provider_override:
+            return _provider_from_override(provider_override, provider_name=provider_name)
+
         target = provider_name or self.default_provider
         if not target:
             raise AgentConfigError(
@@ -296,13 +323,15 @@ def _sanitize_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
     return sanitized
 
 
-def _build_user_prompt(*, message: str, context_bundle: dict[str, Any]) -> str:
+def _build_user_prompt(*, message: str, context_bundle: dict[str, Any], attachments: list[AgentAttachment]) -> str:
     context_json = json.dumps(context_bundle, ensure_ascii=False, indent=2)
+    attachment_text = _format_attachment_prompt(attachments)
     return (
         "用户问题：\n"
         f"{message.strip()}\n\n"
         "本地代码库上下文（来自当前 uses-indexer 服务）:\n"
         f"{context_json}\n\n"
+        f"{attachment_text}"
         "请基于这些上下文回答。如果上下文还不够，请明确指出还缺什么。"
     )
 
@@ -378,3 +407,77 @@ def _extract_content(payload: dict[str, Any]) -> str:
                 text_parts.append(item["text"].strip())
         return "\n".join(part for part in text_parts if part)
     return ""
+
+
+def _provider_from_override(provider_override: dict[str, Any], *, provider_name: str | None) -> AgentProviderConfig:
+    if not isinstance(provider_override, dict):
+        raise AgentConfigError("provider_override must be an object")
+    base_url = str(provider_override.get("base_url") or "").strip()
+    model = str(provider_override.get("model") or "").strip()
+    if not base_url or not model:
+        raise AgentConfigError("provider_override requires base_url and model")
+    adapter = str(provider_override.get("adapter") or "openai-compatible").strip() or "openai-compatible"
+    if adapter != "openai-compatible":
+        raise AgentConfigError(f"Unsupported provider_override adapter: {adapter}")
+    label = str(provider_override.get("label") or provider_name or "自定义模型").strip() or "自定义模型"
+    api_key = str(provider_override.get("api_key") or "").strip() or None
+    return AgentProviderConfig(
+        name=str(provider_name or "custom-agent").strip() or "custom-agent",
+        label=label,
+        adapter=adapter,
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        temperature=float(provider_override.get("temperature", 0.1)),
+        max_tokens=int(provider_override.get("max_tokens", 1600)),
+        timeout_seconds=float(provider_override.get("timeout_seconds", 90)),
+        max_retries=int(provider_override.get("max_retries", 0)),
+        retry_backoff_seconds=float(provider_override.get("retry_backoff_seconds", 1.0)),
+        description="来自前端弹层配置的临时模型",
+    )
+
+
+def _coerce_attachments(raw_attachments: list[dict[str, Any]] | None) -> list[AgentAttachment]:
+    attachments: list[AgentAttachment] = []
+    for item in raw_attachments or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        media_kind = str(item.get("media_kind") or "file").strip()
+        mime_type = str(item.get("mime_type") or "application/octet-stream").strip()
+        if not name:
+            continue
+        attachments.append(
+            AgentAttachment(
+                name=name,
+                media_kind=media_kind,
+                mime_type=mime_type,
+                size_bytes=int(item.get("size_bytes") or 0),
+                text_content=(str(item["text_content"]) if item.get("text_content") else None),
+                data_url=(str(item["data_url"]) if item.get("data_url") else None),
+            )
+        )
+    return attachments[:8]
+
+
+def _truncate_attachment_text(text: str | None) -> str | None:
+    if not text:
+        return None
+    normalized = text.strip()
+    if not normalized:
+        return None
+    return normalized[:500]
+
+
+def _format_attachment_prompt(attachments: list[AgentAttachment]) -> str:
+    if not attachments:
+        return ""
+    lines = ["附件信息："]
+    for item in attachments:
+        lines.append(f"- {item.name} ({item.media_kind}, {item.mime_type}, {item.size_bytes} bytes)")
+        excerpt = _truncate_attachment_text(item.text_content)
+        if excerpt:
+            lines.append(f"  内容摘要：{excerpt}")
+        elif item.data_url and item.media_kind == "image":
+            lines.append("  附件包含图片数据，可结合文字问题一起理解。")
+    return "\n".join(lines) + "\n\n"

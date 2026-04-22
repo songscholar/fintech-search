@@ -3191,3 +3191,123 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 推荐的接法已经固定成：
   - `前端 -> uses-indexer API -> 外部 Hermes/OpenClaw`
 - 这样后续继续扩协议、流式输出或多 provider 路由都更容易
+
+## [1.2.46] - 2026-04-22
+
+### Step 53: 把智能体页改成真正的聊天式界面
+
+### 本步目标
+
+- 去掉智能体页里过多的控制台说明和右侧配置卡片
+- 改成更接近真实聊天产品的布局
+- 让页面支持：
+  - 上传图片
+  - 上传文件
+  - 选择模型
+  - 通过弹层配置模型
+
+### 本步改动
+
+1. 重做 `src/uses_indexer/web/index.html`
+   - 删除右侧大块配置区
+   - 智能体页改成：
+     - 顶部模型选择 + 配置按钮
+     - 中间聊天消息区
+     - 底部输入区
+     - 附件条
+   - 新增：
+     - 图片上传入口
+     - 文件上传入口
+     - 模型配置弹层
+
+2. 重做 `src/uses_indexer/web/styles.css`
+   - 新增更贴近聊天产品的样式：
+     - `agent-shell`
+     - `agent-topbar`
+     - `agent-attachment-chip`
+     - `agent-composer-card`
+     - `modal-backdrop`
+     - `modal-card`
+   - 当前智能体页更接近“聊天页”而不是“控制台配置页”
+
+3. 更新 `src/uses_indexer/web/app.js`
+   - 删除旧的右侧上下文预览与附带项切换逻辑
+   - 新增：
+     - 附件读取与移除
+     - 自定义模型本地存储
+     - 模型配置弹层开关
+     - 自定义 provider 覆写请求
+   - 当前自定义配置保存在浏览器本地 `localStorage`
+
+4. 更新 `src/uses_indexer/agent_gateway.py`
+   - 新增 `provider_override`
+   - 新增 `attachments`
+   - 支持前端用自定义模型配置直接发起请求
+   - 文本文件会带内容摘要
+   - 图片会带 `data_url`
+
+### 结论
+
+- 当前智能体页已经从“技术控制台式配置页”改成了“聊天式产品页”
+- 页面上只保留用户真正需要的操作：
+  - 传图
+  - 传文件
+  - 选模型
+  - 配模型
+  - 发消息
+
+## [1.2.47] - 2026-04-22
+
+### Step 54: 修正智能体页交互层级并拉满页面布局
+
+### 本步目标
+
+- 修复智能体页弹层不该默认出现的问题
+- 把 `设置` 拆成：
+  - `设置模型`
+  - `添加模型`
+- 让聊天区更占屏，输入区更薄
+- 让 `设计说明` 页真正撑满整个工作区
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/web/index.html`
+   - `设置` 改成下拉菜单入口
+   - 菜单项拆成：
+     - `设置模型`
+     - `添加模型`
+   - 模型弹层仍保留，但不再默认展示
+   - 输入区 `textarea` 从 `rows=5` 压到 `rows=3`
+
+2. 更新 `src/uses_indexer/web/styles.css`
+   - 增加：
+     - `.agent-settings-wrap`
+     - `.agent-settings-menu`
+     - `.agent-settings-item`
+   - `modal-backdrop[hidden]` 显式 `display: none`
+   - 缩小聊天输入区卡片高度和整体 padding
+   - 让 `agent-transcript` 更占高度
+   - `insight-board` 改成更稳定的等高网格，撑满设计说明页
+
+3. 更新 `src/uses_indexer/web/app.js`
+   - 新增：
+     - `toggleAgentSettingsMenu()`
+     - `closeAgentSettingsMenu()`
+   - 点击 `设置` 只展开菜单
+   - 只有点击：
+     - `设置模型`
+     - `添加模型`
+     才会真正打开弹层
+   - 点击菜单外区域会自动关闭菜单
+   - `openAgentConfigModal()` 支持区分：
+     - 编辑已有模型
+     - 新增自定义模型
+
+### 结论
+
+- 当前智能体页的交互层级已经更合理：
+  - 先点 `设置`
+  - 再选具体动作
+  - 最后才弹配置层
+- 聊天页的主视觉重心重新回到消息区
+- `设计说明` 页也不再有明显的“悬空感”和未填满工作区的问题

@@ -8,10 +8,14 @@ const state = {
   agentProviders: [],
   agentConversation: [],
   agentLastResponse: null,
+  agentAttachments: [],
+  agentCustomProvider: null,
+  agentConfigMode: "edit",
   currentView: "home",
 };
 
 const nodes = {};
+const AGENT_CUSTOM_PROVIDER_KEY = "uses-indexer-agent-custom-provider";
 
 document.addEventListener("DOMContentLoaded", () => {
   bindNodes();
@@ -53,17 +57,27 @@ function bindNodes() {
     "route-cloud",
     "agent-meta",
     "agent-transcript",
+    "agent-attachment-strip",
     "agent-input",
     "agent-send",
     "agent-clear",
+    "agent-open-config",
+    "agent-settings-menu",
+    "agent-open-model-settings",
+    "agent-open-model-create",
+    "agent-close-config",
+    "agent-save-config",
+    "agent-reset-config",
     "agent-provider-select",
-    "agent-include-retrieval",
-    "agent-include-evidence",
-    "agent-include-answer-draft",
-    "agent-limit-input",
-    "agent-context-window-input",
-    "agent-related-limit-input",
-    "agent-context-preview",
+    "agent-add-image",
+    "agent-add-file",
+    "agent-image-input",
+    "agent-file-input",
+    "agent-config-modal",
+    "agent-config-label",
+    "agent-config-model",
+    "agent-config-base-url",
+    "agent-config-api-key",
   ].forEach((id) => {
     nodes[id] = document.getElementById(id);
   });
@@ -172,28 +186,61 @@ function bindEvents() {
   nodes["agent-clear"].addEventListener("click", () => {
     state.agentConversation = [];
     state.agentLastResponse = null;
+    state.agentAttachments = [];
     nodes["agent-input"].value = "";
     renderAgentConversation();
-    renderAgentContextPreview();
+    renderAgentAttachments();
     nodes["agent-meta"].textContent = "会话已清空";
   });
 
   nodes["agent-provider-select"].addEventListener("change", () => {
-    renderAgentContextPreview();
     renderAgentMeta();
   });
 
-  [
-    "agent-include-retrieval",
-    "agent-include-evidence",
-    "agent-include-answer-draft",
-    "agent-limit-input",
-    "agent-context-window-input",
-    "agent-related-limit-input",
-  ].forEach((id) => {
-    nodes[id].addEventListener("change", () => {
-      renderAgentContextPreview();
-    });
+  nodes["agent-open-config"].addEventListener("click", () => {
+    toggleAgentSettingsMenu();
+  });
+
+  nodes["agent-open-model-settings"].addEventListener("click", () => {
+    state.agentConfigMode = "edit";
+    closeAgentSettingsMenu();
+    openAgentConfigModal();
+  });
+
+  nodes["agent-open-model-create"].addEventListener("click", () => {
+    state.agentConfigMode = "create";
+    closeAgentSettingsMenu();
+    openAgentConfigModal();
+  });
+
+  nodes["agent-close-config"].addEventListener("click", () => {
+    closeAgentConfigModal();
+  });
+
+  nodes["agent-save-config"].addEventListener("click", () => {
+    saveAgentConfig();
+  });
+
+  nodes["agent-reset-config"].addEventListener("click", () => {
+    resetAgentConfig();
+  });
+
+  nodes["agent-add-image"].addEventListener("click", () => {
+    nodes["agent-image-input"].click();
+  });
+
+  nodes["agent-add-file"].addEventListener("click", () => {
+    nodes["agent-file-input"].click();
+  });
+
+  nodes["agent-image-input"].addEventListener("change", async (event) => {
+    await addSelectedFiles(event.target.files, "image");
+    event.target.value = "";
+  });
+
+  nodes["agent-file-input"].addEventListener("change", async (event) => {
+    await addSelectedFiles(event.target.files, "file");
+    event.target.value = "";
   });
 
   document.addEventListener("keydown", (event) => {
@@ -205,6 +252,19 @@ function bindEvents() {
         return;
       }
       runAction("all");
+    }
+  });
+
+  nodes["agent-config-modal"].addEventListener("click", (event) => {
+    if (event.target === nodes["agent-config-modal"]) {
+      closeAgentConfigModal();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    const settingsWrap = document.querySelector(".agent-settings-wrap");
+    if (settingsWrap && !settingsWrap.contains(event.target)) {
+      closeAgentSettingsMenu();
     }
   });
 
@@ -225,7 +285,7 @@ async function initializeConsole() {
     await refreshSummary();
     await loadAgentProviders();
     renderAgentConversation();
-    renderAgentContextPreview();
+    renderAgentAttachments();
     setStatus("控制台已就绪，可以直接开始检索。", "ready");
   } catch (error) {
     setStatus(error.message, "error");
@@ -262,6 +322,7 @@ async function refreshSummary() {
 async function loadAgentProviders() {
   const payload = await fetchJson("/agent/providers", { method: "GET" });
   state.agentProviders = payload.items || [];
+  state.agentCustomProvider = loadAgentCustomProvider();
   renderAgentProviders(payload);
 }
 
@@ -374,19 +435,22 @@ async function fetchBundle(question) {
 }
 
 async function fetchAgentChat(message) {
+  const provider = selectedAgentProvider();
   return fetchJson("/agent/chat", {
     method: "POST",
     body: JSON.stringify({
-      provider: nodes["agent-provider-select"].value || undefined,
+      provider: provider && !provider.custom ? provider.name : undefined,
       message,
       history: state.agentConversation.slice(-6),
       db_path: currentDbPathOrUndefined(),
-      include_retrieval: nodes["agent-include-retrieval"].checked,
-      include_evidence: nodes["agent-include-evidence"].checked,
-      include_answer_draft: nodes["agent-include-answer-draft"].checked,
-      limit: numberValue(nodes["agent-limit-input"], 6),
-      context_window: numberValue(nodes["agent-context-window-input"], 2),
-      related_limit: numberValue(nodes["agent-related-limit-input"], 3),
+      include_retrieval: true,
+      include_evidence: true,
+      include_answer_draft: false,
+      limit: 6,
+      context_window: 2,
+      related_limit: 3,
+      attachments: state.agentAttachments,
+      provider_override: provider && provider.custom ? buildProviderOverridePayload(provider) : undefined,
     }),
   });
 }
@@ -575,7 +639,12 @@ function renderTrace(query, evidence, answer, bundle) {
 function renderAgentProviders(payload) {
   const providers = payload.items || [];
   const select = nodes["agent-provider-select"];
-  if (!providers.length) {
+  const options = [...providers];
+  if (state.agentCustomProvider) {
+    options.unshift(state.agentCustomProvider);
+  }
+
+  if (!options.length) {
     select.innerHTML = `<option value="">未配置可用智能体</option>`;
     select.disabled = true;
     nodes["agent-send"].disabled = true;
@@ -583,11 +652,12 @@ function renderAgentProviders(payload) {
     return;
   }
 
-  const defaultProvider = payload.default_provider || providers[0].name;
-  select.innerHTML = providers
+  const defaultProvider = state.agentCustomProvider?.name || payload.default_provider || options[0].name;
+  select.innerHTML = options
     .map((provider) => {
       const selected = provider.name === defaultProvider ? " selected" : "";
-      return `<option value="${escapeHtml(provider.name)}"${selected}>${escapeHtml(provider.label)} · ${escapeHtml(provider.model)}</option>`;
+      const suffix = provider.custom ? "（本地配置）" : "";
+      return `<option value="${escapeHtml(provider.name)}"${selected}>${escapeHtml(provider.label)} · ${escapeHtml(provider.model)}${suffix}</option>`;
     })
     .join("");
   select.disabled = false;
@@ -598,7 +668,7 @@ function renderAgentProviders(payload) {
 function renderAgentConversation() {
   const transcript = nodes["agent-transcript"];
   if (!state.agentConversation.length) {
-    renderEmpty(transcript, "这里会显示你和外部智能体的往返消息，以及它实际拿到的本地代码证据摘要。");
+    renderEmpty(transcript, "这里会像聊天页一样显示你和智能体的往返消息。上传的图片和文件会作为附件一起发给当前模型。");
     return;
   }
   transcript.innerHTML = state.agentConversation
@@ -619,30 +689,6 @@ function renderAgentConversation() {
   transcript.scrollTop = transcript.scrollHeight;
 }
 
-function renderAgentContextPreview() {
-  const cards = [
-    traceCard("Provider", selectedAgentProviderLabel(), "当前前端会把请求发给这个外部智能体"),
-    traceCard(
-      "Retrieval",
-      nodes["agent-include-retrieval"].checked ? "included" : "off",
-      nodes["agent-include-retrieval"].checked ? "会附带 query 命中和 query type" : "不附带 query 命中"
-    ),
-    traceCard(
-      "Evidence",
-      nodes["agent-include-evidence"].checked ? "included" : "off",
-      nodes["agent-include-evidence"].checked ? "会附带证据块、相关表和调用" : "不附带证据块"
-    ),
-    traceCard(
-      "Draft",
-      nodes["agent-include-answer-draft"].checked ? "included" : "off",
-      nodes["agent-include-answer-draft"].checked ? "会附带本地 draft answer" : "只给外部智能体检索证据"
-    ),
-    traceCard("Window", String(numberValue(nodes["agent-context-window-input"], 2)), "控制证据展开的上下文范围"),
-    traceCard("Related", String(numberValue(nodes["agent-related-limit-input"], 3)), "控制 related context 的条数"),
-  ];
-  nodes["agent-context-preview"].innerHTML = cards.join("");
-}
-
 function renderAgentMeta() {
   const provider = selectedAgentProvider();
   if (!provider) {
@@ -650,6 +696,34 @@ function renderAgentMeta() {
     return;
   }
   nodes["agent-meta"].textContent = `${provider.label} · ${provider.model}`;
+}
+
+function renderAgentAttachments() {
+  const strip = nodes["agent-attachment-strip"];
+  if (!state.agentAttachments.length) {
+    strip.innerHTML = "";
+    return;
+  }
+  strip.innerHTML = state.agentAttachments
+    .map(
+      (item, index) => `
+        <div class="agent-attachment-chip">
+          <div>
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(item.media_kind)} · ${escapeHtml(formatBytes(item.size_bytes || 0))}</span>
+          </div>
+          <button class="agent-attachment-remove" data-attachment-index="${index}">移除</button>
+        </div>
+      `,
+    )
+    .join("");
+  strip.querySelectorAll("[data-attachment-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.attachmentIndex);
+      state.agentAttachments.splice(index, 1);
+      renderAgentAttachments();
+    });
+  });
 }
 
 function renderRoutes(routes) {
@@ -688,7 +762,7 @@ function renderEmptyStates() {
   renderEmpty(nodes["trace-results"], "Bundle、query debug 和 evidence pruning 摘要会显示在这里。");
   renderEmpty(nodes["route-cloud"], "正在读取 API 路由。");
   renderEmpty(nodes["agent-transcript"], "正在初始化智能体面板。");
-  nodes["agent-context-preview"].innerHTML = "";
+  nodes["agent-attachment-strip"].innerHTML = "";
 }
 
 function renderEmpty(node, message) {
@@ -768,7 +842,9 @@ async function runAgentChat() {
       meta: `${response.provider?.label || response.provider?.name || "agent"} · ${response.latency_ms || 0}ms`,
     });
     nodes["agent-input"].value = "";
+    state.agentAttachments = [];
     renderAgentConversation();
+    renderAgentAttachments();
     renderAgentMeta();
     setStatus("智能体回答已返回。", "ready");
   } catch (error) {
@@ -780,15 +856,154 @@ async function runAgentChat() {
 
 function selectedAgentProvider() {
   const value = nodes["agent-provider-select"].value;
+  if (state.agentCustomProvider && state.agentCustomProvider.name === value) {
+    return state.agentCustomProvider;
+  }
   return state.agentProviders.find((item) => item.name === value) || null;
 }
 
-function selectedAgentProviderLabel() {
-  const provider = selectedAgentProvider();
-  if (!provider) {
-    return "not configured";
+function openAgentConfigModal() {
+  const provider =
+    state.agentConfigMode === "create"
+      ? { label: "", model: "", base_url: "", api_key: "" }
+      : state.agentCustomProvider || selectedAgentProvider() || { label: "", model: "", base_url: "", api_key: "" };
+  nodes["agent-config-label"].value = provider.label || "";
+  nodes["agent-config-model"].value = provider.model || "";
+  nodes["agent-config-base-url"].value = provider.base_url || "";
+  nodes["agent-config-api-key"].value = provider.api_key || "";
+  nodes["agent-config-modal"].hidden = false;
+}
+
+function closeAgentConfigModal() {
+  nodes["agent-config-modal"].hidden = true;
+}
+
+function toggleAgentSettingsMenu() {
+  nodes["agent-settings-menu"].hidden = !nodes["agent-settings-menu"].hidden;
+}
+
+function closeAgentSettingsMenu() {
+  nodes["agent-settings-menu"].hidden = true;
+}
+
+function saveAgentConfig() {
+  const label = nodes["agent-config-label"].value.trim() || "自定义模型";
+  const model = nodes["agent-config-model"].value.trim();
+  const baseUrl = nodes["agent-config-base-url"].value.trim();
+  const apiKey = nodes["agent-config-api-key"].value.trim();
+  if (!model || !baseUrl) {
+    setStatus("模型名和 Base URL 不能为空。", "error");
+    return;
   }
-  return `${provider.label} (${provider.model})`;
+  state.agentCustomProvider = {
+    name: "custom-local",
+    label,
+    model,
+    base_url: baseUrl,
+    api_key: apiKey,
+    adapter: "openai-compatible",
+    custom: true,
+  };
+  localStorage.setItem(AGENT_CUSTOM_PROVIDER_KEY, JSON.stringify(state.agentCustomProvider));
+  renderAgentProviders({
+    default_provider: state.agentCustomProvider.name,
+    items: state.agentProviders,
+  });
+  closeAgentConfigModal();
+  setStatus("自定义模型配置已保存。", "ready");
+}
+
+function resetAgentConfig() {
+  state.agentCustomProvider = null;
+  localStorage.removeItem(AGENT_CUSTOM_PROVIDER_KEY);
+  renderAgentProviders({
+    default_provider: state.agentProviders[0]?.name || null,
+    items: state.agentProviders,
+  });
+  closeAgentConfigModal();
+  setStatus("已恢复为后端默认 provider 列表。", "ready");
+}
+
+function loadAgentCustomProvider() {
+  try {
+    const raw = localStorage.getItem(AGENT_CUSTOM_PROVIDER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.model || !parsed.base_url) return null;
+    return {
+      name: "custom-local",
+      label: parsed.label || "自定义模型",
+      model: parsed.model,
+      base_url: parsed.base_url,
+      api_key: parsed.api_key || "",
+      adapter: "openai-compatible",
+      custom: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildProviderOverridePayload(provider) {
+  return {
+    label: provider.label,
+    model: provider.model,
+    base_url: provider.base_url,
+    api_key: provider.api_key || "",
+    adapter: "openai-compatible",
+  };
+}
+
+async function addSelectedFiles(fileList, mediaKind) {
+  const files = Array.from(fileList || []).slice(0, 6);
+  for (const file of files) {
+    state.agentAttachments.push(await toAttachment(file, mediaKind));
+  }
+  renderAgentAttachments();
+}
+
+async function toAttachment(file, mediaKind) {
+  const isImage = mediaKind === "image" || (file.type || "").startsWith("image/");
+  const base = {
+    name: file.name,
+    media_kind: isImage ? "image" : "file",
+    mime_type: file.type || "application/octet-stream",
+    size_bytes: file.size || 0,
+  };
+  if (isImage) {
+    return {
+      ...base,
+      data_url: await readAsDataUrl(file),
+    };
+  }
+  if (isProbablyTextFile(file)) {
+    return {
+      ...base,
+      text_content: (await file.text()).slice(0, 4000),
+    };
+  }
+  return base;
+}
+
+function isProbablyTextFile(file) {
+  const mime = file.type || "";
+  if (mime.startsWith("text/")) return true;
+  return /\.(txt|md|json|csv|tsv|log|xml|yml|yaml|py|js|ts|java|sql|cfg|ini)$/i.test(file.name);
+}
+
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(size) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function escapeHtml(value) {

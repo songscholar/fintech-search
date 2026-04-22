@@ -199,6 +199,12 @@ class CodebaseApi:
             history = payload.get("history")
             if history is not None and not isinstance(history, list):
                 raise ApiError(HTTPStatus.BAD_REQUEST, "history must be a list")
+            attachments = payload.get("attachments")
+            if attachments is not None and not isinstance(attachments, list):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "attachments must be a list")
+            provider_override = payload.get("provider_override")
+            if provider_override is not None and not isinstance(provider_override, dict):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "provider_override must be an object")
             system_prompt = payload.get("system_prompt")
             if system_prompt is not None and not isinstance(system_prompt, str):
                 raise ApiError(HTTPStatus.BAD_REQUEST, "system_prompt must be a string")
@@ -215,6 +221,8 @@ class CodebaseApi:
                     context_window=_coerce_int(payload.get("context_window", 2), "context_window"),
                     related_limit=_coerce_int(payload.get("related_limit", 3), "related_limit"),
                     system_prompt=system_prompt,
+                    attachments=attachments if isinstance(attachments, list) else None,
+                    provider_override=provider_override if isinstance(provider_override, dict) else None,
                 )
             except AgentConfigError as exc:
                 raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc

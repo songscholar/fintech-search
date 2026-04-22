@@ -255,86 +255,53 @@
             </section>
 
             <section class="workspace-view" id="agent-view" hidden>
-              <div class="agent-board">
-                <div class="agent-chat panel-inset">
-                  <div class="section-head">
-                    <div>
-                      <p class="eyebrow">Agent Workspace</p>
-                      <h4>带代码证据的智能体对话</h4>
-                    </div>
-                    <span class="panel-note" id="agent-meta">等待加载 provider</span>
+              <div class="agent-shell panel-inset">
+                <div class="agent-topbar">
+                  <div>
+                    <p class="eyebrow">Agent Chat</p>
+                    <h4>智能体对话</h4>
                   </div>
+                  <div class="agent-topbar-actions">
+                    <select id="agent-provider-select" class="select-input agent-model-select"></select>
+                    <div class="agent-settings-wrap">
+                      <button class="ghost-button small-button" id="agent-open-config">设置</button>
+                      <div class="agent-settings-menu" id="agent-settings-menu" hidden>
+                        <button class="agent-settings-item" id="agent-open-model-settings">设置模型</button>
+                        <button class="agent-settings-item" id="agent-open-model-create">添加模型</button>
+                      </div>
+                    </div>
+                    <button class="ghost-button small-button" id="agent-clear">清空会话</button>
+                  </div>
+                </div>
 
-                  <div class="agent-transcript" id="agent-transcript"></div>
+                <div class="agent-transcript" id="agent-transcript"></div>
 
-                  <div class="agent-composer">
-                    <label class="field agent-field">
-                      <span>发给智能体的问题</span>
-                      <textarea
-                        id="agent-input"
-                        rows="4"
-                        placeholder="例如：请结合当前代码库证据，解释证券代码获取失败时最可能经过哪条路径。"
-                      ></textarea>
-                    </label>
-                    <div class="agent-actions">
-                      <button class="primary-button" id="agent-send">发送给智能体</button>
-                      <button class="ghost-button" id="agent-clear">清空会话</button>
+                <div class="agent-attachment-strip" id="agent-attachment-strip"></div>
+
+                <div class="agent-composer-card">
+                  <label class="field agent-field">
+                    <span>消息内容</span>
+                    <textarea
+                      id="agent-input"
+                      rows="3"
+                      placeholder="输入你想让智能体处理的问题。这里的体验会尽量接近聊天页面，而不是控制台说明页。"
+                    ></textarea>
+                  </label>
+
+                  <div class="agent-toolbar">
+                    <div class="agent-toolbar-left">
+                      <button class="ghost-button small-button" id="agent-add-image">上传图片</button>
+                      <button class="ghost-button small-button" id="agent-add-file">上传文件</button>
+                    </div>
+                    <div class="agent-toolbar-right">
+                      <span class="panel-note" id="agent-meta">等待加载 provider</span>
+                      <button class="primary-button" id="agent-send">发送</button>
                     </div>
                   </div>
                 </div>
 
-                <div class="agent-side">
-                  <div class="panel-inset agent-config">
-                    <div class="section-head">
-                      <div>
-                        <p class="eyebrow">Provider</p>
-                        <h4>连接配置</h4>
-                      </div>
-                    </div>
-                    <label class="field">
-                      <span>智能体提供方</span>
-                      <select id="agent-provider-select" class="select-input"></select>
-                    </label>
-                    <div class="toggle-list">
-                      <label class="toggle-card">
-                        <input id="agent-include-retrieval" type="checkbox" checked />
-                        <span>附带检索命中</span>
-                      </label>
-                      <label class="toggle-card">
-                        <input id="agent-include-evidence" type="checkbox" checked />
-                        <span>附带证据块</span>
-                      </label>
-                      <label class="toggle-card">
-                        <input id="agent-include-answer-draft" type="checkbox" />
-                        <span>附带本地 draft</span>
-                      </label>
-                    </div>
-                    <div class="config-grid">
-                      <label class="field compact-field">
-                        <span>Limit</span>
-                        <input id="agent-limit-input" type="number" min="1" max="12" value="6" />
-                      </label>
-                      <label class="field compact-field">
-                        <span>Context</span>
-                        <input id="agent-context-window-input" type="number" min="1" max="8" value="2" />
-                      </label>
-                      <label class="field compact-field">
-                        <span>Related</span>
-                        <input id="agent-related-limit-input" type="number" min="1" max="8" value="3" />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div class="panel-inset agent-context">
-                    <div class="section-head">
-                      <div>
-                        <p class="eyebrow">Context Preview</p>
-                        <h4>本次会附带什么</h4>
-                      </div>
-                    </div>
-                    <div class="trace-grid" id="agent-context-preview"></div>
-                  </div>
-                </div>
+                <input id="agent-image-input" type="file" accept="image/*" multiple hidden />
+                <input id="agent-file-input" type="file" multiple hidden />
               </div>
             </section>
 
@@ -495,6 +462,42 @@
         <p></p>
       </div>
     </template>
+
+    <div class="modal-backdrop" id="agent-config-modal" hidden>
+      <div class="modal-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Agent Config</p>
+            <h4>模型配置</h4>
+          </div>
+          <button class="ghost-button small-button" id="agent-close-config">关闭</button>
+        </div>
+
+        <div class="modal-form">
+          <label class="field">
+            <span>显示名称</span>
+            <input id="agent-config-label" type="text" placeholder="例如：Hermes Prod" />
+          </label>
+          <label class="field">
+            <span>模型名</span>
+            <input id="agent-config-model" type="text" placeholder="例如：hermes-prod" />
+          </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="agent-config-base-url" type="text" placeholder="例如：http://127.0.0.1:9001/v1/chat/completions" />
+          </label>
+          <label class="field">
+            <span>API Key</span>
+            <input id="agent-config-api-key" type="password" placeholder="留空表示不需要鉴权" />
+          </label>
+        </div>
+
+        <div class="agent-actions">
+          <button class="primary-button" id="agent-save-config">保存配置</button>
+          <button class="ghost-button" id="agent-reset-config">恢复默认 provider</button>
+        </div>
+      </div>
+    </div>
 
     <script src="/assets/app.js" defer></script>
   </body>
