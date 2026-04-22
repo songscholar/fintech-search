@@ -194,6 +194,16 @@ sequenceDiagram
   - 只刷新 `files / procedures / procedures_fts / histories / params`
   - 不触发结构块和向量重建
 
+在这个基础上，增量建库现在还支持 `noop` 快速返回：
+
+- 如果本轮没有 `added / changed / removed`
+- 直接返回已有索引概况和空执行计划
+- 不触发 parser
+- 不触发结构重建
+- 不触发向量补齐
+
+向量补齐阶段也已经从“逐条写入 `chunk_vectors`”切到“按 batch 组装后 `executemany()` 批量写入”，这样更适合后续较大的索引库。
+
 ## 模块职责与源码映射
 
 | 层级 | 主要职责 | 对应文件 |

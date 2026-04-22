@@ -419,23 +419,26 @@ class IndexWriteService:
             embedding_inputs = [str(row[3] or f"{row[1]}\n{row[2]}") for row in rows]
             vectors = self.owner.embedder.embed_texts(embedding_inputs)
             embedder_info = self.owner.embedder.info
+            batch_rows = [
+                (
+                    int(row[0]),
+                    embedder_info.provider,
+                    embedder_info.model,
+                    len(vector),
+                    json_dumps(vector),
+                )
+                for row, vector in zip(rows, vectors, strict=True)
+            ]
 
             with conn:
-                for row, vector in zip(rows, vectors, strict=True):
-                    conn.execute(
-                        """
-                        INSERT OR REPLACE INTO chunk_vectors(chunk_id, provider, model, dimension, vector_json)
-                        VALUES(?, ?, ?, ?, ?)
-                        """,
-                        (
-                            int(row[0]),
-                            embedder_info.provider,
-                            embedder_info.model,
-                            len(vector),
-                            json_dumps(vector),
-                        ),
-                    )
-                    provider_counts[embedder_info.provider] += 1
+                conn.executemany(
+                    """
+                    INSERT OR REPLACE INTO chunk_vectors(chunk_id, provider, model, dimension, vector_json)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    batch_rows,
+                )
+                provider_counts[embedder_info.provider] += len(batch_rows)
                 self.store_embedding_metadata(conn, embedder_info)
 
             inserted += len(rows)

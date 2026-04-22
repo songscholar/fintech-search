@@ -154,6 +154,96 @@ class IndexBuildService:
                 if path in stored_state and fingerprint["fingerprint"] != stored_state[path]["fingerprint"]
             )
 
+            if not added_paths and not changed_paths and not removed_paths:
+                db_summary = self.owner.summarize_db(db_file)
+                payload = self._build_summary_payload(
+                    db_file=db_file,
+                    root=root,
+                    index_type=index_type,
+                    db_summary=db_summary,
+                    vector_stats={
+                        "batch_size": 0,
+                        "missing_before": 0,
+                        "inserted": 0,
+                        "batches": 0,
+                        "missing_after": 0,
+                        "provider_counts": {},
+                        "reused": 0,
+                        "reuse_candidates": 0,
+                        "reused_chunk_count": 0,
+                    },
+                    counters={
+                        "unit_kind": Counter(),
+                        "prefix": Counter(),
+                        "statement": Counter(),
+                        "edge": Counter(),
+                        "variable_ref": Counter(),
+                        "action": Counter(),
+                        "chunk": Counter(),
+                        "vector": Counter(),
+                        "block": Counter(),
+                        "block_edge": Counter(),
+                    },
+                    incremental=True,
+                    build_stats={
+                        "parsed_unit_count": 0,
+                        "parse_cache_hits": 0,
+                        "parse_cache_misses": 0,
+                        "metadata_refresh_count": 0,
+                    },
+                )
+                payload["incremental_changes"] = {
+                    "added": [],
+                    "changed": [],
+                    "metadata_only": [],
+                    "reindexed": [],
+                    "removed": [],
+                }
+                payload["incremental_execution_plan"] = {
+                    "metadata_refresh_count": 0,
+                    "metadata_refresh_paths": [],
+                    "reindex_paths": [],
+                    "remove_paths": [],
+                    "noop": True,
+                }
+                payload["incremental_trace"] = build_incremental_trace(
+                    index_type=index_type,
+                    current_file_count=len(current_state),
+                    stored_file_count=len(stored_state),
+                    added_paths=[],
+                    changed_paths=[],
+                    removed_paths=[],
+                    affected_units=[],
+                    rebuild_scope={"summary": {"reindexed_procedure_count": 0, "metadata_refresh_count": 0}, "items": []},
+                    vector_stats=payload["vector_stats"],
+                    elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
+                )
+                payload["incremental_impact"] = {
+                    "affected_unit_count": 0,
+                    "affected_units": [],
+                }
+                payload["incremental_scope"] = {
+                    "summary": {
+                        "reindexed_procedure_count": 0,
+                        "metadata_refresh_count": 0,
+                        "removed_procedure_count": 0,
+                        "after_statement_count": 0,
+                        "after_chunk_count": 0,
+                        "after_block_count": 0,
+                        "after_vector_target_count": 0,
+                        "rebuild_target_statement_count": 0,
+                        "rebuild_target_chunk_count": 0,
+                        "rebuild_target_block_count": 0,
+                        "delta_statement_count": 0,
+                        "delta_chunk_count": 0,
+                        "delta_block_count": 0,
+                        "delta_vector_target_count": 0,
+                    },
+                    "items": [],
+                }
+                payload["noop"] = True
+                return payload
+
             metadata_only_paths = sorted(
                 path
                 for path in changed_paths

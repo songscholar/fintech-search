@@ -1022,3 +1022,32 @@ def test_incremental_build_refreshes_metadata_without_rebuilding_structure(tmp_p
     conn.close()
     assert row is not None
     assert row[0] == "AF_测试_样例_新"
+
+
+def test_incremental_build_short_circuits_when_nothing_changed(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "incremental_noop.db"
+    parser = CountingParser(SQLiteIndexer().parser)
+    embedder = RecordingBatchEmbedder(batch_size=1000)
+    indexer = SQLiteIndexer(parser=parser, embedder=embedder)
+
+    indexer.build_index(source_dir, db_path, index_type="code")
+    before_calls = dict(parser.calls)
+    embedder.calls.clear()
+
+    result = indexer.build_index(source_dir, db_path, incremental=True, index_type="code")
+
+    assert result["incremental"] is True
+    assert result["noop"] is True
+    assert result["incremental_execution_plan"]["noop"] is True
+    assert result["incremental_changes"] == {
+        "added": [],
+        "changed": [],
+        "metadata_only": [],
+        "reindexed": [],
+        "removed": [],
+    }
+    assert result["incremental_impact"]["affected_unit_count"] == 0
+    assert result["build_stats"]["parsed_unit_count"] == 0
+    assert embedder.calls == []
+    assert parser.calls == before_calls

@@ -3478,3 +3478,49 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   - 次候选
   - 引用来源
   - 证据强度
+
+## [1.2.51] - 2026-04-22
+
+### Step 58: 优化建库性能，新增 no-op 增量短路与批量向量写入
+
+### 本步目标
+
+- 当增量建库发现没有任何文件变化时，直接短路返回
+- 减少 `populate_missing_chunk_vectors()` 中逐条写库的细碎开销
+- 保持已有增量更新、metadata refresh、向量复用行为不变
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 新增无变更增量短路：
+     - `noop = true`
+   - 当 `added / changed / removed` 全为空时：
+     - 不再进入 parse
+     - 不再进入 delete / rebuild
+     - 不再进入向量填充
+   - 返回中新增：
+     - `incremental_execution_plan.noop`
+     - `noop`
+
+2. 更新 `src/uses_indexer/index_write.py`
+   - `populate_missing_chunk_vectors()` 改为批量准备 `batch_rows`
+   - 使用 `executemany()` 批量写入 `chunk_vectors`
+   - provider 计数也改为按 batch 汇总
+
+3. 更新 `tests/test_indexer.py`
+   - 新增：
+     - `test_incremental_build_short_circuits_when_nothing_changed`
+   - 验证：
+     - 不触发 parser
+     - 不触发 embedder
+     - 直接返回 `noop`
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py -k "incremental_build_short_circuits_when_nothing_changed or incremental_build_supports_incremental_updates or metadata_without_rebuilding_structure or reuses_parsed_units_with_cache or reuses_existing_chunk_vectors_when_embedding_text_matches"`
+- 结果：`4 passed`
+
+### 结论
+
+- 当前建库链路已经不再把“无变化增量”当成一次完整任务去执行
+- 向量补齐阶段的写库动作也从逐条执行改成了批量提交，更适合后续大库场景
