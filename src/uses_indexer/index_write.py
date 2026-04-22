@@ -113,6 +113,110 @@ class IndexWriteService:
 
         return file_id, procedure_id
 
+    def refresh_unit_metadata(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        path: str,
+        unit: ParsedUnit,
+    ) -> bool:
+        row = conn.execute(
+            """
+            SELECT f.id, p.id
+            FROM files f
+            JOIN procedures p ON p.file_id = f.id
+            WHERE f.path = ?
+            LIMIT 1
+            """,
+            (path,),
+        ).fetchone()
+        if row is None:
+            return False
+
+        file_id = int(row[0])
+        procedure_id = int(row[1])
+        conn.execute(
+            """
+            UPDATE files
+            SET file_name = ?, unit_kind = ?, prefix = ?, name = ?, chinese_name = ?, object_id = ?, code_line_count = ?, attributes_json = ?
+            WHERE id = ?
+            """,
+            (
+                unit.file_name,
+                unit.unit_kind,
+                unit.prefix,
+                unit.name,
+                unit.chinese_name,
+                unit.object_id,
+                unit.code_line_count,
+                json_dumps(unit.attributes),
+                file_id,
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE procedures
+            SET name = ?, prefix = ?, unit_kind = ?, chinese_name = ?, object_id = ?
+            WHERE id = ?
+            """,
+            (
+                unit.name,
+                unit.prefix,
+                unit.unit_kind,
+                unit.chinese_name,
+                unit.object_id,
+                procedure_id,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO procedures_fts(rowid, name, chinese_name, object_id, path)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            (procedure_id, unit.name, unit.chinese_name or "", unit.object_id or "", unit.path),
+        )
+        conn.execute("DELETE FROM histories WHERE file_id = ?", (file_id,))
+        for seq, history in enumerate(unit.histories, start=1):
+            conn.execute(
+                """
+                INSERT INTO histories(file_id, seq, modified_date, version, order_number, modified_by, modified, extra_attributes_json)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    file_id,
+                    seq,
+                    history.modified_date,
+                    history.version,
+                    history.order_number,
+                    history.modified_by,
+                    history.modified,
+                    json_dumps(history.extra_attributes),
+                ),
+            )
+        conn.execute("DELETE FROM params WHERE file_id = ?", (file_id,))
+        for seq, param in enumerate(unit.parameters, start=1):
+            conn.execute(
+                """
+                INSERT INTO params(file_id, seq, category, param_id, uuid, param_type, type_name, name, comments, default_value, flags, extra_attributes_json)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    file_id,
+                    seq,
+                    param.category,
+                    param.param_id,
+                    param.uuid,
+                    param.param_type,
+                    param.type_name,
+                    param.name,
+                    param.comments,
+                    param.default_value,
+                    param.flags,
+                    json_dumps(param.extra_attributes),
+                ),
+            )
+        return True
+
     def insert_statements(
         self,
         conn: sqlite3.Connection,

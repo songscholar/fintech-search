@@ -55,6 +55,9 @@
 - 提供 stdio MCP server
 - 提供 repo-local Codex 插件封装
 - 提供检索评测闭环
+- 提供增量建库执行分流：
+  - 结构变更走完整重建
+  - metadata-only 变更只刷新文件与过程元信息
 
 当前版本还没有做到：
 
@@ -167,6 +170,16 @@ sequenceDiagram
 - 对话式工具接入：`serve-mcp`、Codex skill、repo-local plugin
 
 这 4 种形态共用一套核心模块，没有额外的“第二套服务实现”。
+
+当前增量建库不再只是“找到 changed files 然后全部删重建”。它已经有两层执行判断：
+
+- `reindexed`
+  - 代码语句或过程结构发生变化
+  - 需要重建 statements / actions / chunks / blocks / edges / procedure_features
+- `metadata_only`
+  - 代码语句指纹不变，过程签名不变
+  - 只刷新 `files / procedures / procedures_fts / histories / params`
+  - 不触发结构块和向量重建
 
 ## 模块职责与源码映射
 

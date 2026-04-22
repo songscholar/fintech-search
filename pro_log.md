@@ -3359,3 +3359,66 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 新增关系召回没有破坏原本高质量的 top hit：
   - 变量赋值问题仍然优先命中真实赋值语句
   - 失败路径问题仍然优先命中真正的失败处理块
+
+## [1.2.49] - 2026-04-22
+
+### Step 56: 细化增量建库执行粒度，新增 metadata-only 刷新
+
+### 本步目标
+
+- 让增量建库不再把所有“文件有变化”的情况都视作结构重建
+- 当文件只是 XML 头信息、中文名、对象号、参数历史等 metadata 变化时，只做 metadata refresh
+- 保留原有结构重建、向量复用和 parse cache 行为
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_build.py`
+   - 给 `indexed_files` 增加：
+     - `code_fingerprint`
+     - `unit_signature`
+   - 新增：
+     - `_unit_code_fingerprint()`
+     - `_unit_signature()`
+     - `_is_metadata_only_change()`
+     - `_ensure_index_state_schema()`
+   - 增量建库现在会区分：
+     - `metadata_only`
+     - `reindexed`
+     - `removed`
+   - 返回新增：
+     - `incremental_changes.metadata_only`
+     - `incremental_changes.reindexed`
+     - `incremental_execution_plan`
+   - `incremental_scope.summary` 现在也会单独统计 `metadata_refresh_count`
+
+2. 更新 `src/uses_indexer/index_write.py`
+   - 新增 `refresh_unit_metadata()`
+   - 当代码语句未变时，只刷新：
+     - `files`
+     - `procedures`
+     - `procedures_fts`
+     - `histories`
+     - `params`
+   - 不再重建：
+     - `statements`
+     - `chunks`
+     - `blocks`
+     - `edges`
+     - `chunk_vectors`
+
+3. 更新 `tests/test_indexer.py`
+   - 新增：
+     - `test_incremental_build_refreshes_metadata_without_rebuilding_structure`
+   - 同时调整原有向量复用测试，使其适配新的 `metadata_only` 分支
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py -k "incremental_build_supports_incremental_updates or metadata_without_rebuilding_structure or reuses_existing_chunk_vectors_when_embedding_text_matches or reuses_parsed_units_with_cache"`
+- 结果：`3 passed`
+
+### 结论
+
+- 当前增量建库已经从“文件级变更即重建”推进到“结构变更重建、metadata 变更刷新”的双分支执行模型
+- 这一步带来的直接收益是：
+  - metadata-only 改动不再触发 statements/chunks/blocks/edges 重建
+  - 向量填充和向量复用逻辑也不会被无意义地触发

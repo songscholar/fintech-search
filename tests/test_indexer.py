@@ -448,8 +448,10 @@ def test_incremental_build_reuses_existing_chunk_vectors_when_embedding_text_mat
     )
 
     assert result["incremental"] is True
-    assert result["vector_stats"]["reused"] >= 1
-    assert result["vector_stats"]["reused_chunk_count"] >= 1
+    assert result["incremental_execution_plan"]["metadata_refresh_count"] == 1
+    assert str(sample_path) in result["incremental_changes"]["metadata_only"]
+    assert result["vector_stats"]["reused"] == 0
+    assert result["vector_stats"]["reused_chunk_count"] == 0
     assert result["vector_stats"]["inserted"] == 0
     assert incremental_embedder.calls == []
 
@@ -980,3 +982,43 @@ def test_build_index_supports_incremental_updates(tmp_path: Path) -> None:
     assert changed_item["delta"]["statement_count"] >= 1
     assert changed["incremental_scope"]["summary"]["delta_statement_count"] >= 1
     assert "delta_chunk_count" in changed["incremental_scope"]["summary"]
+
+
+def test_incremental_build_refreshes_metadata_without_rebuilding_structure(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "incremental_metadata_only.db"
+    indexer = SQLiteIndexer()
+
+    indexer.build_index(source_dir, db_path, index_type="code")
+
+    sample_path = source_dir / "AF_SAMPLE.uftatomfunction"
+    updated_xml = SAMPLE_XML.replace('chineseName="AF_测试_样例"', 'chineseName="AF_测试_样例_新"')
+    sample_path.write_text(updated_xml, encoding="utf-8")
+
+    result = indexer.build_index(source_dir, db_path, incremental=True, index_type="code")
+
+    assert result["incremental"] is True
+    assert str(sample_path) in result["incremental_changes"]["metadata_only"]
+    assert str(sample_path) not in result["incremental_changes"]["reindexed"]
+    assert result["incremental_execution_plan"]["metadata_refresh_count"] == 1
+    item = next(item for item in result["incremental_scope"]["items"] if item["file_path"] == str(sample_path))
+    assert item["change_type"] == "metadata_only"
+    assert item["rebuild_targets"]["chunk_count"] == 0
+    assert item["rebuild_targets"]["vector_target_count"] == 0
+    assert result["incremental_scope"]["summary"]["metadata_refresh_count"] == 1
+    assert result["build_stats"]["metadata_refresh_count"] == 1
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        """
+        SELECT p.chinese_name, COUNT(*)
+        FROM files f
+        JOIN procedures p ON p.file_id = f.id
+        WHERE f.path = ?
+        GROUP BY p.chinese_name
+        """,
+        (str(sample_path),),
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] == "AF_测试_样例_新"

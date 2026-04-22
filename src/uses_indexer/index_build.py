@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS indexed_files (
   file_size INTEGER NOT NULL,
   mtime_ns INTEGER NOT NULL,
   fingerprint TEXT NOT NULL,
-  index_type TEXT NOT NULL
+  index_type TEXT NOT NULL,
+  code_fingerprint TEXT NOT NULL DEFAULT '',
+  unit_signature TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -61,7 +63,7 @@ class IndexBuildService:
         conn = sqlite3.connect(db_file)
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(self.owner.SCHEMA_SQL)
-        conn.executescript(INDEX_STATE_SCHEMA_SQL)
+        self._ensure_index_state_schema(conn)
 
         files = self._collect_files(root, index_type=index_type)
         initial_embedder_info = self.owner.embedder.info
@@ -72,7 +74,13 @@ class IndexBuildService:
             with conn:
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=initial_embedder_info)
                 counters = self._index_files(conn, files, parse_cache=parse_cache, parse_stats=parse_stats)
-                self._upsert_indexed_file_state(conn, files, index_type=index_type)
+                self._upsert_indexed_file_state(
+                    conn,
+                    files,
+                    index_type=index_type,
+                    parse_cache=parse_cache,
+                    parse_stats=parse_stats,
+                )
 
             vector_stats = write_service.populate_missing_chunk_vectors(conn)
         finally:
@@ -111,7 +119,7 @@ class IndexBuildService:
 
         conn = sqlite3.connect(db_file)
         conn.execute("PRAGMA foreign_keys=ON")
-        conn.executescript(INDEX_STATE_SCHEMA_SQL)
+        self._ensure_index_state_schema(conn)
         try:
             write_service.validate_resume_source(conn, root)
             existing_index_type = read_metadata(conn, "index_type")
@@ -129,9 +137,11 @@ class IndexBuildService:
                     "file_size": int(row[1]),
                     "mtime_ns": int(row[2]),
                     "fingerprint": str(row[3]),
+                    "code_fingerprint": str(row[4] or ""),
+                    "unit_signature": str(row[5] or ""),
                 }
                 for row in conn.execute(
-                    "SELECT path, file_size, mtime_ns, fingerprint FROM indexed_files WHERE index_type = ?",
+                    "SELECT path, file_size, mtime_ns, fingerprint, code_fingerprint, unit_signature FROM indexed_files WHERE index_type = ?",
                     (index_type,),
                 ).fetchall()
             }
@@ -141,30 +151,53 @@ class IndexBuildService:
             changed_paths = sorted(
                 path
                 for path, fingerprint in current_state.items()
-                if path in stored_state and fingerprint != stored_state[path]
+                if path in stored_state and fingerprint["fingerprint"] != stored_state[path]["fingerprint"]
             )
 
-            changed_files = [Path(path) for path in [*added_paths, *changed_paths]]
+            metadata_only_paths = sorted(
+                path
+                for path in changed_paths
+                if self._is_metadata_only_change(
+                    Path(path),
+                    stored_state=stored_state[path],
+                    parse_cache=parse_cache,
+                    parse_stats=parse_stats,
+                )
+            )
+            rebuild_paths = sorted(path for path in changed_paths if path not in set(metadata_only_paths))
+            changed_files = [Path(path) for path in [*added_paths, *rebuild_paths]]
             previous_scope = {
                 path: self._describe_index_scope(conn, path)
                 for path in [*changed_paths, *removed_paths]
             }
-            reusable_vectors = self._collect_reusable_chunk_vectors(conn, changed_paths)
+            reusable_vectors = self._collect_reusable_chunk_vectors(conn, rebuild_paths)
             affected_units = self._build_incremental_impact_report(
                 conn,
                 added_paths=added_paths,
                 changed_paths=changed_paths,
                 removed_paths=removed_paths,
+                metadata_only_paths=metadata_only_paths,
                 parse_cache=parse_cache,
                 parse_stats=parse_stats,
             )
 
             with conn:
-                for path in [*removed_paths, *changed_paths]:
+                for path in [*removed_paths, *rebuild_paths]:
                     self._delete_indexed_path(conn, path)
                 counters = self._index_files(conn, changed_files, parse_cache=parse_cache, parse_stats=parse_stats)
+                metadata_refresh_count = 0
+                for path in metadata_only_paths:
+                    unit = self._parse_unit(Path(path), parse_cache=parse_cache, parse_stats=parse_stats)
+                    if self.owner._index_write_service.refresh_unit_metadata(conn, path=path, unit=unit):
+                        metadata_refresh_count += 1
                 reused_vector_stats = self._restore_reusable_chunk_vectors(conn, reusable_vectors)
-                self._upsert_indexed_file_state(conn, files, index_type=index_type)
+                self._upsert_indexed_file_state(
+                    conn,
+                    files,
+                    index_type=index_type,
+                    parse_cache=parse_cache,
+                    parse_stats=parse_stats,
+                )
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=self.owner.embedder.info)
 
             vector_stats = write_service.populate_missing_chunk_vectors(conn)
@@ -181,6 +214,7 @@ class IndexBuildService:
                 removed_paths=removed_paths,
                 previous_scope=previous_scope,
                 current_scope=current_scope,
+                metadata_only_paths=metadata_only_paths,
             )
             db_summary = self.owner.summarize_db(db_file)
             payload = self._build_summary_payload(
@@ -195,12 +229,21 @@ class IndexBuildService:
                     "parsed_unit_count": len(parse_cache),
                     "parse_cache_hits": int(parse_stats["hits"]),
                     "parse_cache_misses": int(parse_stats["misses"]),
+                    "metadata_refresh_count": metadata_refresh_count,
                 },
             )
             payload["incremental_changes"] = {
                 "added": added_paths,
                 "changed": changed_paths,
+                "metadata_only": metadata_only_paths,
+                "reindexed": rebuild_paths,
                 "removed": removed_paths,
+            }
+            payload["incremental_execution_plan"] = {
+                "metadata_refresh_count": metadata_refresh_count,
+                "metadata_refresh_paths": metadata_only_paths,
+                "reindex_paths": [*added_paths, *rebuild_paths],
+                "remove_paths": removed_paths,
             }
             payload["incremental_trace"] = build_incremental_trace(
                 index_type=index_type,
@@ -380,6 +423,77 @@ class IndexBuildService:
         parse_cache[cache_key] = parsed
         return parsed
 
+    def _ensure_index_state_schema(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(INDEX_STATE_SCHEMA_SQL)
+        columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(indexed_files)").fetchall()
+        }
+        if "code_fingerprint" not in columns:
+            conn.execute("ALTER TABLE indexed_files ADD COLUMN code_fingerprint TEXT NOT NULL DEFAULT ''")
+        if "unit_signature" not in columns:
+            conn.execute("ALTER TABLE indexed_files ADD COLUMN unit_signature TEXT NOT NULL DEFAULT ''")
+
+    def _unit_code_fingerprint(self, unit: ParsedUnit) -> str:
+        payload = [
+            {
+                "kind": statement.kind,
+                "line_start": statement.line_start,
+                "line_end": statement.line_end,
+                "raw": statement.raw,
+                "tag": statement.tag,
+                "name": statement.name,
+                "condition": statement.condition,
+                "target": statement.target,
+                "reads": statement.reads,
+                "writes": statement.writes,
+            }
+            for statement in unit.statements
+        ]
+        return hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def _unit_signature(self, unit: ParsedUnit) -> str:
+        payload = {
+            "file_name": unit.file_name,
+            "unit_kind": unit.unit_kind,
+            "prefix": unit.prefix,
+            "name": unit.name,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def _build_index_state_record(
+        self,
+        path: Path,
+        *,
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> dict[str, object]:
+        fingerprint = self._fingerprint_path(path)
+        unit = self._parse_unit(path, parse_cache=parse_cache, parse_stats=parse_stats)
+        return {
+            **fingerprint,
+            "code_fingerprint": self._unit_code_fingerprint(unit),
+            "unit_signature": self._unit_signature(unit),
+        }
+
+    def _is_metadata_only_change(
+        self,
+        path: Path,
+        *,
+        stored_state: dict[str, object],
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> bool:
+        unit = self._parse_unit(path, parse_cache=parse_cache, parse_stats=parse_stats)
+        return (
+            self._unit_code_fingerprint(unit) == str(stored_state.get("code_fingerprint") or "")
+            and self._unit_signature(unit) == str(stored_state.get("unit_signature") or "")
+        )
+
     def _index_files(
         self,
         conn: sqlite3.Connection,
@@ -455,23 +569,33 @@ class IndexBuildService:
         )
         self.owner._index_write_service.store_embedding_metadata(conn, embedder_info)
 
-    def _upsert_indexed_file_state(self, conn: sqlite3.Connection, files: list[Path], *, index_type: str) -> None:
+    def _upsert_indexed_file_state(
+        self,
+        conn: sqlite3.Connection,
+        files: list[Path],
+        *,
+        index_type: str,
+        parse_cache: dict[str, ParsedUnit],
+        parse_stats: dict[str, int],
+    ) -> None:
         conn.execute("DELETE FROM indexed_files WHERE index_type = ?", (index_type,))
         conn.executemany(
             """
-            INSERT OR REPLACE INTO indexed_files(path, file_size, mtime_ns, fingerprint, index_type)
-            VALUES(?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO indexed_files(path, file_size, mtime_ns, fingerprint, index_type, code_fingerprint, unit_signature)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
                     str(path),
-                    fingerprint["file_size"],
-                    fingerprint["mtime_ns"],
-                    fingerprint["fingerprint"],
+                    state["file_size"],
+                    state["mtime_ns"],
+                    state["fingerprint"],
                     index_type,
+                    state["code_fingerprint"],
+                    state["unit_signature"],
                 )
                 for path in files
-                for fingerprint in [self._fingerprint_path(path)]
+                for state in [self._build_index_state_record(path, parse_cache=parse_cache, parse_stats=parse_stats)]
             ],
         )
 
@@ -527,6 +651,7 @@ class IndexBuildService:
         added_paths: list[str],
         changed_paths: list[str],
         removed_paths: list[str],
+        metadata_only_paths: list[str],
         parse_cache: dict[str, ParsedUnit],
         parse_stats: dict[str, int],
     ) -> list[dict[str, object]]:
@@ -544,9 +669,9 @@ class IndexBuildService:
             estimated_scope = self._estimate_source_scope(Path(path), parse_cache=parse_cache, parse_stats=parse_stats)
             affected_units.append(
                 {
-                    "change_type": "changed",
+                    "change_type": "metadata_only" if path in metadata_only_paths else "changed",
                     **self._describe_indexed_unit(conn, path),
-                    "rebuild_targets": self._scope_to_rebuild_targets(estimated_scope),
+                    "rebuild_targets": self._scope_to_rebuild_targets({} if path in metadata_only_paths else estimated_scope),
                 }
             )
         for path in removed_paths:
@@ -798,6 +923,7 @@ class IndexBuildService:
         removed_paths: list[str],
         previous_scope: dict[str, dict[str, object]],
         current_scope: dict[str, dict[str, object]],
+        metadata_only_paths: list[str],
     ) -> dict[str, object]:
         items: list[dict[str, object]] = []
 
@@ -817,12 +943,13 @@ class IndexBuildService:
         for path in changed_paths:
             before = dict(previous_scope.get(path) or {"file_path": path})
             after = dict(current_scope.get(path) or {"file_path": path})
+            metadata_only = path in metadata_only_paths
             items.append(
                 {
-                    "change_type": "changed",
+                    "change_type": "metadata_only" if metadata_only else "changed",
                     "file_path": path,
                     "procedure_name": after.get("procedure_name") or before.get("procedure_name"),
-                    "rebuild_targets": self._scope_to_rebuild_targets(after or before),
+                    "rebuild_targets": self._scope_to_rebuild_targets({} if metadata_only else (after or before)),
                     "before": before,
                     "after": after,
                     "delta": self._scope_delta(before, after),
@@ -853,6 +980,7 @@ class IndexBuildService:
 
         summary = {
             "reindexed_procedure_count": len([item for item in items if item["change_type"] in {"added", "changed"}]),
+            "metadata_refresh_count": len([item for item in items if item["change_type"] == "metadata_only"]),
             "removed_procedure_count": len([item for item in items if item["change_type"] == "removed"]),
             "after_statement_count": sum(int((item.get("after") or {}).get("statement_count") or 0) for item in items),
             "after_chunk_count": sum(int((item.get("after") or {}).get("chunk_count") or 0) for item in items),
