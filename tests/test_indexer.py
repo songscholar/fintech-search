@@ -927,6 +927,29 @@ def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: 
     assert max(exact_focus_hits) < min(vector_mismatches)
 
 
+def test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_mc_publish_index(tmp_path)
+
+    result = indexer.query_index(db_path, "CNST_MC_UFT_OPTSYNC topic 发布", limit=5)
+
+    assert result["hit_count"] >= 1
+    top_hit = result["hits"][0]
+    assert top_hit["procedure_name"] == "LS_MC_PUBLISH"
+    assert top_hit["aggregate_score"] >= top_hit["score"]
+    assert top_hit["aggregate_hit_count"] >= 1
+    assert top_hit["procedure_profile"].get("topic_role") == "publisher"
+    assert "CNST_MC_UFT_OPTSYNC" in list(top_hit["procedure_profile"].get("core_topics") or [])
+
+
+def test_query_index_prefers_aggregate_topic_hits_without_hurting_table_focus(tmp_path: Path) -> None:
+    indexer, db_path = _build_mc_publish_index(tmp_path)
+
+    result = indexer.query_index(db_path, "CNST_MC_UFT_PUBSYNC topic 发布", limit=5)
+
+    assert result["hits"][0]["procedure_name"] == "LS_MC_PUBLISH"
+    assert any("procedure_aggregate_bonus=" in reason for reason in result["hits"][0]["reasons"])
+
+
 def test_query_index_disables_vector_when_embedding_space_mismatches(tmp_path: Path) -> None:
     _, db_path = _build_sample_index(tmp_path)
     indexer = SQLiteIndexer(embedder=MismatchEmbedder())

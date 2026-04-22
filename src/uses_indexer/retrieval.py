@@ -150,6 +150,7 @@ class RetrievalService:
             merge_candidate(candidates, candidate)
 
         merged = list(candidates.values())
+        self._hydrate_missing_procedure_profiles(conn, merged)
         for candidate in merged:
             candidate["debug_retrieval"] = {
                 "retrieval_source": candidate.get("retrieval_source"),
@@ -191,6 +192,10 @@ class RetrievalService:
                 procedure_name=procedure_name,
             ),
         )
+        reranked = self._apply_procedure_aggregate_rerank(
+            reranked,
+            query_analysis=query_analysis,
+        )
 
         retrieval_debug = None
         if debug:
@@ -206,6 +211,97 @@ class RetrievalService:
             )
 
         return reranked, fts_query, vector_status, retrieval_debug
+
+    def _hydrate_missing_procedure_profiles(
+        self,
+        conn: sqlite3.Connection,
+        candidates: list[dict[str, object]],
+    ) -> None:
+        procedure_ids = sorted(
+            {
+                int(candidate["procedure_id"])
+                for candidate in candidates
+                if candidate.get("procedure_id") is not None and not candidate.get("procedure_profile")
+            }
+        )
+        if not procedure_ids:
+            return
+        placeholders = ",".join("?" for _ in procedure_ids)
+        rows = conn.execute(
+            f"""
+            SELECT procedure_id, profile_json
+            FROM procedure_features
+            WHERE procedure_id IN ({placeholders})
+            """,
+            tuple(procedure_ids),
+        ).fetchall()
+        profile_map = {
+            int(row[0]): json.loads(str(row[1]))
+            for row in rows
+            if row[1]
+        }
+        for candidate in candidates:
+            procedure_id = candidate.get("procedure_id")
+            if procedure_id is None or candidate.get("procedure_profile"):
+                continue
+            candidate["procedure_profile"] = dict(profile_map.get(int(procedure_id)) or {})
+
+    def _apply_procedure_aggregate_rerank(
+        self,
+        ranked: list[dict[str, object]],
+        *,
+        query_analysis: dict[str, object],
+    ) -> list[dict[str, object]]:
+        if not ranked:
+            return ranked
+
+        grouped: dict[tuple[str, str], dict[str, object]] = {}
+        for candidate in ranked:
+            key = (str(candidate.get("procedure_name") or ""), str(candidate.get("file_path") or ""))
+            group = grouped.setdefault(
+                key,
+                {
+                    "score_total": 0.0,
+                    "count": 0,
+                    "matched_via": set(),
+                    "sources": set(),
+                },
+            )
+            group["score_total"] = float(group["score_total"]) + float(candidate.get("score") or 0.0)
+            group["count"] = int(group["count"]) + 1
+            group["matched_via"].update(candidate.get("matched_via") or [candidate.get("retrieval_source")])
+            group["sources"].add(str(candidate.get("retrieval_source") or ""))
+
+        reranked: list[dict[str, object]] = []
+        query_type = str(query_analysis.get("query_type") or "")
+        for candidate in ranked:
+            key = (str(candidate.get("procedure_name") or ""), str(candidate.get("file_path") or ""))
+            group = grouped[key]
+            aggregate_score = float(group["score_total"])
+            aggregate_hits = int(group["count"])
+            aggregate_bonus = min(max(aggregate_hits - 1, 0) * 2.0, 6.0)
+            if query_type in {"topic_publish", "metadata_definition", "table_write", "table_read", "table_access", "variable_write", "variable_read", "variable_flow"}:
+                aggregate_bonus += min(len(group["sources"]) * 0.8, 2.4)
+            candidate["aggregate_score"] = round(aggregate_score, 6)
+            candidate["aggregate_hit_count"] = aggregate_hits
+            candidate["matched_via"] = sorted(str(item) for item in group["matched_via"] if str(item))
+            if aggregate_bonus:
+                candidate["score"] = round(float(candidate["score"]) + aggregate_bonus, 6)
+                reasons = list(candidate.get("reasons", []))
+                reasons.append(f"procedure_aggregate_hits={aggregate_hits}")
+                reasons.append(f"procedure_aggregate_bonus={aggregate_bonus:.3f}")
+                candidate["reasons"] = reasons
+                debug_rerank = dict(candidate.get("debug_rerank") or {})
+                debug_rerank["procedure_aggregate_score"] = round(aggregate_score, 6)
+                debug_rerank["procedure_aggregate_hits"] = aggregate_hits
+                debug_rerank["score_after_procedure_aggregate"] = round(float(candidate["score"]), 6)
+                candidate["debug_rerank"] = debug_rerank
+            reranked.append(candidate)
+
+        return sorted(
+            reranked,
+            key=lambda item: (-float(item["score"]), -float(item.get("aggregate_score") or 0.0), str(item["procedure_name"]), int(item["line_start"] or 0), str(item["matched_text"])),
+        )
 
     def _run_focus_chain_queries(
         self,
@@ -1693,6 +1789,8 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
     return {
         "rank": rank,
         "score": round(float(candidate["score"]), 3),
+        "aggregate_score": round(float(candidate.get("aggregate_score") or candidate["score"]), 3),
+        "aggregate_hit_count": int(candidate.get("aggregate_hit_count") or 1),
         "hit_type": candidate["hit_type"],
         "retrieval_source": candidate["retrieval_source"],
         "match_source": candidate["match_source"],

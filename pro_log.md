@@ -4068,3 +4068,68 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前“知识构建”已经把 topic / metadata 也正式沉淀进过程画像
 - 当前“问答流程”里的主候选 / 次候选更像过程级判断，不再受单条 evidence 排序抖动影响
 - 当前 `procedure_profile` 也能更稳定地从 retrieval 贯穿到 evidence、QA 和前端调试视图
+
+## [1.2.60] - 2026-04-23
+
+### Step 67: 前移过程级聚合到检索层并暴露聚合指标
+
+### 本步目标
+
+- 把“过程级聚合”从 QA 层继续前移到 retrieval 层
+- 让 topic / metadata / table / variable 这类问题在检索排序阶段就受益于同过程多路支撑
+- 同时保持原有精确命中的排序优势，不降低准确度
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 在 `retrieve_candidates()` 进入 rerank 前新增：
+     - `_hydrate_missing_procedure_profiles()`
+   - 对来自 `fts_chunk / fts_action / fts_statement / vector_chunk` 等路径、但未携带画像的候选
+   - 用 `procedure_id -> procedure_features.profile_json` 统一补齐 `procedure_profile`
+
+2. 更新 `src/uses_indexer/retrieval.py`
+   - 新增检索层的过程级聚合加权：
+     - `_apply_procedure_aggregate_rerank()`
+   - 按 `procedure_name + file_path` 聚合：
+     - `aggregate_score`
+     - `aggregate_hit_count`
+     - `matched_via`
+   - 对以下 query type 做适度聚合加权：
+     - `topic_publish`
+     - `metadata_definition`
+     - `table_write / table_read / table_access`
+     - `variable_write / variable_read / variable_flow`
+   - reasons 新增：
+     - `procedure_aggregate_hits=...`
+     - `procedure_aggregate_bonus=...`
+
+3. 更新 `src/uses_indexer/retrieval.py`
+   - query 命中输出新增：
+     - `aggregate_score`
+     - `aggregate_hit_count`
+   - 前端和 debug trace 现在都可以直接看到“这是单条命中强，还是同一过程多路支撑强”
+
+4. 更新测试
+   - `tests/test_indexer.py`
+     - 新增 `test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries`
+     - 新增 `test_query_index_prefers_aggregate_topic_hits_without_hurting_table_focus`
+   - 继续回归已有：
+     - 表边关系
+     - 表链路扩展
+     - 显式路径桥接
+     - exact focus 优先于 vector-only 上下文
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/retrieval.py tests/test_indexer.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_indexer.py::test_query_index_prefers_aggregate_topic_hits_without_hurting_table_focus tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_expands_table_chain_context_for_flow_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context`
+- `PYTHONPATH=src pytest -q tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_qa.py::test_ask_tracks_primary_and_secondary_candidates tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- 结果：`9 passed`
+
+### 结论
+
+- 当前“检索流程”已经开始在排序阶段利用同一过程的多路支撑信号
+- 当前 `procedure_profile` 能更稳定地从 retrieval 开始贯穿到 query/evidence/QA
+- 当前“过程级聚合”已经形成上下游闭环：
+  - retrieval 负责聚合排序
+  - QA 负责聚合候选表达

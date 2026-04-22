@@ -255,6 +255,33 @@ flowchart LR
 
 这样问答层给出的主候选，更像是“当前系统认为最值得相信的过程”，而不只是“恰好排第一的那条片段”。
 
+现在这个“过程级聚合”也开始前移到检索层本身：
+
+- `retrieve_candidates()` 在进入 rerank 前，会先补齐缺失的 `procedure_profile`
+- 即使候选来自：
+  - `fts_chunk`
+  - `fts_action`
+  - `fts_statement`
+  - `vector_chunk`
+  - 其他不直接联表 `procedure_features` 的路径
+- 最终也能稳定带上过程画像
+
+随后检索层会再做一次“过程级聚合加权”：
+
+- 按 `procedure_name + file_path` 统计：
+  - `aggregate_score`
+  - `aggregate_hit_count`
+  - `matched_via`
+- 对 `topic / metadata / table / variable` 这几类正向问题：
+  - 同一过程多路命中会得到适度的 `procedure_aggregate_bonus`
+- 这样同一过程被多条 chunk/action/edge 同时支撑时，排序会更稳定，而不会被零碎片段互相稀释
+
+这个设计的目标不是“压制细粒度 evidence”，而是让：
+
+- 精确命中仍然优先
+- 多路一致支撑的过程获得稳定加权
+- 前端与调试接口能直接看到 `aggregate_score / aggregate_hit_count`
+
 ## 端到端问答链路
 
 ```mermaid
