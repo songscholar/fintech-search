@@ -47,6 +47,25 @@ DEEP_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </business:Function>
 """
 
+MC_PUBLISH_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<business:Service xmlns:business="http://www.hundsun.com/ares/studio/uft/business/1.0.0" chineseName="LS_测试_MC发布" objectId="19">
+  <code><![CDATA[
+  [同步消息发布][topic_name = CNST_MC_UFT_PUBSYNC][table_category = @table_category,
+                                                    param_oper_type = @param_oper_type,
+                                                    transaction_no = @transaction_no,
+                                                    business_data = @business_data,
+                                                    partition_no = 0]
+  [消息发布][topic_name = CNST_MC_UFT_OPTSYNC][table_category = @table_category,
+                                             param_oper_type = @param_oper_type,
+                                             transaction_str = @transaction_str,
+                                             transaction_no = 0,
+                                             business_data = @business_data,
+                                             position_str = @position_str,
+                                             partition_no = @partition_no]
+  ]]></code>
+</business:Service>
+"""
+
 
 def _prepare_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
     source_dir = tmp_path / "src"
@@ -56,6 +75,17 @@ def _prepare_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
     (source_dir / "AF_DEEP.uftatomfunction").write_text(DEEP_XML, encoding="utf-8")
 
     db_path = tmp_path / "index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    return CodebaseQA(indexer), db_path
+
+
+def _prepare_topic_qa(tmp_path: Path) -> tuple[CodebaseQA, Path]:
+    source_dir = tmp_path / "topic_src"
+    source_dir.mkdir()
+    (source_dir / "LS_MC_PUBLISH.uftservice").write_text(MC_PUBLISH_XML, encoding="utf-8")
+
+    db_path = tmp_path / "topic_index.db"
     indexer = SQLiteIndexer()
     indexer.build_index(source_dir, db_path)
     return CodebaseQA(indexer), db_path
@@ -112,6 +142,7 @@ def test_ask_tracks_primary_and_secondary_candidates(tmp_path: Path) -> None:
     assert result["draft_answer"]["primary_candidate"]
     assert result["draft_answer"]["primary_candidate"]["procedure_name"] in {"AF_SAMPLE", "LS_FLOW"}
     assert isinstance(result["draft_answer"]["secondary_candidates"], list)
+    assert float(result["draft_answer"]["primary_candidate"]["aggregate_score"]) >= 0.0
     secondary_names = [item["procedure_name"] for item in result["draft_answer"]["secondary_candidates"]]
     assert len(secondary_names) == len(set(secondary_names))
 
@@ -153,3 +184,13 @@ def test_ask_surfaces_failure_path_summary_for_failure_questions(tmp_path: Path)
     summary_points = list(result["draft_answer"]["summary_points"])
     assert any("失败处理块" in item for item in summary_points)
     assert result["draft_answer"]["confidence"]["label"] in {"medium", "high"}
+
+
+def test_ask_surfaces_topic_profile_hints_for_topic_queries(tmp_path: Path) -> None:
+    qa, db_path = _prepare_topic_qa(tmp_path)
+
+    result = qa.ask(db_path, "CNST_MC_UFT_OPTSYNC topic 发布", evidence_limit=3, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["query_type"] == "topic_publish"
+    summary_points = list(result["draft_answer"]["summary_points"])
+    assert any("发布主题包括" in item for item in summary_points)

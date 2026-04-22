@@ -4001,3 +4001,70 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
   - 不同问题类型有不同标题和表达方式
   - 次候选更干净
   - 置信度也不再只看命中数量
+
+## [1.2.59] - 2026-04-22
+
+### Step 66: 扩展 topic / metadata 画像并升级过程级候选聚合
+
+### 本步目标
+
+- 继续做正向增强，把 topic / metadata 也真正纳入过程画像
+- 让主候选 / 次候选从“单条 evidence 排序”升级成“过程级聚合判定”
+- 让 `fts_chunk / fts_action` 这类命中也能稳定带出过程画像
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/index_write.py`
+   - `profile_json` 新增：
+     - `core_topics`
+     - `core_metadata_refs`
+   - 这样 `procedure_features` 不再只覆盖表访问、变量和调用，也开始显式覆盖：
+     - topic 发布角色
+     - metadata 引用角色
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - `procedure_profile` 精排继续增强：
+     - `profile_exact_topic_focus`
+     - `profile_exact_metadata_focus`
+   - 对 topic / metadata 问题，开始显式用画像里的 `core_topics / core_metadata_refs` 做 exact focus 加权
+   - 同时把 `topic_publish` 的 query type 优先级提升到 `metadata_definition` 之前，避免 topic 问题被 metadata 抢走
+
+3. 更新 `src/uses_indexer/evidence.py`
+   - 当 retrieval candidate 自身没带 `procedure_profile` 时
+   - evidence 组装阶段会回查 `procedure_features.profile_json`
+   - 用 `procedure_id` 补全画像
+   - 避免 `fts_chunk / fts_action` 命中在问答阶段丢失画像信息
+
+4. 更新 `src/uses_indexer/qa.py`
+   - 主候选 / 次候选不再只看单条 evidence
+   - 改为按：
+     - `procedure_name + file_path`
+     - 聚合 `aggregate_score`
+     - 汇总 `matched_via`
+   - 主候选会选择该过程内分数最高的那条 evidence 作为代表位置
+   - topic / metadata 问题新增更明确的画像提示：
+     - `发布主题包括 ...`
+     - `核心 metadata 引用包括 ...`
+   - 置信度评估也开始参考聚合后的主次候选分差
+
+5. 更新测试
+   - `tests/test_indexer.py`
+     - 新增 `test_build_index_populates_topic_profile_fields`
+       - 验证 `core_topics / topic_role / has_mc_topics`
+   - `tests/test_qa.py`
+     - `test_ask_tracks_primary_and_secondary_candidates`
+       - 额外验证 `aggregate_score`
+     - 新增 `test_ask_surfaces_topic_profile_hints_for_topic_queries`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/evidence.py src/uses_indexer/index_write.py src/uses_indexer/rerank.py src/uses_indexer/qa.py tests/test_indexer.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_topic_profile_fields tests/test_qa.py::test_ask_tracks_primary_and_secondary_candidates tests/test_qa.py::test_ask_uses_query_specific_section_for_callers tests/test_qa.py::test_ask_surfaces_profile_hints_for_table_queries tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_qa.py::test_ask_surfaces_path_bridge_summary_for_call_chain_questions tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_expands_table_chain_context_for_flow_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_keeps_exact_call_focus_above_vector_only_context`
+- 结果：`11 passed`
+
+### 结论
+
+- 当前“知识构建”已经把 topic / metadata 也正式沉淀进过程画像
+- 当前“问答流程”里的主候选 / 次候选更像过程级判断，不再受单条 evidence 排序抖动影响
+- 当前 `procedure_profile` 也能更稳定地从 retrieval 贯穿到 evidence、QA 和前端调试视图

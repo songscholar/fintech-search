@@ -164,29 +164,11 @@ class CodebaseQA:
         failure_hints: list[str] = []
         retrieval_sources = {str(item.get("retrieval_source") or "") for item in top_evidence}
 
-        lead = top_evidence[0]
-        primary_candidate = {
-            "procedure_name": lead["procedure_name"],
-            "file_path": lead["file_path"],
-            "line_start": lead["line_start"],
-            "line_end": lead["line_end"],
-            "retrieval_source": lead["retrieval_source"],
-            "match_source": lead["match_source"],
-            "procedure_profile": dict(lead.get("procedure_profile") or {}),
-        }
-        secondary_candidates = []
-        seen_secondary: set[tuple[str, str, int, int]] = set()
-        for item in top_evidence[1:]:
-            key = (
-                str(item["procedure_name"]),
-                str(item["file_path"]),
-                int(item["line_start"]),
-                int(item["line_end"]),
-            )
-            if key in seen_secondary:
-                continue
-            seen_secondary.add(key)
-            secondary_candidates.append(
+        candidate_groups: OrderedDict[tuple[str, str], dict[str, object]] = OrderedDict()
+        for item in top_evidence:
+            group_key = (str(item["procedure_name"]), str(item["file_path"]))
+            group = candidate_groups.setdefault(
+                group_key,
                 {
                     "procedure_name": item["procedure_name"],
                     "file_path": item["file_path"],
@@ -195,8 +177,62 @@ class CodebaseQA:
                     "retrieval_source": item["retrieval_source"],
                     "match_source": item["match_source"],
                     "procedure_profile": dict(item.get("procedure_profile") or {}),
-                }
+                    "aggregate_score": 0.0,
+                    "best_item_score": -1.0,
+                    "matched_via": set(),
+                    "sources": set(),
+                },
             )
+            group["aggregate_score"] = float(group["aggregate_score"]) + float(item.get("score") or 0.0)
+            group["matched_via"].update(item.get("matched_via") or [item["retrieval_source"]])
+            group["sources"].add(str(item["retrieval_source"]))
+            if float(item.get("score") or 0.0) >= float(group["best_item_score"]):
+                group["best_item_score"] = float(item.get("score") or 0.0)
+                group["line_start"] = item["line_start"]
+                group["line_end"] = item["line_end"]
+                group["retrieval_source"] = item["retrieval_source"]
+                group["match_source"] = item["match_source"]
+                group["procedure_profile"] = dict(item.get("procedure_profile") or {})
+
+        grouped_candidates = sorted(
+            candidate_groups.values(),
+            key=lambda item: (-float(item["aggregate_score"]), str(item["procedure_name"]), str(item["file_path"])),
+        )
+        lead_group = grouped_candidates[0]
+        lead = next(
+            (
+                item
+                for item in top_evidence
+                if str(item["procedure_name"]) == str(lead_group["procedure_name"])
+                and str(item["file_path"]) == str(lead_group["file_path"])
+            ),
+            top_evidence[0],
+        )
+        primary_candidate = {
+            "procedure_name": lead_group["procedure_name"],
+            "file_path": lead_group["file_path"],
+            "line_start": lead_group["line_start"],
+            "line_end": lead_group["line_end"],
+            "retrieval_source": lead_group["retrieval_source"],
+            "match_source": lead_group["match_source"],
+            "procedure_profile": dict(lead_group.get("procedure_profile") or {}),
+            "aggregate_score": round(float(lead_group["aggregate_score"]), 3),
+            "matched_via": sorted(str(item) for item in lead_group.get("matched_via", set())),
+        }
+        secondary_candidates = [
+            {
+                "procedure_name": item["procedure_name"],
+                "file_path": item["file_path"],
+                "line_start": item["line_start"],
+                "line_end": item["line_end"],
+                "retrieval_source": item["retrieval_source"],
+                "match_source": item["match_source"],
+                "procedure_profile": dict(item.get("procedure_profile") or {}),
+                "aggregate_score": round(float(item["aggregate_score"]), 3),
+                "matched_via": sorted(str(value) for value in item.get("matched_via", set())),
+            }
+            for item in grouped_candidates[1:3]
+        ]
         lead_desc = (
             f"最直接的证据位于过程 {lead['procedure_name']}，"
             f"文件 {lead['file_path']} 的 {lead['line_start']}-{lead['line_end']} 行附近。"
@@ -255,9 +291,17 @@ class CodebaseQA:
                     f"{item['procedure_name']} 的主要变量写入包括 {', '.join(str(name) for name in profile.get('core_variable_writes')[:3])}。"
                 )
             if query_type == "metadata_definition" and str(profile.get("metadata_role") or "") == "referencer":
-                profile_hints.append(f"{item['procedure_name']} 属于 metadata 引用过程。")
+                refs = ", ".join(str(name) for name in (profile.get("core_metadata_refs") or [])[:3])
+                profile_hints.append(
+                    f"{item['procedure_name']} 属于 metadata 引用过程。"
+                    + (f" 核心 metadata 引用包括 {refs}。" if refs else "")
+                )
             if query_type == "topic_publish" and str(profile.get("topic_role") or "") == "publisher":
-                profile_hints.append(f"{item['procedure_name']} 属于 topic 发布过程。")
+                topics = ", ".join(str(name) for name in (profile.get("core_topics") or [])[:3])
+                profile_hints.append(
+                    f"{item['procedure_name']} 属于 topic 发布过程。"
+                    + (f" 发布主题包括 {topics}。" if topics else "")
+                )
             if query_type == "failure_flow":
                 recovered_blocks = list(item.get("recovered_blocks") or [])
                 failure_blocks = [
@@ -334,6 +378,7 @@ class CodebaseQA:
             query_type=query_type,
             failure_hints=failure_hints,
             secondary_candidates=secondary_candidates,
+            primary_candidate=primary_candidate,
         )
         prioritized_hints = [*path_hints, *profile_hints, *related_hints]
         return {
@@ -358,10 +403,13 @@ class CodebaseQA:
         query_type: str,
         failure_hints: list[str],
         secondary_candidates: list[dict[str, object]],
+        primary_candidate: dict[str, object],
     ) -> dict[str, object]:
         score = 0.35 + min(len(evidence), 3) * 0.15
         top_score = float(evidence[0].get("score") or 0.0) if evidence else 0.0
         second_score = float(evidence[1].get("score") or 0.0) if len(evidence) > 1 else 0.0
+        group_top_score = float(primary_candidate.get("aggregate_score") or 0.0)
+        group_second_score = float(secondary_candidates[0].get("aggregate_score") or 0.0) if secondary_candidates else 0.0
         if related_hints:
             score += 0.1
         if any(
@@ -381,6 +429,11 @@ class CodebaseQA:
                 score += 0.08
             elif top_score - second_score <= 2.0 and secondary_candidates:
                 score -= 0.06
+        if group_top_score and group_second_score:
+            if group_top_score - group_second_score >= 10.0:
+                score += 0.05
+            elif group_top_score - group_second_score <= 3.0:
+                score -= 0.04
         if uncertainties:
             score -= min(len(uncertainties), 2) * 0.08
         score = max(0.1, min(round(score, 2), 0.95))

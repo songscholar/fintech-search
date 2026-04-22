@@ -234,6 +234,27 @@ flowchart LR
   - 主候选明显领先时，提高可信度
   - 多个候选分数咬得很近时，主动更保守
 
+再往前一层，过程画像本身也不再只覆盖“表 / 变量 / 调用”：
+
+- `core_topics`
+- `core_metadata_refs`
+
+这意味着：
+
+- topic 发布类问题不再只依赖 action/edge 文本命中
+- metadata 定义类问题也开始具备可复用的过程级画像
+
+同时，evidence 组装阶段现在会对缺失画像的候选做一次按 `procedure_id` 的回表补齐，所以像 `fts_chunk`、`fts_action` 这类命中，也能把 `procedure_profile` 稳定带进后续 QA 和前端调试视图。
+
+主候选 / 次候选的确定方式也开始从“哪条 evidence 排第一”升级成“过程级聚合判定”：
+
+- 按 `procedure_name + file_path` 聚合多个 evidence
+- 汇总 `aggregate_score`
+- 合并 `matched_via`
+- 选择该过程里分数最高的 evidence 作为代表位置
+
+这样问答层给出的主候选，更像是“当前系统认为最值得相信的过程”，而不只是“恰好排第一的那条片段”。
+
 ## 端到端问答链路
 
 ```mermaid

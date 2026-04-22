@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from pathlib import Path
@@ -104,6 +105,14 @@ class EvidenceService:
             seen_contexts.add(context_key)
             context_indexes[context_key] = len(evidence_blocks)
             procedure_counts[procedure_id] = procedure_counts.get(procedure_id, 0) + 1
+            procedure_profile = dict(candidate.get("procedure_profile") or {})
+            if not procedure_profile:
+                profile_row = conn.execute(
+                    "SELECT profile_json FROM procedure_features WHERE procedure_id = ? LIMIT 1",
+                    (procedure_id,),
+                ).fetchone()
+                if profile_row is not None and profile_row[0]:
+                    procedure_profile = dict(json.loads(str(profile_row[0])) or {})
 
             evidence_blocks.append(
                 {
@@ -119,7 +128,7 @@ class EvidenceService:
                     "file_path": candidate["file_path"],
                     "matched_text": candidate["matched_text"],
                     "reasons": list(candidate["reasons"]),
-                    "procedure_profile": dict(candidate.get("procedure_profile") or {}),
+                    "procedure_profile": procedure_profile,
                     "chunk_type": context.get("chunk_type"),
                     "chunk_summary": context.get("summary_text"),
                     "block_type": context.get("block_type"),

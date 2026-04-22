@@ -419,6 +419,29 @@ def test_build_index_commits_vector_batches_before_failure(tmp_path: Path) -> No
     assert vector_count == 1
 
 
+def test_build_index_populates_topic_profile_fields(tmp_path: Path) -> None:
+    _, db_path = _build_mc_publish_index(tmp_path)
+
+    conn = sqlite3.connect(db_path)
+    profile_row = conn.execute(
+        """
+        SELECT profile_json, feature_flags_json, summary_text
+        FROM procedure_features
+        WHERE procedure_name = 'LS_MC_PUBLISH'
+        """
+    ).fetchone()
+    conn.close()
+
+    assert profile_row is not None
+    profile_json, feature_flags_json, summary_text = profile_row
+    profile = json.loads(str(profile_json))
+    feature_flags = json.loads(str(feature_flags_json))
+    assert "CNST_MC_UFT_OPTSYNC" in profile["core_topics"]
+    assert profile["topic_role"] == "publisher"
+    assert feature_flags["has_mc_topics"] is True
+    assert "publishes" in str(summary_text)
+
+
 def test_build_index_resume_vectors_skips_existing_vectors(tmp_path: Path) -> None:
     source_dir = _write_sample_sources(tmp_path)
     db_path = tmp_path / "index.db"

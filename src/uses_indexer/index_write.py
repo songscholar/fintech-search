@@ -1279,6 +1279,8 @@ class IndexWriteService:
             "core_read_tables": read_tables[:6],
             "core_write_tables": write_tables[:6],
             "core_variable_writes": variable_writes[:6],
+            "core_topics": mc_topics[:6],
+            "core_metadata_refs": metadata_refs[:6],
             "dynamic_tables": dynamic_tables[:6],
             "call_role": (
                 "bridge"

@@ -760,6 +760,13 @@ def _profile_focus_bonus(
     }
     core_calls = {str(name).lower() for name in procedure_profile.get("core_calls") or [] if str(name)}
     core_callers = {str(name).lower() for name in procedure_profile.get("core_callers") or [] if str(name)}
+    core_topics = {str(name).lower() for name in procedure_profile.get("core_topics") or [] if str(name)}
+    core_metadata_refs = {str(name).lower() for name in procedure_profile.get("core_metadata_refs") or [] if str(name)}
+    focus_terms = {
+        str(term).lower()
+        for term in [*(query_analysis.get("focus_terms") or []), *(query_analysis.get("tokens") or [])]
+        if str(term)
+    }
 
     if query_type in {"table_write", "table_read", "table_access"}:
         matched = sorted(table_terms & core_tables)
@@ -785,6 +792,26 @@ def _profile_focus_bonus(
             bonus += 6.0
             reasons.append(f"profile_exact_callee_focus={matched[0]}")
 
+    if query_type == "metadata_definition":
+        matched = sorted(
+            term
+            for term in focus_terms
+            if any(term in metadata_ref for metadata_ref in core_metadata_refs)
+        )
+        if matched:
+            bonus += 7.0
+            reasons.append(f"profile_exact_metadata_focus={matched[0]}")
+
+    if query_type == "topic_publish":
+        matched = sorted(
+            term
+            for term in focus_terms
+            if any(term in topic_name for topic_name in core_topics)
+        )
+        if matched:
+            bonus += 7.0
+            reasons.append(f"profile_exact_topic_focus={matched[0]}")
+
     return bonus, reasons
 
 
@@ -809,10 +836,10 @@ def _classify_query_type(
 ) -> str:
     if wants_failure_flow:
         return "failure_flow"
-    if wants_metadata:
-        return "metadata_definition"
     if wants_topic:
         return "topic_publish"
+    if wants_metadata:
+        return "metadata_definition"
     if wants_table_sql and wants_table_write:
         return "table_write"
     if wants_table_sql and wants_table_read:
