@@ -3830,3 +3830,111 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前“问答流程”对失败题也更像真实排障回答：
   - 会直接指出失败处理块
   - 并在证据不足时给出更明确的不确定点
+
+## [1.2.57] - 2026-04-22
+
+### Step 64: 强化结构化过程画像、focus-chain 检索与草答画像提示
+
+### 本步目标
+
+- 继续做正向增强，不再围绕失败路径展开
+- 把过程级知识底座从“文本摘要”为主，推进到“结构化画像 + 文本摘要”并行
+- 让表访问链、变量传递链这类问题具备更直接的链路补全能力
+- 让草答阶段开始显式利用过程画像，而不是只看 excerpt
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/schema.py`
+   - `procedure_features` 新增：
+     - `profile_json`
+   - 用来稳定保存结构化过程画像，而不是只保留 `summary_text`
+
+2. 更新 `src/uses_indexer/index_build.py`
+   - 运行时 schema 检查新增：
+     - 缺失 `profile_json` 时自动补列
+   - 增量建库不再总是全量刷新所有过程画像
+   - 改为调用：
+     - `refresh_procedure_features_for_paths()`
+   - 只刷新 changed / added / metadata-only 文件，以及一跳 caller / callee 邻居
+
+3. 更新 `src/uses_indexer/index_write.py`
+   - `procedure_features` 新增结构化过程画像：
+     - `primary_inputs`
+     - `primary_outputs`
+     - `core_calls`
+     - `core_callers`
+     - `core_read_tables`
+     - `core_write_tables`
+     - `core_variable_writes`
+     - `dynamic_tables`
+     - `call_role`
+     - `table_access_role`
+     - `topic_role`
+     - `metadata_role`
+   - `summary_text` 继续增强：
+     - 输入参数摘要
+     - 输出参数摘要
+     - 动态表摘要
+   - 当动态表没有在 recovered blocks 中直接命中时，允许从 `read_tables/write_tables` 回退识别，避免画像遗漏
+
+4. 更新 `src/uses_indexer/retrieval.py`
+   - 检索候选开始显式携带：
+     - `procedure_profile`
+   - 新增 focus-chain 召回：
+     - `relation_table_chain_context`
+     - `relation_variable_chain_context`
+   - 以“表访问命中 / 变量写入命中”为 seed，补一段反向调用链上下文
+   - 不再只支持两过程调用链桥接
+
+5. 更新 `src/uses_indexer/rerank.py`
+   - query type 进一步细化并调整优先级：
+     - 表问题优先于泛化 call-chain 词命中
+     - 变量问题优先于泛化 call-chain 词命中
+   - rerank 新增过程画像感知：
+     - 更重视 `table_access_role`
+     - 更重视 `call_role=bridge`
+     - 更重视变量写入画像
+     - metadata / topic 角色也开始显式参与加权
+
+6. 更新 `src/uses_indexer/evidence.py`
+   - evidence block 现在会保留：
+     - `procedure_profile`
+   - 后续 QA 和前端调试都能直接消费
+
+7. 更新 `src/uses_indexer/qa.py`
+   - `primary_candidate` / `secondary_candidates` 开始保留：
+     - `procedure_profile`
+   - `secondary_candidates` 新增稳定去重，避免同一过程多次重复输出
+   - 针对不同 query type 新增画像提示：
+     - 表问题：
+       - `核心表访问包括 ...`
+     - 变量问题：
+       - `主要变量写入包括 ...`
+     - metadata / topic 问题：
+       - 角色型 hint
+   - 草答开始更明确利用“过程画像”，而不只是依赖 evidence excerpt
+
+8. 更新测试
+   - `tests/test_indexer.py`
+     - 验证 `procedure_features.profile_json` 已写入并包含：
+       - `primary_inputs`
+       - `table_access_role`
+       - `dynamic_tables`
+     - 新增：
+       - `test_query_index_expands_table_chain_context_for_flow_queries`
+   - `tests/test_qa.py`
+     - 新增：
+       - `test_ask_surfaces_profile_hints_for_table_queries`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/schema.py src/uses_indexer/index_build.py src/uses_indexer/index_write.py src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/qa.py src/uses_indexer/evidence.py tests/test_indexer.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_chunk_features_and_procedure_features tests/test_indexer.py::test_query_index_expands_table_chain_context_for_flow_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_qa.py::test_ask_surfaces_profile_hints_for_table_queries tests/test_qa.py::test_ask_surfaces_path_bridge_summary_for_call_chain_questions`
+- 结果：`5 passed`
+
+### 结论
+
+- 当前“知识构建”已经从“摘要文本增强”进一步进入“结构化过程画像”阶段
+- 当前“检索流程”不再只支持过程对桥接，也开始支持表访问链和变量传递链的正向扩展
+- 当前“问答流程”在草答阶段就能显式输出更贴近业务语义的过程画像提示
+- 当前“构建索引”在增量场景下也开始做更细粒度的过程画像局部刷新，避免每次都全量重算

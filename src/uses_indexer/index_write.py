@@ -49,6 +49,55 @@ class IndexWriteService:
                 procedure_name=str(procedure_name),
             )
 
+    def refresh_procedure_features_for_paths(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        paths: list[str],
+    ) -> None:
+        if not paths:
+            return
+        placeholders = ",".join("?" for _ in paths)
+        direct_rows = conn.execute(
+            f"""
+            SELECT p.id, p.file_id, p.name
+            FROM procedures p
+            JOIN files f ON f.id = p.file_id
+            WHERE f.path IN ({placeholders})
+            """,
+            paths,
+        ).fetchall()
+        direct_names = {str(row[2]) for row in direct_rows}
+        if not direct_names:
+            return
+        neighbor_rows = conn.execute(
+            f"""
+            SELECT DISTINCT p.id, p.file_id, p.name
+            FROM procedures p
+            WHERE p.name IN (
+              SELECT source_name
+              FROM edges
+              WHERE edge_type = 'calls_procedure' AND target_name IN ({",".join("?" for _ in direct_names)})
+              UNION
+              SELECT target_name
+              FROM edges
+              WHERE edge_type = 'calls_procedure' AND source_name IN ({",".join("?" for _ in direct_names)})
+            )
+            """,
+            (*direct_names, *direct_names),
+        ).fetchall()
+        refresh_rows = {
+            (int(row[0]), int(row[1]), str(row[2]))
+            for row in [*direct_rows, *neighbor_rows]
+        }
+        for procedure_id, file_id, procedure_name in sorted(refresh_rows):
+            self.upsert_procedure_features(
+                conn,
+                file_id=file_id,
+                procedure_id=procedure_id,
+                procedure_name=procedure_name,
+            )
+
     def insert_unit(self, conn: sqlite3.Connection, unit: ParsedUnit) -> tuple[int, int]:
         attributes_json = json_dumps(unit.attributes)
         cursor = conn.execute(
@@ -1016,6 +1065,21 @@ class IndexWriteService:
         procedure_id: int,
         procedure_name: str,
     ) -> None:
+        params_by_category: dict[str, list[str]] = {}
+        for category, param_name, param_id in conn.execute(
+            """
+            SELECT category, COALESCE(NULLIF(name, ''), param_id), param_id
+            FROM params
+            WHERE file_id = ?
+            ORDER BY seq
+            """,
+            (file_id,),
+        ).fetchall():
+            params_by_category.setdefault(str(category or ""), []).append(
+                str(param_name or param_id or "")
+            )
+        input_params = params_by_category.get("input", [])
+        output_params = params_by_category.get("output", [])
         actions = [
             str(row[0])
             for row in conn.execute(
@@ -1152,6 +1216,28 @@ class IndexWriteService:
         failure_handler_count = int(block_counts.get("failure_handler", 0))
         exception_handler_count = int(block_counts.get("exception_handler", 0))
         when_others_handler_count = int(block_counts.get("when_others_handler", 0))
+        dynamic_tables = sorted(
+            {
+                str(row[0])
+                for row in conn.execute(
+                    """
+                    SELECT DISTINCT target_name
+                    FROM edges
+                    WHERE procedure_id = ? AND edge_type IN ('reads_dynamic_table', 'writes_dynamic_table')
+                    ORDER BY target_name
+                    """,
+                    (procedure_id,),
+                ).fetchall()
+            }
+        )
+        if not dynamic_tables:
+            dynamic_tables = sorted(
+                {
+                    table_name
+                    for table_name in [*read_tables, *write_tables]
+                    if "dynamic" in table_name.lower()
+                }
+            )
         feature_flags = {
             "has_calls": bool(outgoing_calls or incoming_callers),
             "has_table_reads": bool(read_tables),
@@ -1179,13 +1265,49 @@ class IndexWriteService:
             "call_density": round(call_count / max(statement_count, 1), 6),
             "action_density": round(action_count / max(statement_count, 1), 6),
         }
+        table_access_role = (
+            "read_write" if read_tables and write_tables
+            else "write" if write_tables
+            else "read" if read_tables
+            else "none"
+        )
+        profile = {
+            "primary_inputs": input_params[:6],
+            "primary_outputs": output_params[:6],
+            "core_calls": outgoing_calls[:6],
+            "core_callers": incoming_callers[:6],
+            "core_read_tables": read_tables[:6],
+            "core_write_tables": write_tables[:6],
+            "core_variable_writes": variable_writes[:6],
+            "dynamic_tables": dynamic_tables[:6],
+            "call_role": (
+                "bridge"
+                if call_fan_out and call_fan_in
+                else "entry"
+                if call_fan_out
+                else "leaf"
+                if call_fan_in
+                else "isolated"
+            ),
+            "call_fan_in": call_fan_in,
+            "call_fan_out": call_fan_out,
+            "table_access_role": table_access_role,
+            "topic_role": "publisher" if mc_topics else "none",
+            "metadata_role": "referencer" if metadata_refs else "none",
+        }
         summary_parts = [procedure_name]
+        if input_params:
+            summary_parts.append(f"inputs {', '.join(input_params[:4])}")
+        if output_params:
+            summary_parts.append(f"outputs {', '.join(output_params[:4])}")
         if outgoing_calls:
             summary_parts.append(f"calls {', '.join(outgoing_calls[:4])}")
         if incoming_callers:
             summary_parts.append(f"called by {', '.join(incoming_callers[:4])}")
         if call_fan_out and call_fan_in:
             summary_parts.append(f"bridge in={call_fan_in} out={call_fan_out}")
+        if dynamic_tables:
+            summary_parts.append(f"dynamic tables {', '.join(dynamic_tables[:3])}")
         failure_summary_parts: list[str] = []
         if failure_handler_count:
             failure_summary_parts.append(f"failure={failure_handler_count}")
@@ -1212,6 +1334,7 @@ class IndexWriteService:
               file_id,
               procedure_name,
               summary_text,
+              profile_json,
               actions_json,
               outgoing_calls_json,
               incoming_callers_json,
@@ -1223,13 +1346,14 @@ class IndexWriteService:
               variable_writes_json,
               feature_flags_json
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 procedure_id,
                 file_id,
                 procedure_name,
                 summary_text,
+                json_dumps(profile),
                 json_dumps(actions),
                 json_dumps(outgoing_calls),
                 json_dumps(incoming_callers),

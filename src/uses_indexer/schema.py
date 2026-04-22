@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS procedure_features (
   file_id INTEGER NOT NULL,
   procedure_name TEXT NOT NULL,
   summary_text TEXT NOT NULL,
+  profile_json TEXT NOT NULL DEFAULT '{}',
   actions_json TEXT NOT NULL DEFAULT '[]',
   outgoing_calls_json TEXT NOT NULL DEFAULT '[]',
   incoming_callers_json TEXT NOT NULL DEFAULT '[]',

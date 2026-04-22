@@ -119,6 +119,7 @@ class EvidenceService:
                     "file_path": candidate["file_path"],
                     "matched_text": candidate["matched_text"],
                     "reasons": list(candidate["reasons"]),
+                    "procedure_profile": dict(candidate.get("procedure_profile") or {}),
                     "chunk_type": context.get("chunk_type"),
                     "chunk_summary": context.get("summary_text"),
                     "block_type": context.get("block_type"),

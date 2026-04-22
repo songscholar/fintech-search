@@ -138,24 +138,38 @@ class CodebaseQA:
             "line_end": lead["line_end"],
             "retrieval_source": lead["retrieval_source"],
             "match_source": lead["match_source"],
+            "procedure_profile": dict(lead.get("procedure_profile") or {}),
         }
-        secondary_candidates = [
-            {
-                "procedure_name": item["procedure_name"],
-                "file_path": item["file_path"],
-                "line_start": item["line_start"],
-                "line_end": item["line_end"],
-                "retrieval_source": item["retrieval_source"],
-                "match_source": item["match_source"],
-            }
-            for item in top_evidence[1:]
-        ]
+        secondary_candidates = []
+        seen_secondary: set[tuple[str, str, int, int]] = set()
+        for item in top_evidence[1:]:
+            key = (
+                str(item["procedure_name"]),
+                str(item["file_path"]),
+                int(item["line_start"]),
+                int(item["line_end"]),
+            )
+            if key in seen_secondary:
+                continue
+            seen_secondary.add(key)
+            secondary_candidates.append(
+                {
+                    "procedure_name": item["procedure_name"],
+                    "file_path": item["file_path"],
+                    "line_start": item["line_start"],
+                    "line_end": item["line_end"],
+                    "retrieval_source": item["retrieval_source"],
+                    "match_source": item["match_source"],
+                    "procedure_profile": dict(item.get("procedure_profile") or {}),
+                }
+            )
         lead_desc = (
             f"最直接的证据位于过程 {lead['procedure_name']}，"
             f"文件 {lead['file_path']} 的 {lead['line_start']}-{lead['line_end']} 行附近。"
         )
 
         summary_points = [lead_desc]
+        profile_hints: list[str] = []
         for item in top_evidence[1:]:
             summary_points.append(
                 f"另一个候选过程是 {item['procedure_name']}，命中的关键文本是 {item['matched_text']}。"
@@ -196,6 +210,20 @@ class CodebaseQA:
                     for table in related_tables[:3]
                 )
                 related_hints.append(f"{item['procedure_name']} 涉及表访问 {table_desc}。")
+            profile = dict(item.get("procedure_profile") or {})
+            if query_type in {"table_write", "table_read"} and (profile.get("core_write_tables") or profile.get("core_read_tables")):
+                table_names = list(profile.get("core_write_tables") or []) or list(profile.get("core_read_tables") or [])
+                profile_hints.append(
+                    f"{item['procedure_name']} 的核心表访问包括 {', '.join(str(name) for name in table_names[:3])}。"
+                )
+            if query_type in {"variable_write", "variable_read", "variable"} and profile.get("core_variable_writes"):
+                profile_hints.append(
+                    f"{item['procedure_name']} 的主要变量写入包括 {', '.join(str(name) for name in profile.get('core_variable_writes')[:3])}。"
+                )
+            if query_type == "metadata" and str(profile.get("metadata_role") or "") == "referencer":
+                profile_hints.append(f"{item['procedure_name']} 属于 metadata 引用过程。")
+            if query_type == "topic" and str(profile.get("topic_role") or "") == "publisher":
+                profile_hints.append(f"{item['procedure_name']} 属于 topic 发布过程。")
             if query_type == "failure_flow":
                 recovered_blocks = list(item.get("recovered_blocks") or [])
                 failure_blocks = [
@@ -226,6 +254,8 @@ class CodebaseQA:
         for line in summary_points:
             answer_lines.append(f"- {line}")
         for line in failure_hints[:2]:
+            answer_lines.append(f"- {line}")
+        for line in profile_hints[:2]:
             answer_lines.append(f"- {line}")
         for line in related_hints[:2]:
             answer_lines.append(f"- {line}")
@@ -271,7 +301,7 @@ class CodebaseQA:
             query_type=query_type,
             failure_hints=failure_hints,
         )
-        prioritized_hints = [*path_hints, *related_hints]
+        prioritized_hints = [*path_hints, *profile_hints, *related_hints]
         return {
             "status": "ok",
             "answer": "\n".join(answer_lines),

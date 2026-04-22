@@ -64,6 +64,7 @@ class IndexBuildService:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(self.owner.SCHEMA_SQL)
         self._ensure_index_state_schema(conn)
+        self._ensure_runtime_schema(conn)
 
         files = self._collect_files(root, index_type=index_type)
         initial_embedder_info = self.owner.embedder.info
@@ -121,6 +122,7 @@ class IndexBuildService:
         conn = sqlite3.connect(db_file)
         conn.execute("PRAGMA foreign_keys=ON")
         self._ensure_index_state_schema(conn)
+        self._ensure_runtime_schema(conn)
         try:
             write_service.validate_resume_source(conn, root)
             existing_index_type = read_metadata(conn, "index_type")
@@ -282,7 +284,10 @@ class IndexBuildService:
                     if self.owner._index_write_service.refresh_unit_metadata(conn, path=path, unit=unit):
                         metadata_refresh_count += 1
                 reused_vector_stats = self._restore_reusable_chunk_vectors(conn, reusable_vectors)
-                write_service.refresh_all_procedure_features(conn)
+                write_service.refresh_procedure_features_for_paths(
+                    conn,
+                    paths=[*added_paths, *rebuild_paths, *metadata_only_paths],
+                )
                 self._upsert_indexed_file_state(
                     conn,
                     files,
@@ -530,6 +535,14 @@ class IndexBuildService:
             conn.execute("ALTER TABLE indexed_files ADD COLUMN code_fingerprint TEXT NOT NULL DEFAULT ''")
         if "unit_signature" not in columns:
             conn.execute("ALTER TABLE indexed_files ADD COLUMN unit_signature TEXT NOT NULL DEFAULT ''")
+
+    def _ensure_runtime_schema(self, conn: sqlite3.Connection) -> None:
+        procedure_feature_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(procedure_features)").fetchall()
+        }
+        if "profile_json" not in procedure_feature_columns:
+            conn.execute("ALTER TABLE procedure_features ADD COLUMN profile_json TEXT NOT NULL DEFAULT '{}'")
 
     def _unit_code_fingerprint(self, unit: ParsedUnit) -> str:
         payload = [

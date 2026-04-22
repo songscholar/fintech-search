@@ -177,6 +177,7 @@ def rerank_candidate(
     chunk_role = str(candidate.get("chunk_role") or "")
     chunk_features = dict(candidate.get("chunk_features") or {})
     feature_flags = dict(candidate.get("feature_flags") or {})
+    procedure_profile = dict(candidate.get("procedure_profile") or {})
 
     overlap_tokens = [token for token in query_tokens if token in search_text]
     coverage = len(set(overlap_tokens))
@@ -292,6 +293,7 @@ def rerank_candidate(
         chunk_role=chunk_role,
         chunk_features=chunk_features,
         feature_flags=feature_flags,
+        procedure_profile=procedure_profile,
     )
     score += feature_bonus
     score_breakdown["feature_bonus"] += feature_bonus
@@ -499,6 +501,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_neighbor_context":
             bonus += 18.0
             reasons.append("intent_table_neighbor_context")
+        elif candidate.get("retrieval_source") == "relation_table_chain_context":
+            bonus += 20.0
+            reasons.append("intent_table_chain_context")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
             bonus += 30.0
             reasons.append("intent_sql_block")
@@ -533,6 +538,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_neighbor_context":
             bonus += 14.0
             reasons.append("intent_variable_neighbor_context")
+        elif candidate.get("retrieval_source") == "relation_variable_chain_context":
+            bonus += 18.0
+            reasons.append("intent_variable_chain_context")
         if query_analysis.get("wants_variable_read") and match_source == "read":
             bonus += 10.0
             reasons.append("variable_read_match")
@@ -630,6 +638,7 @@ def _feature_bonus(
     chunk_role: str,
     chunk_features: dict[str, object],
     feature_flags: dict[str, object],
+    procedure_profile: dict[str, object],
 ) -> tuple[float, list[str]]:
     bonus = 0.0
     reasons: list[str] = []
@@ -642,6 +651,9 @@ def _feature_bonus(
         if bool(feature_flags.get("has_table_reads")) or bool(feature_flags.get("has_table_writes")):
             bonus += 12.0
             reasons.append("feature_table_procedure")
+        if str(procedure_profile.get("table_access_role") or "") == "read_write":
+            bonus += 6.0
+            reasons.append("feature_table_access_role")
 
     if query_type in {"variable_write", "variable_read", "variable"}:
         if chunk_role == "variable_flow":
@@ -650,6 +662,9 @@ def _feature_bonus(
         if bool(feature_flags.get("has_variable_writes")):
             bonus += 14.0 if hit_type == "procedure" else 8.0
             reasons.append("feature_variable_procedure")
+        if procedure_profile.get("core_variable_writes"):
+            bonus += 4.0
+            reasons.append("feature_variable_profile")
 
     if query_type in {"callers", "callees"}:
         if chunk_role == "call_chain":
@@ -666,6 +681,9 @@ def _feature_bonus(
         if query_analysis.get("procedure_terms") and call_fan_in and call_fan_out:
             bonus += min(call_fan_in + call_fan_out, 4) * 1.5
             reasons.append("feature_call_fan_balance")
+        if str(procedure_profile.get("call_role") or "") == "bridge":
+            bonus += 4.0
+            reasons.append("feature_bridge_role")
 
     if query_type == "failure_flow":
         if chunk_role == "failure_flow" or bool(chunk_features.get("has_failure_markers")):
@@ -692,10 +710,16 @@ def _feature_bonus(
     if query_type == "metadata" and bool(feature_flags.get("has_metadata_refs")):
         bonus += 10.0
         reasons.append("feature_metadata_procedure")
+        if str(procedure_profile.get("metadata_role") or "") == "referencer":
+            bonus += 4.0
+            reasons.append("feature_metadata_role")
 
     if query_type == "topic" and bool(feature_flags.get("has_mc_topics")):
         bonus += 12.0
         reasons.append("feature_topic_procedure")
+        if str(procedure_profile.get("topic_role") or "") == "publisher":
+            bonus += 4.0
+            reasons.append("feature_topic_role")
 
     if hit_type == "chunk" and float(chunk_features.get("action_density") or 0.0) >= 0.5:
         bonus += 2.0
@@ -723,8 +747,6 @@ def _classify_query_type(
     wants_topic: bool,
     wants_procedure: bool,
 ) -> str:
-    if wants_call_chain:
-        return "callers" if wants_callers else "callees"
     if wants_failure_flow:
         return "failure_flow"
     if wants_table_sql and wants_table_write:
@@ -735,6 +757,8 @@ def _classify_query_type(
         return "variable_write"
     if wants_variable_read:
         return "variable_read"
+    if wants_call_chain:
+        return "callers" if wants_callers else "callees"
     if wants_metadata:
         return "metadata"
     if wants_topic:

@@ -314,7 +314,7 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
     ).fetchall()
     procedure_row = conn.execute(
         """
-        SELECT summary_text, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json
+        SELECT summary_text, profile_json, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json
         FROM procedure_features
         WHERE procedure_name = 'AF_DEEP'
         """
@@ -348,8 +348,9 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
     assert procedure_row is not None
     assert bridge_row is not None
     assert failure_row is not None
-    summary_text, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json = procedure_row
+    summary_text, profile_json, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json = procedure_row
     feature_flags = json.loads(str(feature_flags_json))
+    profile = json.loads(str(profile_json))
     bridge_summary_text, bridge_feature_flags_json = bridge_row
     bridge_feature_flags = json.loads(str(bridge_feature_flags_json))
     failure_summary_text, failure_feature_flags_json = failure_row
@@ -357,6 +358,9 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
     assert "uses_deep_table" in json.loads(str(read_tables_json))
     assert "uses_deep_table" in json.loads(str(write_tables_json))
     assert "@deep_flag" in json.loads(str(variable_writes_json))
+    assert "fund_account" in " ".join(str(item) for item in profile["primary_inputs"])
+    assert profile["table_access_role"] == "read_write"
+    assert "uses_dynamic_table" in profile["dynamic_tables"]
     assert feature_flags["has_table_reads"] is True
     assert feature_flags["has_table_writes"] is True
     assert feature_flags["has_variable_writes"] is True
@@ -860,6 +864,20 @@ def test_query_index_uses_explicit_path_bridge_for_two_procedures(tmp_path: Path
         "path_bridge=ls_flow -> af_sample -> af_deep" in " ".join(str(reason).lower() for reason in hit["reasons"])
         for hit in path_bridge_hits
     )
+
+
+def test_query_index_expands_table_chain_context_for_flow_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "uses_deep_table 更新链路", limit=20)
+
+    chain_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_table_chain_context"
+        or "relation_table_chain_context" in hit.get("matched_via", [])
+    ]
+    assert chain_hits
+    assert any("table_chain=" in " ".join(hit["reasons"]) for hit in chain_hits)
 
 
 def test_query_index_keeps_exact_call_focus_above_vector_only_context(tmp_path: Path) -> None:

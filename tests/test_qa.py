@@ -125,6 +125,15 @@ def test_ask_surfaces_path_bridge_summary_for_call_chain_questions(tmp_path: Pat
     assert result["draft_answer"]["confidence"]["score"] >= 0.55
 
 
+def test_ask_surfaces_profile_hints_for_table_queries(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "uses_fund_real 在哪里读取", evidence_limit=3, context_window=1, related_limit=2)
+
+    summary_points = list(result["draft_answer"]["summary_points"])
+    assert any("核心表访问" in item for item in summary_points)
+
+
 def test_ask_surfaces_failure_path_summary_for_failure_questions(tmp_path: Path) -> None:
     qa, db_path = _prepare_qa(tmp_path)
 

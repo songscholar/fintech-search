@@ -127,6 +127,8 @@ flowchart LR
   - feature flag 感知
   - 调用链邻居加权
   - 显式路径桥接优先级
+  - 表访问链 / 变量传递链的 focus-chain 加权
+  - 过程画像特征加权
 
 知识构建层现在还会在建库结束后做一次全局的 `procedure_features` 刷新：
 
@@ -148,6 +150,69 @@ flowchart LR
 - `has_failure_handlers`
 
 并且会进入 `procedure_features.summary_text`，所以失败题后续不只靠块级命中，还可以直接利用过程级失败语义。
+
+最新一轮知识构建又把 `procedure_features` 从“文本摘要”继续推进成了“结构化过程画像”：
+
+- `profile_json`
+  - `primary_inputs`
+  - `primary_outputs`
+  - `core_calls`
+  - `core_callers`
+  - `core_read_tables`
+  - `core_write_tables`
+  - `core_variable_writes`
+  - `dynamic_tables`
+  - `call_role`
+  - `table_access_role`
+  - `topic_role`
+  - `metadata_role`
+
+这样后续的检索、rerank 和问答都不需要只靠运行时临时拼装文本，而是可以直接消费更稳定的结构化知识。
+
+为了避免增量建库每次都全量重算所有过程摘要，现在增量路径也开始做“局部过程画像刷新”：
+
+- 只刷新 changed / added / metadata-only 文件对应的过程
+- 同时补刷新它们的一跳 caller / callee 邻居
+- 全量建库仍然保留最终的全局 refresh，确保跨文件语义一致
+
+这让“知识构建”从单纯的索引写入，进一步演进成了更明确的知识底座维护过程。
+
+在检索层，当前已经不只是过程对的调用链桥接：
+
+- `relation_path_bridge`
+  - 显式两过程最短调用路径桥接
+- `relation_table_chain_context`
+  - 以表访问命中为 seed，反向补调用链上下文
+- `relation_variable_chain_context`
+  - 以变量写入命中为 seed，反向补变量传递链上下文
+
+同时，query type 也继续细化，不再只停留在通用 call chain：
+
+- `implementation_location`
+- `callers`
+- `callees`
+- `table_read`
+- `table_write`
+- `variable_write`
+- `variable_flow`
+- `metadata_definition`
+- `topic_publish`
+
+这类更细的分类会直接影响：
+
+- 召回时选择哪路关系扩展
+- rerank 时加哪些 feature bonus
+- QA 时优先暴露哪类 summary hints
+
+问答链路也开始显式利用过程画像，而不是只依赖 evidence excerpt：
+
+- 表问题优先输出：
+  - `核心表访问包括 ...`
+- 变量问题优先输出：
+  - `主要变量写入包括 ...`
+- metadata / topic 问题优先输出角色型 hints
+
+并且 `secondary_candidates` 也开始做稳定去重，避免同一过程被多路召回后在草答里重复出现。
 
 ## 端到端问答链路
 

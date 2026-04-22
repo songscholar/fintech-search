@@ -127,6 +127,17 @@ class RetrievalService:
         for candidate in path_bridge_candidates:
             merge_candidate(candidates, candidate)
 
+        focus_chain_candidates = self._run_focus_chain_queries(
+            conn,
+            query_analysis=query_analysis,
+            relation_candidates=relation_candidates,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["focus_chain"] = [self._trace_candidate(item) for item in focus_chain_candidates[:20]]
+        source_counts["focus_chain"] = len(focus_chain_candidates)
+        for candidate in focus_chain_candidates:
+            merge_candidate(candidates, candidate)
+
         neighbor_candidates = self._run_neighbor_expansion_queries(
             conn,
             query_analysis=query_analysis,
@@ -195,6 +206,122 @@ class RetrievalService:
             )
 
         return reranked, fts_query, vector_status, retrieval_debug
+
+    def _run_focus_chain_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        relation_candidates: list[dict[str, object]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        tokens = {str(token) for token in query_analysis.get("tokens") or []}
+        if not any(
+            any(keyword in token for keyword in ("链路", "路径", "流转", "透传"))
+            for token in tokens
+        ):
+            return []
+        focus_mode = None
+        seed_sources: set[str] = set()
+        if query_analysis.get("wants_table_sql"):
+            focus_mode = "table"
+            seed_sources.add("relation_table_edge")
+        elif query_analysis.get("wants_variable"):
+            focus_mode = "variable"
+            seed_sources.add("relation_variable_edge")
+        if focus_mode is None:
+            return []
+
+        context_fetch = self.owner._context_fetch_service
+        seed_names: list[str] = []
+        for item in relation_candidates:
+            if str(item.get("retrieval_source") or "") not in seed_sources:
+                continue
+            procedure_name = str(item.get("procedure_name") or "")
+            if procedure_name and procedure_name not in seed_names:
+                seed_names.append(procedure_name)
+            if len(seed_names) >= 2:
+                break
+        if not seed_names:
+            return []
+
+        focus_term = ""
+        if focus_mode == "table":
+            focus_term = str((query_analysis.get("table_terms") or [""])[0] or "")
+        elif focus_mode == "variable":
+            focus_term = str((query_analysis.get("variable_terms") or [""])[0] or "")
+
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[str, str]] = set()
+        for procedure_name in seed_names:
+            _, incoming_hops = context_fetch.procedure_call_neighbors(
+                conn,
+                procedure_name=procedure_name,
+                max_depth=3,
+            )
+            for depth in (1, 2):
+                for caller_name in sorted(incoming_hops.get(depth, set())):
+                    if caller_name == procedure_name:
+                        continue
+                    key = (caller_name, procedure_name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    path = context_fetch.find_shortest_call_path(
+                        conn,
+                        source_procedure=caller_name,
+                        target_procedure=procedure_name,
+                        max_depth=4,
+                    )
+                    if not path or len(path) <= 1:
+                        continue
+                    summary = context_fetch.lookup_procedure_summary(conn, caller_name)
+                    if summary is None:
+                        continue
+                    row = conn.execute(
+                        """
+                        SELECT p.id, f.id, p.chinese_name, p.object_id, f.path
+                        FROM procedures p
+                        JOIN files f ON f.id = p.file_id
+                        WHERE lower(p.name) = lower(?) OR lower(COALESCE(p.chinese_name, '')) = lower(?)
+                        ORDER BY CASE WHEN lower(p.name) = lower(?) THEN 0 ELSE 1 END
+                        LIMIT 1
+                        """,
+                        (caller_name, caller_name, caller_name),
+                    ).fetchone()
+                    if row is None:
+                        continue
+                    path_label = " -> ".join(path)
+                    candidates.append(
+                        {
+                            "hit_type": "procedure",
+                            "entity_id": int(row[0]),
+                            "procedure_id": int(row[0]),
+                            "file_id": int(row[1]),
+                            "statement_id": None,
+                            "file_path": str(row[4]),
+                            "procedure_name": str(summary["procedure_name"]),
+                            "chinese_name": row[2] if row[2] else None,
+                            "object_id": row[3] if row[3] else None,
+                            "line_start": summary.get("line_start"),
+                            "line_end": summary.get("line_end"),
+                            "matched_text": path_label,
+                            "match_source": f"{focus_mode}_chain_context",
+                            "retrieval_source": f"relation_{focus_mode}_chain_context",
+                            "base_score": 89.0 if focus_mode == "table" else 85.0,
+                            "source_rank": 8.9 if focus_mode == "table" else 8.5,
+                            "search_text": f"{path_label} {focus_term} {summary.get('summary_text') or ''}",
+                            "procedure_summary": str(summary.get("summary_text") or ""),
+                            "reasons": [
+                                f"{focus_mode}_chain={path_label}",
+                                f"{focus_mode}_seed={procedure_name}",
+                                f"{focus_mode}_focus={focus_term}",
+                            ],
+                        }
+                    )
+                    if len(candidates) >= limit:
+                        return candidates
+        return candidates[:limit]
 
     def _run_path_bridge_queries(
         self,
@@ -670,7 +797,8 @@ class RetrievalService:
                   -bm25(procedure_features_fts, 5.0, 3.0) AS source_rank,
                   pf.summary_text AS search_text,
                   pf.summary_text AS procedure_summary,
-                  pf.feature_flags_json AS feature_flags_json
+                  pf.feature_flags_json AS feature_flags_json,
+                  pf.profile_json AS profile_json
                 FROM procedure_features_fts
                 JOIN procedure_features pf ON pf.procedure_id = procedure_features_fts.rowid
                 JOIN procedures p ON p.id = pf.procedure_id
@@ -1136,6 +1264,7 @@ class RetrievalService:
                   pf.procedure_name,
                   pf.summary_text,
                   pf.feature_flags_json,
+                  pf.profile_json,
                   p.chinese_name,
                   p.object_id,
                   f.path
@@ -1159,10 +1288,10 @@ class RetrievalService:
                         "procedure_id": int(row[0]),
                         "file_id": int(row[1]),
                         "statement_id": None,
-                        "file_path": str(row[7]),
+                        "file_path": str(row[8]),
                         "procedure_name": str(row[2]),
-                        "chinese_name": row[5] if row[5] else None,
-                        "object_id": row[6] if row[6] else None,
+                        "chinese_name": row[6] if row[6] else None,
+                        "object_id": row[7] if row[7] else None,
                         "line_start": None,
                         "line_end": None,
                         "matched_text": str(row[3]),
@@ -1173,6 +1302,7 @@ class RetrievalService:
                         "search_text": str(row[3]),
                         "procedure_summary": str(row[3]),
                         "feature_flags": json.loads(str(row[4] or "{}")),
+                        "procedure_profile": json.loads(str(row[5] or "{}")),
                         "reasons": [f"{reason}={term}"],
                     }
                 )
@@ -1187,6 +1317,7 @@ class RetrievalService:
                       pf.procedure_name,
                       pf.summary_text,
                       pf.feature_flags_json,
+                      pf.profile_json,
                       p.chinese_name,
                       p.object_id,
                       f.path,
@@ -1213,6 +1344,7 @@ class RetrievalService:
                       pf.procedure_name,
                       pf.summary_text,
                       pf.feature_flags_json,
+                      pf.profile_json,
                       p.chinese_name,
                       p.object_id,
                       f.path,
@@ -1244,10 +1376,10 @@ class RetrievalService:
                         "procedure_id": int(row[0]),
                         "file_id": int(row[1]),
                         "statement_id": None,
-                        "file_path": str(row[7]),
+                        "file_path": str(row[8]),
                         "procedure_name": str(row[2]),
-                        "chinese_name": row[5] if row[5] else None,
-                        "object_id": row[6] if row[6] else None,
+                        "chinese_name": row[6] if row[6] else None,
+                        "object_id": row[7] if row[7] else None,
                         "line_start": None,
                         "line_end": None,
                         "matched_text": edge_path,
@@ -1258,6 +1390,7 @@ class RetrievalService:
                         "search_text": f"{edge_path} {row[3]}",
                         "procedure_summary": str(row[3]),
                         "feature_flags": json.loads(str(row[4] or "{}")),
+                        "procedure_profile": json.loads(str(row[5] or "{}")),
                         "reasons": [f"{reason}={term}"],
                     }
                 )
@@ -1284,6 +1417,7 @@ class RetrievalService:
                   e.source_name,
                   pf.summary_text,
                   pf.feature_flags_json,
+                  pf.profile_json,
                   p.name,
                   p.chinese_name,
                   p.object_id,
@@ -1314,12 +1448,12 @@ class RetrievalService:
                         "procedure_id": int(row[1]),
                         "file_id": int(row[2]),
                         "statement_id": int(row[3]) if row[3] is not None else None,
-                        "file_path": str(row[12]),
-                        "procedure_name": str(row[9]),
-                        "chinese_name": row[10] if row[10] else None,
-                        "object_id": row[11] if row[11] else None,
-                        "line_start": int(row[13]) if row[13] is not None else None,
-                        "line_end": int(row[14]) if row[14] is not None else None,
+                        "file_path": str(row[13]),
+                        "procedure_name": str(row[10]),
+                        "chinese_name": row[11] if row[11] else None,
+                        "object_id": row[12] if row[12] else None,
+                        "line_start": int(row[14]) if row[14] is not None else None,
+                        "line_end": int(row[15]) if row[15] is not None else None,
                         "matched_text": edge_label,
                         "match_source": field_name,
                         "retrieval_source": retrieval_source,
@@ -1328,6 +1462,7 @@ class RetrievalService:
                         "search_text": f"{edge_label} {row[4]} {row[7]}",
                         "procedure_summary": str(row[7]),
                         "feature_flags": json.loads(str(row[8] or "{}")),
+                        "procedure_profile": json.loads(str(row[9] or "{}")),
                         "reasons": [f"{reason}={term}", f"edge_type={row[4]}"],
                     }
                 )
@@ -1549,6 +1684,8 @@ def _row_to_hit(row: sqlite3.Row) -> dict[str, object]:
         result["procedure_summary"] = str(row["procedure_summary"])
     if "feature_flags_json" in row.keys() and row["feature_flags_json"]:
         result["feature_flags"] = json.loads(str(row["feature_flags_json"]))
+    if "profile_json" in row.keys() and row["profile_json"]:
+        result["procedure_profile"] = json.loads(str(row["profile_json"]))
     return result
 
 
@@ -1568,4 +1705,5 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
         "matched_text": candidate["matched_text"],
         "reasons": list(candidate["reasons"]),
         "matched_via": list(candidate.get("matched_via", [])),
+        "procedure_profile": dict(candidate.get("procedure_profile") or {}),
     }
