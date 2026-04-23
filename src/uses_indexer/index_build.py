@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import time
+from collections.abc import Callable
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -96,9 +97,16 @@ class IndexBuildService:
 
         try:
             record_phase("index_files_start")
-            with conn:
-                self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=initial_embedder_info)
-                counters = self._index_files(conn, files, parse_cache=parse_cache, parse_stats=parse_stats)
+            self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=initial_embedder_info)
+            conn.commit()
+            counters = self._index_files(
+                conn,
+                files,
+                parse_cache=parse_cache,
+                parse_stats=parse_stats,
+                batch_size=500,
+                progress_callback=record_phase if progress or _truthy_env("USES_INDEXER_BUILD_PROGRESS") else None,
+            )
             record_phase("index_files_committed", {"parsed_unit_count": len(parse_cache)})
 
             record_phase("refresh_procedure_features_start")
@@ -710,6 +718,8 @@ class IndexBuildService:
         *,
         parse_cache: dict[str, ParsedUnit],
         parse_stats: dict[str, int],
+        batch_size: int | None = None,
+        progress_callback: Callable[[str, dict[str, object] | None], None] | None = None,
     ) -> dict[str, Counter[str]]:
         unit_kind_counter: Counter[str] = Counter()
         prefix_counter: Counter[str] = Counter()
@@ -722,7 +732,8 @@ class IndexBuildService:
         block_counter: Counter[str] = Counter()
         block_edge_counter: Counter[str] = Counter()
 
-        for path in files:
+        total = len(files)
+        for processed, path in enumerate(files, start=1):
             unit = self._parse_unit(path, parse_cache=parse_cache, parse_stats=parse_stats)
             file_id, procedure_id = self.owner._index_write_service.insert_unit(conn, unit)
             unit_kind_counter[unit.unit_kind] += 1
@@ -742,6 +753,14 @@ class IndexBuildService:
             vector_counter.update(local_vectors)
             block_counter.update(local_blocks)
             block_edge_counter.update(local_block_edges)
+
+            if batch_size and processed % batch_size == 0:
+                conn.commit()
+                if progress_callback:
+                    progress_callback("index_files_batch_committed", {"processed": processed, "total": total})
+
+        if batch_size:
+            conn.commit()
 
         return {
             "unit_kind": unit_kind_counter,

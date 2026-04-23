@@ -1684,7 +1684,17 @@ SQL 恢复这边也有一个仓库特性要处理：
 
 这一步不是降低知识质量，而是让 `procedure_features / procedure_graph_entities / procedure_graph_entities_fts` 的维护更适合大库。
 
-### 4. 向量阶段可拆分
+### 4. 文件索引阶段分批提交
+
+全量构建的 `index_files` 阶段现在也会按批提交。默认每 `500` 个文件提交一次，并在开启 `--progress` 或脚本构建时输出：
+
+```text
+[build-index] index_files_batch_committed {"processed": 500, "total": 23798}
+```
+
+这个改动解决的是大库构建中的超大事务问题：即使 `.db-wal` 仍会增长，主库也会周期性落盘，失败重建和构建诊断都会更稳定。
+
+### 5. 向量阶段可拆分
 
 `build-index` 和 `build_indexes.py` 现在支持跳过向量：
 

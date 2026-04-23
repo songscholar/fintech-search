@@ -5056,3 +5056,48 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 过程画像刷新不再挤在一个超大事务里
 - 大库可以先构建结构索引，再独立补齐向量
 - 当前正在运行的旧构建进程不会被这些代码改动影响
+
+## 1.2.58 - 文件索引阶段分批提交
+
+### 背景
+
+重新构建三类索引时，代码索引仍然在 `index_files` 阶段形成超大事务：
+
+- `.db-wal` 在数分钟内增长到 GB 级
+- 主库在文件索引阶段完成前仍然看不到已写入记录
+- 上一轮优化已经拆开了阶段级事务，但 `index_files` 阶段内部还没有按文件批次提交
+
+### 本轮改动
+
+1. 全量构建先提交索引元数据
+   - `_store_index_metadata()` 后立即 `commit`
+   - 避免元数据也被包在文件索引大事务中
+
+2. 文件索引阶段按批提交
+   - `_index_files()` 新增 `batch_size`
+   - 全量构建默认每 `500` 个文件提交一次
+   - 最后一批不足 `500` 的文件也会在阶段结束时提交
+
+3. 文件索引阶段输出批次进度
+   - 开启 `--progress` 或脚本构建时输出：
+     - `index_files_batch_committed`
+     - `processed`
+     - `total`
+
+4. 同步更新文档
+   - `docs/USAGE.md` 增加脚本输出说明
+   - `docs/ARCHITECTURE.md` 增加文件索引分批提交说明
+   - `docs/QUICKSTART.md` 修正 WAL 监控说明
+
+### 验证
+
+- `PYTHONPATH=src python3 -m py_compile src/uses_indexer/index_build.py`
+  - 结果：通过
+- `PYTHONPATH=src python3 -m pytest tests/test_indexer.py tests/test_cli.py -q`
+  - 结果：`73 passed`
+
+### 结论
+
+- 大库构建不再需要等整个 `index_files` 完成后才第一次提交
+- 构建过程中可以通过 `index_files_batch_committed` 判断真实进度
+- 如果中途失败，排查时可以看到已提交批次和主库落盘状态

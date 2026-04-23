@@ -490,13 +490,20 @@ python3 -m uses_indexer build-index /path/to/code --db test.db
 
 在 WAL 模式下：
 1. 所有写入操作先写入 `.db-wal` 文件
-2. 主数据库 `.db` 保持不变（或只在 checkpoint 时更新）
+2. 主数据库 `.db` 会在事务提交和 checkpoint 时逐步落盘
 3. 当索引构建完成后，SQLite 会自动执行 checkpoint，将 `.db-wal` 数据合并到 `.db`
+
+当前代码索引构建已经把文件写入阶段改成按批提交。看到类似下面的日志时，说明构建正在正常推进：
+
+```text
+[build-index] index_files_batch_committed {"processed": 500, "total": 23798}
+```
 
 ### 监控要点
 
 构建索引时：
 - ✅ **正常情况**：`.db-wal` 文件大小持续增加，程序正在正常运行
+- ✅ **正常情况**：阶段日志中的 `processed` 持续增长
 - ❌ **异常情况**：文件大小长时间不变或程序报错
 
 ### 如何确认完成？
