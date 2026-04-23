@@ -1305,3 +1305,118 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 结构化知识图更像真正的一等检索对象了
 - 检索命中的“角色语义”开始在系统内部完整流动
 - 回答层也开始把这种结构化证据直接说给用户
+
+## 最新 graph focus context 与 agent 决策统一
+
+这一轮继续解决三个核心问题：
+
+- 关系索引还不够强
+- 知识底座还不够硬
+- 回答决策还不够体系化
+
+重点是把上一轮的 `relation_graph_profile` 再往前推进半步：
+
+- 从“命中一个过程”
+- 推进到“命中一个过程，并给出该过程里更适合直接展示的 chunk 证据”
+
+同时把 grounded QA 的 `decision` 正式带进 agent/chat 上下文。
+
+### 1. `relation_graph_focus_context` 让结构化关系图开始落到 chunk 级主证据
+
+现在在已有的：
+
+- `relation_graph_profile`
+
+之外，又新增了：
+
+- `relation_graph_focus_context`
+
+这一层的作用不是再召回更多过程，而是：
+
+- 先利用 `relation_graph_profile` 找到结构化命中的过程
+- 再从该过程内部挑出更贴近 query type 的代表性 chunk
+
+当前的主偏好大致是：
+
+- table -> `table_access`
+- variable -> `variable_flow`
+- metadata -> `metadata_block`
+- topic -> `call_chain / control_flow`
+
+这意味着当前系统开始具备这样一条链：
+
+- 结构化知识图确定过程
+- 过程内部 chunk 确定更像主证据的上下文
+
+所以 `relation_graph` 不再只是“过程画像里的一条背景信息”，而开始更像真正的证据入口。
+
+### 2. query-type rerank 和 evidence 也开始围绕 graph focus context 收口
+
+为了让这层新上下文真正起作用，这轮还同步做了两件事：
+
+- `rerank` 开始给 `relation_graph_focus_context` 提供 query-type intent bonus
+- `evidence` 选择层开始把它当成高价值候选
+
+所以现在像：
+
+- 变量链路问题
+- 表访问问题
+- metadata 定义问题
+- topic 发布问题
+
+如果结构化关系图已经知道命中的过程和实体，最终给到 QA/LLM 的首批证据就更可能是：
+
+- 带结构化 focus 的 chunk
+
+而不只是：
+
+- 一个抽象的过程命中
+- 或一条较弱的文本片段
+
+### 3. grounded QA 的 decision 开始进入 agent/chat 上下文
+
+这轮的另一条重要推进，是把回答决策从 `answering.py` / `qa.py` 的内部能力，继续往 agent/chat 统一。
+
+当前 `AgentGateway._build_context()` 在 `include_answer_draft=true` 时，已经不再只传一个简单的草答文本，而是会带上：
+
+- `query_type`
+- `confidence`
+- `review_required`
+- `decision`
+- `primary_candidate`
+- `secondary_candidates`
+- `summary_points`
+- `uncertainties`
+
+这意味着当前聊天页智能体终于开始和 grounded answer 共享同一套核心判断：
+
+- 当前问题属于哪类
+- 主候选是谁
+- 是否需要人工复核
+- 当前证据是一致、分歧还是不完整
+
+所以 agent/chat 不再只是“另一个会话入口”，而开始和核心问答链路使用同一套判断基线。
+
+### 4. 当前这条主线的意义
+
+到这一轮为止，三条主线已经开始更紧地耦合成一个系统：
+
+- 关系索引：
+  - `relation_graph_profile`
+  - `relation_graph_focus_context`
+  - `relation_*_flow_path`
+- 知识底座：
+  - `procedure_profile`
+  - `relation_graph`
+  - graph focus role/value/type
+- 回答决策：
+  - grounded QA `decision`
+  - `review_required`
+  - `primary/secondary candidates`
+  - agent/chat context
+
+也就是说，当前系统已经从“有很多功能点”进一步推进到：
+
+- 结构化知识图能够更直接地产出主证据
+- 主证据能更稳定地进入 QA 和 agent
+- QA 和 agent 开始共享同一套决策框架

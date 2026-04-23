@@ -266,9 +266,18 @@ class AgentGateway:
                 context_window=context_window,
                 related_limit=related_limit,
             )
+            draft_answer = dict(ask.get("draft_answer") or {})
             bundle["answer_draft"] = {
-                "status": ask.get("draft_answer", {}).get("status"),
-                "text": ask.get("draft_answer", {}).get("text"),
+                "status": draft_answer.get("status"),
+                "text": draft_answer.get("answer"),
+                "query_type": draft_answer.get("query_type"),
+                "confidence": draft_answer.get("confidence"),
+                "review_required": bool(draft_answer.get("review_required")),
+                "decision": dict(draft_answer.get("decision") or {}),
+                "primary_candidate": dict(draft_answer.get("primary_candidate") or {}),
+                "secondary_candidates": list(draft_answer.get("secondary_candidates") or []),
+                "summary_points": list(draft_answer.get("summary_points") or [])[:3],
+                "uncertainties": list(draft_answer.get("uncertainties") or [])[:3],
             }
         return bundle
 

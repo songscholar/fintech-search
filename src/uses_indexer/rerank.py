@@ -521,6 +521,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_table_flow_path":
             bonus += 22.0
             reasons.append("intent_table_flow_path")
+        elif candidate.get("retrieval_source") == "relation_graph_focus_context":
+            bonus += 24.0
+            reasons.append("intent_relation_graph_context_table")
         elif hit_type == "block" and _looks_like_sql_evidence(combined):
             bonus += 30.0
             reasons.append("intent_sql_block")
@@ -577,6 +580,9 @@ def _intent_bonus(
         elif candidate.get("retrieval_source") == "relation_variable_flow_path":
             bonus += 20.0
             reasons.append("intent_variable_flow_path")
+        elif candidate.get("retrieval_source") == "relation_graph_focus_context":
+            bonus += 22.0
+            reasons.append("intent_relation_graph_context_variable")
         if query_analysis.get("wants_variable_read") and ("reads_variable" in combined or match_source == "read"):
             bonus += 14.0
             reasons.append("variable_read_match")
@@ -644,6 +650,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
             bonus += 6.0
             reasons.append("intent_metadata_feature_source")
+        if candidate.get("retrieval_source") == "relation_graph_focus_context":
+            bonus += 14.0
+            reasons.append("intent_relation_graph_context_metadata")
         if candidate.get("retrieval_source") == "relation_graph_profile":
             bonus += 8.0
             reasons.append("intent_relation_graph_metadata")
@@ -655,6 +664,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_action", "fts_edge"}:
             bonus += 6.0
             reasons.append("intent_topic_feature_source")
+        if candidate.get("retrieval_source") == "relation_graph_focus_context":
+            bonus += 14.0
+            reasons.append("intent_relation_graph_context_topic")
         if candidate.get("retrieval_source") == "relation_graph_profile":
             bonus += 8.0
             reasons.append("intent_relation_graph_topic")

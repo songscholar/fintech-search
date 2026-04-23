@@ -4686,3 +4686,68 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 `relation_graph` 已经不只是“能召回”，而是开始把命中的角色语义真正传递到排序、证据和草答层
 - 当前 table / variable 查询在结构化关系图上的 read/write 判断更稳定了
 - 当前 QA 输出开始更明确地区分“这是文本命中”还是“这是结构化关系图命中”
+
+## 1.2.53 - graph focus context 与 agent 决策对齐
+
+### 背景
+
+上一轮已经让 `relation_graph_profile` 能够直接参与召回和精排，但还有两个硬缺口：
+
+- 结构化关系图更多还是“命中过程”，还没有稳定落成更适合最终展示的 chunk 级主证据
+- 聊天页 agent 虽然能吃检索结果，但还没有和 grounded answer 共用同一套 `decision`
+
+### 本轮改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 新增：
+     - `relation_graph_focus_context`
+   - 它会基于 `relation_graph_profile` 命中的过程，再从同一过程里挑选更贴合 query type 的 chunk 作为上下文主证据
+   - 当前会优先按 query type 偏好：
+     - table -> `table_access`
+     - variable -> `variable_flow`
+     - metadata -> `metadata_block`
+     - topic -> `call_chain / control_flow`
+   - 所以结构化关系图现在不只“指出哪个过程”，还开始“指出这个过程里哪块上下文最像主证据”
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 新增对 `relation_graph_focus_context` 的 query-type intent bonus
+   - table / variable / metadata / topic 问题现在会更偏好这种“结构化图命中 + 过程内代表性 chunk”组合证据
+
+3. 更新 `src/uses_indexer/evidence.py`
+   - evidence 选择层开始把 `relation_graph_focus_context` 当作高价值候选
+   - 当前最终展示给 QA/LLM 的第一块证据，更容易是“结构化关系图落到 chunk 上的上下文”
+
+4. 更新 `src/uses_indexer/agent_gateway.py`
+   - `answer_draft` 不再只传一个简化文本
+   - 现在会把 grounded QA 的关键决策一起带进 agent 上下文：
+     - `query_type`
+     - `confidence`
+     - `review_required`
+     - `decision`
+     - `primary_candidate`
+     - `secondary_candidates`
+     - `summary_points`
+     - `uncertainties`
+   - 同时修复了原来错误读取 `draft_answer.text` 的问题，改成正确使用 `draft_answer.answer`
+
+5. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_uses_relation_graph_focus_context_for_variable_queries`
+       - 验证变量链路查询已经能把 `relation_graph_focus_context` 暴露进公开 hit
+   - `tests/test_api.py`
+     - `test_agent_gateway_context_bundle_exposes_grounded_decision`
+       - 验证聊天页 agent 上下文已经带上 grounded decision / primary_candidate / review_required
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_relation_graph_profile_for_variable_queries tests/test_indexer.py::test_query_index_uses_relation_graph_focus_context_for_variable_queries tests/test_indexer.py::test_query_index_expands_variable_flow_path_for_path_queries tests/test_api.py::test_agent_gateway_context_bundle_exposes_grounded_decision tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+  - 结果：`5 passed`
+- 额外保护回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前 `relation_graph` 已经不只会命中过程，还开始稳定地产出更像主证据的 chunk 上下文
+- 当前聊天页 agent 已经开始和 grounded answer 共用同一套 `decision / candidate / review_required` 判断
+- 当前“关系索引 / 知识底座 / 回答决策”这三条线开始真正收敛到同一套结构化语义上

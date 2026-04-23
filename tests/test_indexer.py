@@ -944,6 +944,21 @@ def test_query_index_uses_relation_graph_profile_for_variable_queries(tmp_path: 
     assert any(hit["graph_focus_role"] in {"read", "read_write"} for hit in graph_hits)
 
 
+def test_query_index_uses_relation_graph_focus_context_for_variable_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@fund_account 变量链路", limit=20)
+
+    context_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_graph_focus_context"
+        or "relation_graph_focus_context" in hit.get("matched_via", [])
+    ]
+    assert context_hits
+    assert any(hit["graph_focus_type"] == "variable" for hit in context_hits)
+    assert any(hit["graph_focus_value"] == "@fund_account" for hit in context_hits)
+
+
 def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

@@ -8,6 +8,7 @@ from threading import Thread
 
 import pytest
 
+from uses_indexer.agent_gateway import AgentGateway
 from uses_indexer.api import ApiError, CodebaseApi, make_handler_class
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.indexer import SQLiteIndexer
@@ -420,6 +421,29 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     )
     assert status == 200
     assert deleted["deleted"] is True
+
+
+def test_agent_gateway_context_bundle_exposes_grounded_decision(tmp_path: Path) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(indexer=api.indexer, qa=api.qa, providers={})
+
+    bundle = gateway._build_context(
+        db_path=str(db_path),
+        message="@fund_account 变量链路",
+        include_retrieval=True,
+        include_evidence=True,
+        include_answer_draft=True,
+        limit=4,
+        context_window=1,
+        related_limit=2,
+    )
+
+    draft = dict(bundle["answer_draft"])
+    assert draft["text"]
+    assert draft["query_type"] in {"variable_flow", "variable_read", "variable_write"}
+    assert isinstance(draft["decision"], dict)
+    assert draft["decision"]["evidence_alignment"] in {"aligned", "divergent", "partial"}
+    assert "primary_candidate" in draft
 
 
 def test_http_server_serves_json(tmp_path: Path) -> None:

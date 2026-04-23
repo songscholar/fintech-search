@@ -127,6 +127,17 @@ class RetrievalService:
         for candidate in relation_graph_candidates:
             merge_candidate(candidates, candidate)
 
+        relation_graph_context_candidates = self._run_relation_graph_context_queries(
+            conn,
+            query_analysis=query_analysis,
+            graph_candidates=relation_graph_candidates,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["relation_graph_context"] = [self._trace_candidate(item) for item in relation_graph_context_candidates[:20]]
+        source_counts["relation_graph_context"] = len(relation_graph_context_candidates)
+        for candidate in relation_graph_context_candidates:
+            merge_candidate(candidates, candidate)
+
         flow_bridge_candidates = self._run_entity_flow_bridge_queries(
             conn,
             query_analysis=query_analysis,
@@ -447,6 +458,138 @@ class RetrievalService:
                     )
                     if len(candidates) >= limit:
                         return candidates
+        return candidates[:limit]
+
+    def _run_relation_graph_context_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        graph_candidates: list[dict[str, object]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        query_type = str(query_analysis.get("query_type") or "")
+        if query_type not in {
+            "table_write",
+            "table_read",
+            "table_access",
+            "variable_write",
+            "variable_read",
+            "variable_flow",
+            "metadata_definition",
+            "topic_publish",
+        }:
+            return []
+
+        preferred_roles = {
+            "table_write": {"table_access", "call_chain"},
+            "table_read": {"table_access", "call_chain"},
+            "table_access": {"table_access", "call_chain"},
+            "variable_write": {"variable_flow", "call_chain"},
+            "variable_read": {"variable_flow", "call_chain"},
+            "variable_flow": {"variable_flow", "call_chain"},
+            "metadata_definition": {"metadata_block", "call_chain"},
+            "topic_publish": {"call_chain", "control_flow"},
+        }.get(query_type, {"call_chain"})
+
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[int, str, str]] = set()
+        for graph_candidate in graph_candidates[: max(limit, 6)]:
+            procedure_id = maybe_int(graph_candidate.get("procedure_id"))
+            if procedure_id is None:
+                continue
+            graph_focus_type = str(graph_candidate.get("graph_focus_type") or "")
+            graph_focus_value = str(graph_candidate.get("graph_focus_value") or "")
+            graph_focus_role = str(graph_candidate.get("graph_focus_role") or "")
+            dedupe_key = (procedure_id, graph_focus_type, graph_focus_value.lower())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            chunk_rows = conn.execute(
+                """
+                SELECT
+                  c.id,
+                  c.procedure_id,
+                  c.file_id,
+                  c.line_start,
+                  c.line_end,
+                  c.chunk_type,
+                  c.chunk_role,
+                  c.summary_text,
+                  c.content,
+                  c.chunk_features_json,
+                  f.path,
+                  p.name,
+                  p.chinese_name,
+                  p.object_id
+                FROM chunks c
+                JOIN files f ON f.id = c.file_id
+                JOIN procedures p ON p.id = c.procedure_id
+                WHERE c.procedure_id = ?
+                ORDER BY c.line_start
+                """,
+                (procedure_id,),
+            ).fetchall()
+            best_row = None
+            best_score = None
+            lowered_focus = graph_focus_value.lower()
+            for row in chunk_rows:
+                chunk_role = str(row[6] or "")
+                summary_text = str(row[7] or "")
+                content = str(row[8] or "")
+                haystack = f"{summary_text} {content}".lower()
+                score = 0
+                if chunk_role in preferred_roles:
+                    score += 4
+                if lowered_focus and lowered_focus in haystack:
+                    score += 3
+                if graph_focus_role and graph_focus_role in haystack:
+                    score += 1
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_row = row
+            if best_row is None:
+                continue
+            chunk_role = str(best_row[6] or "")
+            summary_text = str(best_row[7] or best_row[5] or "")
+            content = str(best_row[8] or "")
+            search_text = f"{graph_focus_value} {graph_focus_role} {summary_text} {content}"
+            candidates.append(
+                {
+                    "hit_type": "chunk",
+                    "entity_id": int(best_row[0]),
+                    "procedure_id": int(best_row[1]),
+                    "file_id": int(best_row[2]),
+                    "statement_id": None,
+                    "file_path": str(best_row[10]),
+                    "procedure_name": str(best_row[11]),
+                    "chinese_name": best_row[12] if best_row[12] else None,
+                    "object_id": best_row[13] if best_row[13] else None,
+                    "line_start": int(best_row[3]) if best_row[3] is not None else None,
+                    "line_end": int(best_row[4]) if best_row[4] is not None else None,
+                    "matched_text": summary_text or chunk_role,
+                    "match_source": "graph_focus_context",
+                    "retrieval_source": "relation_graph_focus_context",
+                    "base_score": 91.0 if graph_focus_type in {"table", "variable"} else 88.0,
+                    "source_rank": 9.1 if graph_focus_type in {"table", "variable"} else 8.8,
+                    "search_text": search_text,
+                    "chunk_role": chunk_role,
+                    "chunk_features": json.loads(str(best_row[9] or "{}")),
+                    "graph_focus_type": graph_focus_type,
+                    "graph_focus_value": graph_focus_value,
+                    "graph_focus_role": graph_focus_role,
+                    "procedure_profile": dict(graph_candidate.get("procedure_profile") or {}),
+                    "feature_flags": dict(graph_candidate.get("feature_flags") or {}),
+                    "procedure_summary": str(graph_candidate.get("procedure_summary") or ""),
+                    "reasons": [
+                        f"relation_graph_focus_context={graph_focus_value}",
+                        f"relation_graph_role={graph_focus_role}",
+                        f"relation_graph_chunk_role={chunk_role}",
+                    ],
+                }
+            )
+            if len(candidates) >= limit:
+                break
         return candidates[:limit]
 
     def _run_entity_flow_bridge_queries(
