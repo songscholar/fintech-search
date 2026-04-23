@@ -14,7 +14,7 @@ from .embeddings import EmbeddingConfigError, EmbeddingInfo
 from .metadata_store import read_metadata, write_metadata_map
 from .observability import build_incremental_trace
 from .models import ParsedUnit
-from .parser import is_supported_path
+from .parser import SUPPORTED_CODE_SUFFIXES, is_supported_path
 from .semantic_recovery import build_semantic_chunks, recover_blocks
 
 
@@ -559,7 +559,7 @@ class IndexBuildService:
             return "metadata" in str(path).lower() and path.suffix not in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface")
 
         def is_code_path(path: Path) -> bool:
-            return path.suffix in (".uftfunction", ".uftservice", ".uftatomfunction", ".uftfactorservice", ".extinterface") and "metadata" not in str(path).lower()
+            return path.suffix in SUPPORTED_CODE_SUFFIXES and "metadata" not in str(path).lower()
 
         return sorted(
             path for path in root.rglob("*")

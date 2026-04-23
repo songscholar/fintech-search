@@ -461,6 +461,24 @@ def test_build_index_can_skip_vectors_and_creates_perf_indexes(tmp_path: Path) -
     assert "idx_statements_procedure" in index_names
 
 
+def test_code_index_includes_uft_atom_service_files(tmp_path: Path) -> None:
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    (source_dir / "AS_SAMPLE.uftatomservice").write_text(CALLER_XML, encoding="utf-8")
+    db_path = tmp_path / "index.db"
+
+    result = SQLiteIndexer().build_index(source_dir, db_path, index_type="code", skip_vectors=True)
+
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT file_name, prefix FROM files").fetchone()
+    finally:
+        conn.close()
+
+    assert result["file_count"] == 1
+    assert row == ("AS_SAMPLE.uftatomservice", "AS")
+
+
 def test_build_index_commits_vector_batches_before_failure(tmp_path: Path) -> None:
     source_dir = _write_sample_sources(tmp_path)
     db_path = tmp_path / "index.db"

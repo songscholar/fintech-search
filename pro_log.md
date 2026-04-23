@@ -5186,3 +5186,54 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 这不是表结构索引整体构建失败，而是标准字段元数据没有加载
 - 修复后表结构问答可以只依赖索引库回答字段含义、类型、字典和注释
 - 后续查询表结构时不应回退原文件，除非明确是在调试索引构建问题
+
+## 1.2.60 - 代码索引文件类型完整性检查
+
+### 背景
+
+检查代码索引和元数据索引构建内容是否完整时，对 `_collect_files()` 和当前数据库做了对账。
+
+### 检查结果
+
+1. 元数据索引
+   - 当前收集并入库 `40` 个业务元数据文件
+   - 已构建：
+     - `55873` 个 metadata statement
+     - `55873` 个 chunk
+     - `55873` 个向量
+     - `40` 条 procedure feature
+   - 额外发现的 `30` 个 metadata 路径文件均属于 Eclipse 工作区 `.metadata/.plugins` 配置文件，不属于业务元数据，不应进入索引
+
+2. 代码索引
+   - 当前已构建数据库中有 `23798` 个文件
+   - 对账发现 `code` 模式应收集 `23895` 个文件
+   - 差异是 `97` 个 `.uftatomservice` 文件
+   - `UftDslParser` 已支持 `.uftatomservice`
+   - 但 `_collect_files(index_type="code")` 内部硬编码后缀列表时漏掉了 `.uftatomservice`
+
+### 本轮改动
+
+1. 修复代码索引文件收集规则
+   - `_collect_files()` 的 `is_code_path()` 改为复用 `SUPPORTED_CODE_SUFFIXES`
+   - 避免 parser 支持新代码后缀后，构建收集逻辑再次漏同步
+
+2. 增加回归测试
+   - `test_code_index_includes_uft_atom_service_files`
+   - 验证 `index_type="code"` 会收集 `.uftatomservice`
+
+### 验证
+
+- `PYTHONPATH=src python3 -m py_compile src/uses_indexer/index_build.py tests/test_indexer.py`
+  - 结果：通过
+- `PYTHONPATH=src python3 -m pytest tests/test_indexer.py::test_code_index_includes_uft_atom_service_files tests/test_indexer.py::test_build_index_can_skip_vectors_and_creates_perf_indexes tests/test_indexer.py::test_metadata_files_are_indexed_and_summarized -q`
+  - 结果：`3 passed`
+- 修复后文件收集数量：
+  - `code`: `23895`
+  - `metadata`: `40`
+  - `all`: `23935`
+
+### 结论
+
+- 元数据索引边界基本合理
+- 代码索引构建逻辑存在一个明确漏收集问题，已修复
+- 当前磁盘上的 `business_code_index.db` 仍是旧构建结果，需要重建代码索引后才会包含这 `97` 个 `.uftatomservice`

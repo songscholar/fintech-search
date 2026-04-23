@@ -2,10 +2,10 @@
   "source_root": "/Users/songzuoqiang/Documents/agent/code",
   "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db",
   "index_type": "code",
-  "file_count": 23798,
+  "file_count": 23895,
   "unit_kind_counts": {
     "Function": 14516,
-    "Service": 6503,
+    "Service": 6600,
     "OuterInterface": 2748,
     "FactorService": 31
   },
@@ -14,7 +14,7 @@
     "LS": 8750,
     "AF": 1191,
     "EI": 524,
-    "AS": 40,
+    "AS": 137,
     "RS": 31,
     "CNST": 13,
     "CSNT": 8,
@@ -23,23 +23,23 @@
     "REF": 1
   },
   "statement_counts": {
-    "brace": 329283,
-    "comment": 246689,
-    "assignment": 159342,
-    "action": 149321,
-    "control": 145111,
-    "call": 55083,
+    "brace": 329327,
+    "comment": 246821,
+    "assignment": 159580,
+    "action": 149339,
+    "control": 145135,
+    "call": 55207,
     "raw": 37898,
     "goto": 602,
     "label": 238
   },
   "edge_counts": {
-    "reads_variable": 1175206,
-    "writes_variable": 161433,
-    "uses_action": 149321,
-    "uses_target": 69801,
-    "calls_procedure": 55083,
-    "reads_table": 19212,
+    "reads_variable": 1176183,
+    "writes_variable": 161671,
+    "uses_action": 149339,
+    "uses_target": 69803,
+    "calls_procedure": 55207,
+    "reads_table": 19228,
     "writes_table": 10234,
     "uses_component": 1237,
     "jumps_to_label": 602,
@@ -48,24 +48,24 @@
     "defines_label": 238
   },
   "variable_ref_counts": {
-    "read": 1175206,
-    "write": 230152
+    "read": 1176183,
+    "write": 230413
   },
   "action_counts": {
-    "action": 149321,
-    "call": 55083
+    "action": 149339,
+    "call": 55207
   },
   "chunk_counts": {
-    "control_block": 129084,
-    "action_block": 33654,
-    "call_flow": 18776,
-    "call_block": 13601,
-    "assignment_block": 5379,
+    "control_block": 129102,
+    "action_block": 33656,
+    "call_flow": 18790,
+    "call_block": 13679,
+    "assignment_block": 5412,
     "raw_block": 670,
     "statement_block": 59
   },
   "vector_counts": {
-    "local-hash": 201223
+    "local-hash": 201368
   },
   "block_counts": {
     "sql_execute": 9876,
@@ -96,21 +96,21 @@
     "publishes_mc_topic": 32
   },
   "fts_counts": {
-    "procedures_fts": 23798,
-    "statements_fts": 1123567,
-    "actions_fts": 204404,
-    "edges_fts": 1643371,
-    "chunks_fts": 201223,
+    "procedures_fts": 23895,
+    "statements_fts": 1124147,
+    "actions_fts": 204546,
+    "edges_fts": 1644746,
+    "chunks_fts": 201368,
     "blocks_fts": 40887
   },
   "vector_stats": {
     "batch_size": 512,
-    "missing_before": 201223,
-    "inserted": 201223,
+    "missing_before": 201368,
+    "inserted": 201368,
     "batches": 394,
     "missing_after": 0,
     "provider_counts": {
-      "local-hash": 201223
+      "local-hash": 201368
     }
   },
   "embedding": {
@@ -119,693 +119,693 @@
     "dimension": 256
   },
   "build_stats": {
-    "parsed_unit_count": 23798,
-    "parse_cache_hits": 23798,
-    "parse_cache_misses": 23798,
+    "parsed_unit_count": 23895,
+    "parse_cache_hits": 23895,
+    "parse_cache_misses": 23895,
     "phase_events": [
       {
         "phase": "collect_files_start",
-        "elapsed_seconds": 0.005,
+        "elapsed_seconds": 0.004,
         "index_type": "code"
       },
       {
         "phase": "collect_files_done",
-        "elapsed_seconds": 0.372,
-        "file_count": 23798
+        "elapsed_seconds": 0.33,
+        "file_count": 23895
       },
       {
         "phase": "index_files_start",
-        "elapsed_seconds": 0.372
+        "elapsed_seconds": 0.33
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 2.97,
+        "elapsed_seconds": 3.043,
         "processed": 500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 5.596,
+        "elapsed_seconds": 5.919,
         "processed": 1000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 10.574,
+        "elapsed_seconds": 11.029,
         "processed": 1500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 15.413,
+        "elapsed_seconds": 15.878,
         "processed": 2000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 20.243,
+        "elapsed_seconds": 20.794,
         "processed": 2500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 26.035,
+        "elapsed_seconds": 26.716,
         "processed": 3000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 35.385,
+        "elapsed_seconds": 36.217,
         "processed": 3500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 42.992,
+        "elapsed_seconds": 43.82,
         "processed": 4000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 50.217,
+        "elapsed_seconds": 51.238,
         "processed": 4500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 61.379,
+        "elapsed_seconds": 62.169,
         "processed": 5000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 75.955,
+        "elapsed_seconds": 76.627,
         "processed": 5500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 92.876,
+        "elapsed_seconds": 93.379,
         "processed": 6000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 110.113,
+        "elapsed_seconds": 110.263,
         "processed": 6500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 130.586,
+        "elapsed_seconds": 130.622,
         "processed": 7000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 151.521,
+        "elapsed_seconds": 151.013,
         "processed": 7500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 176.7,
+        "elapsed_seconds": 174.827,
         "processed": 8000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 200.766,
+        "elapsed_seconds": 198.555,
         "processed": 8500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 225.597,
+        "elapsed_seconds": 222.154,
         "processed": 9000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 257.628,
+        "elapsed_seconds": 251.633,
         "processed": 9500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 290.451,
+        "elapsed_seconds": 284.06,
         "processed": 10000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 321.4,
+        "elapsed_seconds": 312.42,
         "processed": 10500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 355.087,
+        "elapsed_seconds": 343.196,
         "processed": 11000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 384.168,
+        "elapsed_seconds": 371.763,
         "processed": 11500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 412.87,
+        "elapsed_seconds": 398.191,
         "processed": 12000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 441.324,
+        "elapsed_seconds": 424.361,
         "processed": 12500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 470.325,
+        "elapsed_seconds": 451.69,
         "processed": 13000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 499.709,
+        "elapsed_seconds": 479.845,
         "processed": 13500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 530.352,
+        "elapsed_seconds": 509.928,
         "processed": 14000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 560.698,
+        "elapsed_seconds": 539.738,
         "processed": 14500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 591.687,
+        "elapsed_seconds": 569.916,
         "processed": 15000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 622.936,
+        "elapsed_seconds": 600.953,
         "processed": 15500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 660.576,
+        "elapsed_seconds": 637.311,
         "processed": 16000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 699.547,
+        "elapsed_seconds": 676.865,
         "processed": 16500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 740.697,
+        "elapsed_seconds": 719.901,
         "processed": 17000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 777.662,
+        "elapsed_seconds": 758.035,
         "processed": 17500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 814.517,
+        "elapsed_seconds": 795.189,
         "processed": 18000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 855.784,
+        "elapsed_seconds": 836.204,
         "processed": 18500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 897.564,
+        "elapsed_seconds": 878.716,
         "processed": 19000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 942.496,
+        "elapsed_seconds": 926.759,
         "processed": 19500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 985.549,
+        "elapsed_seconds": 973.238,
         "processed": 20000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1030.307,
+        "elapsed_seconds": 1020.791,
         "processed": 20500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1079.051,
+        "elapsed_seconds": 1069.261,
         "processed": 21000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1131.738,
+        "elapsed_seconds": 1121.102,
         "processed": 21500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1179.63,
+        "elapsed_seconds": 1172.764,
         "processed": 22000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1230.27,
+        "elapsed_seconds": 1226.924,
         "processed": 22500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1281.37,
+        "elapsed_seconds": 1278.239,
         "processed": 23000,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_batch_committed",
-        "elapsed_seconds": 1335.552,
+        "elapsed_seconds": 1331.332,
         "processed": 23500,
-        "total": 23798
+        "total": 23895
       },
       {
         "phase": "index_files_committed",
-        "elapsed_seconds": 1367.422,
-        "parsed_unit_count": 23798
+        "elapsed_seconds": 1378.736,
+        "parsed_unit_count": 23895
       },
       {
         "phase": "refresh_procedure_features_start",
-        "elapsed_seconds": 1367.422
+        "elapsed_seconds": 1378.736
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1416.176,
+        "elapsed_seconds": 1429.112,
         "processed": 500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1465.081,
+        "elapsed_seconds": 1476.315,
         "processed": 1000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1514.533,
+        "elapsed_seconds": 1524.048,
         "processed": 1500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1563.625,
+        "elapsed_seconds": 1571.832,
         "processed": 2000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1612.547,
+        "elapsed_seconds": 1619.553,
         "processed": 2500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1661.031,
+        "elapsed_seconds": 1667.176,
         "processed": 3000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1709.457,
+        "elapsed_seconds": 1715.315,
         "processed": 3500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1758.273,
+        "elapsed_seconds": 1762.803,
         "processed": 4000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1807.641,
+        "elapsed_seconds": 1816.907,
         "processed": 4500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1857.104,
+        "elapsed_seconds": 1864.868,
         "processed": 5000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1906.611,
+        "elapsed_seconds": 1914.474,
         "processed": 5500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 1955.927,
+        "elapsed_seconds": 1963.102,
         "processed": 6000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2004.741,
+        "elapsed_seconds": 2010.95,
         "processed": 6500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2053.341,
+        "elapsed_seconds": 2058.998,
         "processed": 7000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2102.343,
+        "elapsed_seconds": 2111.849,
         "processed": 7500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2151.811,
+        "elapsed_seconds": 2159.55,
         "processed": 8000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2201.058,
+        "elapsed_seconds": 2206.92,
         "processed": 8500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2249.916,
+        "elapsed_seconds": 2254.535,
         "processed": 9000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2299.391,
+        "elapsed_seconds": 2301.554,
         "processed": 9500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2348.65,
+        "elapsed_seconds": 2349.6,
         "processed": 10000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2397.767,
+        "elapsed_seconds": 2397.288,
         "processed": 10500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2446.875,
+        "elapsed_seconds": 2445.078,
         "processed": 11000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2495.647,
+        "elapsed_seconds": 2489.011,
         "processed": 11500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2543.631,
+        "elapsed_seconds": 2530.755,
         "processed": 12000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2591.448,
+        "elapsed_seconds": 2571.974,
         "processed": 12500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2640.07,
+        "elapsed_seconds": 2613.629,
         "processed": 13000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2688.749,
+        "elapsed_seconds": 2659.522,
         "processed": 13500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2737.271,
+        "elapsed_seconds": 2701.974,
         "processed": 14000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2785.446,
+        "elapsed_seconds": 2744.219,
         "processed": 14500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2833.745,
+        "elapsed_seconds": 2786.692,
         "processed": 15000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2882.099,
+        "elapsed_seconds": 2832.924,
         "processed": 15500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2931.088,
+        "elapsed_seconds": 2880.964,
         "processed": 16000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 2980.073,
+        "elapsed_seconds": 2928.202,
         "processed": 16500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3029.075,
+        "elapsed_seconds": 2971.605,
         "processed": 17000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3077.648,
+        "elapsed_seconds": 3014.45,
         "processed": 17500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3126.247,
+        "elapsed_seconds": 3059.761,
         "processed": 18000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3175.336,
+        "elapsed_seconds": 3103.284,
         "processed": 18500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3223.442,
+        "elapsed_seconds": 3146.83,
         "processed": 19000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3269.039,
+        "elapsed_seconds": 3189.777,
         "processed": 19500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3314.779,
+        "elapsed_seconds": 3232.371,
         "processed": 20000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3360.493,
+        "elapsed_seconds": 3275.064,
         "processed": 20500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3406.444,
+        "elapsed_seconds": 3318.105,
         "processed": 21000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3452.249,
+        "elapsed_seconds": 3367.421,
         "processed": 21500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3497.498,
+        "elapsed_seconds": 3416.36,
         "processed": 22000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3545.924,
+        "elapsed_seconds": 3463.412,
         "processed": 22500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3594.098,
+        "elapsed_seconds": 3509.636,
         "processed": 23000,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3643.858,
+        "elapsed_seconds": 3552.955,
         "processed": 23500,
-        "total": 23798,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_batch",
-        "elapsed_seconds": 3672.963,
-        "processed": 23798,
-        "total": 23798,
+        "elapsed_seconds": 3590.396,
+        "processed": 23895,
+        "total": 23895,
         "batch_size": 500
       },
       {
         "phase": "refresh_procedure_features_done",
-        "elapsed_seconds": 3672.964,
-        "procedure_count": 23798,
+        "elapsed_seconds": 3590.397,
+        "procedure_count": 23895,
         "batch_size": 500,
         "batches": 48
       },
       {
         "phase": "upsert_indexed_file_state_start",
-        "elapsed_seconds": 3672.964
+        "elapsed_seconds": 3590.397
       },
       {
         "phase": "upsert_indexed_file_state_done",
-        "elapsed_seconds": 3674.912
+        "elapsed_seconds": 3592.326
       },
       {
         "phase": "populate_vectors_start",
-        "elapsed_seconds": 3674.912
+        "elapsed_seconds": 3592.326
       },
       {
         "phase": "populate_vectors_done",
-        "elapsed_seconds": 3828.074,
+        "elapsed_seconds": 3742.749,
         "batch_size": 512,
-        "missing_before": 201223,
-        "inserted": 201223,
+        "missing_before": 201368,
+        "inserted": 201368,
         "batches": 394,
         "missing_after": 0,
         "provider_counts": {
-          "local-hash": 201223
+          "local-hash": 201368
         }
       },
       {
         "phase": "summarize_db_start",
-        "elapsed_seconds": 3828.084
+        "elapsed_seconds": 3742.758
       },
       {
         "phase": "summarize_db_done",
-        "elapsed_seconds": 3829.351
+        "elapsed_seconds": 3752.858
       }
     ],
     "procedure_feature_refresh": {
-      "procedure_count": 23798,
+      "procedure_count": 23895,
       "batch_size": 500,
       "batches": 48
     },
@@ -813,26 +813,26 @@
   },
   "db_summary": {
     "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db",
-    "files": 23798,
+    "files": 23895,
     "metadata_files": 0,
-    "procedures": 23798,
-    "histories": 46015,
-    "params": 525503,
-    "statements": 1123567,
+    "procedures": 23895,
+    "histories": 46167,
+    "params": 526773,
+    "statements": 1124147,
     "metadata_entries": 0,
-    "actions": 204404,
-    "variable_refs": 1405358,
-    "edges": 1643371,
-    "chunks": 201223,
-    "chunk_vectors": 201223,
+    "actions": 204546,
+    "variable_refs": 1406596,
+    "edges": 1644746,
+    "chunks": 201368,
+    "chunk_vectors": 201368,
     "blocks": 40887,
     "block_edges": 726072,
     "fts_counts": {
-      "procedures_fts": 23798,
-      "statements_fts": 1123567,
-      "actions_fts": 204404,
-      "edges_fts": 1643371,
-      "chunks_fts": 201223,
+      "procedures_fts": 23895,
+      "statements_fts": 1124147,
+      "actions_fts": 204546,
+      "edges_fts": 1644746,
+      "chunks_fts": 201368,
       "blocks_fts": 40887
     },
     "embedding": {
@@ -842,7 +842,7 @@
     },
     "unit_kind_counts": {
       "Function": 14516,
-      "Service": 6503,
+      "Service": 6600,
       "OuterInterface": 2748,
       "FactorService": 31
     },
@@ -851,7 +851,7 @@
       "LS": 8750,
       "AF": 1191,
       "EI": 524,
-      "AS": 40,
+      "AS": 137,
       "RS": 31,
       "CNST": 13,
       "CSNT": 8,
@@ -860,28 +860,28 @@
       "REF": 1
     },
     "statement_kind_counts": {
-      "brace": 329283,
-      "comment": 246689,
-      "assignment": 159342,
-      "action": 149321,
-      "control": 145111,
-      "call": 55083,
+      "brace": 329327,
+      "comment": 246821,
+      "assignment": 159580,
+      "action": 149339,
+      "control": 145135,
+      "call": 55207,
       "raw": 37898,
       "goto": 602,
       "label": 238
     },
     "metadata_entry_tag_counts": {},
     "variable_ref_type_counts": {
-      "read": 1175206,
-      "write": 230152
+      "read": 1176183,
+      "write": 230413
     },
     "edge_type_counts": {
-      "reads_variable": 1175206,
-      "writes_variable": 161433,
-      "uses_action": 149321,
-      "uses_target": 69801,
-      "calls_procedure": 55083,
-      "reads_table": 19212,
+      "reads_variable": 1176183,
+      "writes_variable": 161671,
+      "uses_action": 149339,
+      "uses_target": 69803,
+      "calls_procedure": 55207,
+      "reads_table": 19228,
       "writes_table": 10234,
       "uses_component": 1237,
       "jumps_to_label": 602,
@@ -890,16 +890,16 @@
       "defines_label": 238
     },
     "chunk_type_counts": {
-      "control_block": 129084,
-      "action_block": 33654,
-      "call_flow": 18776,
-      "call_block": 13601,
-      "assignment_block": 5379,
+      "control_block": 129102,
+      "action_block": 33656,
+      "call_flow": 18790,
+      "call_block": 13679,
+      "assignment_block": 5412,
       "raw_block": 670,
       "statement_block": 59
     },
     "vector_provider_counts": {
-      "local-hash": 201223
+      "local-hash": 201368
     },
     "block_type_counts": {
       "sql_execute": 9876,
@@ -931,17 +931,17 @@
     },
     "call_kind_counts": {
       "local_function_call": 47408,
-      "unknown_call_kind": 3676,
+      "unknown_call_kind": 3800,
       "rpc_call": 3999
     },
     "call_rule_counts": {
       "AF->AF": 2522,
       "AF->LF": 4,
       "AF->LS": 310,
+      "AS->AF": 126,
       "AS->LS": 6,
       "AS->LF": 68,
       "AS->AS": 21,
-      "AS->AF": 2,
       "CNST->LF": 42,
       "CNST->LS": 1,
       "CNST->AF": 1,
