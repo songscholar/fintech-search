@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS table_fields (
   data_type TEXT,
   chinese_name TEXT,
   dictionary_type TEXT,
+  description TEXT,
+  public_type TEXT,
+  comments TEXT,
   FOREIGN KEY(table_id) REFERENCES tables(id) ON DELETE CASCADE
 );
 
@@ -78,6 +81,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS table_fields_fts USING fts5(
   field_id,
   data_type,
   chinese_name,
+  dictionary_type,
+  description,
+  public_type,
+  comments,
   table_name,
   path,
   tokenize='unicode61 remove_diacritics 0'
@@ -120,8 +127,9 @@ class TableIndexer:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(TABLE_SCHEMA_SQL)
 
-        if stdfield_path:
-            self.parser.load_standard_fields(stdfield_path)
+        resolved_stdfield_path = self._resolve_stdfield_path(root, stdfield_path)
+        if resolved_stdfield_path:
+            self.parser.load_standard_fields(resolved_stdfield_path)
         if mdbobject_path:
             self.parser.load_tablespace_relations(mdbobject_path)
 
@@ -168,6 +176,7 @@ class TableIndexer:
             "table_space_counts": dict(table_counter),
             "field_count": field_counter["total"],
             "index_count": index_counter["total"],
+            "standard_field_count": len(self.parser.standard_fields),
             "db_summary": db_summary,
         }
 
@@ -226,8 +235,8 @@ class TableIndexer:
     def _insert_field(self, conn: sqlite3.Connection, table_id: int, field: TableField) -> None:
         cursor = conn.execute(
             """
-            INSERT INTO table_fields(table_id, field_id, allow_null, uuid, data_type, chinese_name, dictionary_type)
-            VALUES(?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO table_fields(table_id, field_id, allow_null, uuid, data_type, chinese_name, dictionary_type, description, public_type, comments)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 table_id,
@@ -237,6 +246,9 @@ class TableIndexer:
                 field.data_type,
                 field.chinese_name,
                 field.dictionary_type,
+                field.description,
+                field.public_type,
+                field.comments,
             ),
         )
         field_id = int(cursor.lastrowid)
@@ -247,14 +259,18 @@ class TableIndexer:
 
         conn.execute(
             """
-            INSERT INTO table_fields_fts(rowid, field_id, data_type, chinese_name, table_name, path)
-            VALUES(?, ?, ?, ?, ?, ?)
+            INSERT INTO table_fields_fts(rowid, field_id, data_type, chinese_name, dictionary_type, description, public_type, comments, table_name, path)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 field_id,
                 field.id,
                 field.data_type or "",
                 field.chinese_name or "",
+                field.dictionary_type or "",
+                field.description or "",
+                field.public_type or "",
+                field.comments or "",
                 table_name,
                 path,
             ),
@@ -305,9 +321,29 @@ class TableIndexer:
         return {
             "tables": scalar("SELECT COUNT(*) FROM tables"),
             "table_fields": scalar("SELECT COUNT(*) FROM table_fields"),
+            "table_fields_with_chinese_name": scalar("SELECT COUNT(*) FROM table_fields WHERE COALESCE(chinese_name, '') != ''"),
+            "table_fields_with_data_type": scalar("SELECT COUNT(*) FROM table_fields WHERE COALESCE(data_type, '') != ''"),
+            "table_fields_with_dictionary_type": scalar("SELECT COUNT(*) FROM table_fields WHERE COALESCE(dictionary_type, '') != ''"),
             "table_indexes": scalar("SELECT COUNT(*) FROM table_indexes"),
             "table_space_counts": grouped("SELECT space, COUNT(*) FROM tables GROUP BY space ORDER BY COUNT(*) DESC"),
         }
+
+    def _resolve_stdfield_path(self, source_root: Path, stdfield_path: str | Path | None) -> Path | None:
+        candidates: list[Path] = []
+        if stdfield_path:
+            candidates.append(Path(stdfield_path))
+        candidates.extend(
+            [
+                source_root / "stdfield.stdfield",
+                source_root.parent / "metadata" / "stdfield.stdfield",
+                source_root.parent / "stdfield.stdfield",
+            ]
+        )
+        candidates.extend(parent / "metadata" / "stdfield.stdfield" for parent in source_root.parents)
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
 
     def query_index(self, db_path: str | Path, query: str, limit: int = 20) -> dict:
         conn = sqlite3.connect(db_path)

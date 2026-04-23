@@ -14,6 +14,9 @@ class TableField:
     data_type: Optional[str] = None
     chinese_name: Optional[str] = None
     dictionary_type: Optional[str] = None
+    description: Optional[str] = None
+    public_type: Optional[str] = None
+    comments: Optional[str] = None
 
 
 @dataclass
@@ -65,6 +68,8 @@ class TableStructureParser:
                     "chineseName": item.attrib.get("chineseName"),
                     "dataType": item.attrib.get("dataType"),
                     "dictionaryType": item.attrib.get("dictionaryType"),
+                    "description": item.attrib.get("description"),
+                    "publicType": _standard_field_public_type(item),
                 }
 
     def load_tablespace_relations(self, mdbobject_path: str | Path) -> None:
@@ -126,6 +131,7 @@ class TableStructureParser:
                 id=prop.attrib.get("id", ""),
                 allow_null=prop.attrib.get("allowNull", "false").lower() == "true",
                 uuid=prop.attrib.get("uuid"),
+                comments=prop.attrib.get("comments"),
             )
 
             if field.id in self.standard_fields:
@@ -133,6 +139,8 @@ class TableStructureParser:
                 field.data_type = std_field.get("dataType")
                 field.chinese_name = std_field.get("chineseName")
                 field.dictionary_type = std_field.get("dictionaryType")
+                field.description = std_field.get("description")
+                field.public_type = std_field.get("publicType")
 
             structure.fields.append(field)
 
@@ -152,3 +160,10 @@ class TableStructureParser:
             structure.indexes.append(index)
 
         return structure
+
+
+def _standard_field_public_type(item: ET.Element) -> str | None:
+    for mapping in item.findall(".//map"):
+        if mapping.attrib.get("key") == "public_type":
+            return mapping.attrib.get("value")
+    return None

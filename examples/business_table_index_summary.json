@@ -1,6 +1,6 @@
 {
   "source_root": "/Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure",
-  "db_path": "/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_table_index.db",
+  "db_path": "examples/business_table_index.db",
   "table_count": 1204,
   "table_space_counts": {
     "HS_UFT_DATA": 732,
@@ -10,9 +10,13 @@
   },
   "field_count": 24672,
   "index_count": 2542,
+  "standard_field_count": 15262,
   "db_summary": {
     "tables": 1204,
     "table_fields": 24672,
+    "table_fields_with_chinese_name": 24672,
+    "table_fields_with_data_type": 24672,
+    "table_fields_with_dictionary_type": 5923,
     "table_indexes": 2542,
     "table_space_counts": {
       "HS_UFT_DATA": 732,

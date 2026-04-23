@@ -401,6 +401,9 @@
 - `data_type`
 - `chinese_name`
 - `dictionary_type`
+- `description`
+- `public_type`
+- `comments`
 
 ### `table_indexes`
 

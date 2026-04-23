@@ -5101,3 +5101,88 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 大库构建不再需要等整个 `index_files` 完成后才第一次提交
 - 构建过程中可以通过 `index_files_batch_committed` 判断真实进度
 - 如果中途失败，排查时可以看到已提交批次和主库落盘状态
+
+## 1.2.59 - 表结构索引字段元数据补全
+
+### 背景
+
+查询 `uses_entrust` 表结构时，表结构索引可以命中表、字段和索引，但 `table_fields` 中的字段中文名、数据类型、字典类型为空。
+
+排查确认：
+
+- `business_table_index.db` 中存在 `uses_entrust`
+- 表级信息、76 个字段、10 个索引均已入库
+- 字段元数据为空不是表结构解析失败
+- 根因是构建脚本默认把 `stdfield` 指向了 `upub_codes/uftstructure/stdfield.stdfield`
+- 实际标准字段文件位于 `upub_codes/metadata/stdfield.stdfield`
+
+### 本轮改动
+
+1. 修正三索引构建脚本中的标准字段路径
+   - `build_indexes.py`
+   - 表结构索引默认使用 `upub_codes/metadata/stdfield.stdfield`
+
+2. 增强表结构解析器
+   - `TableField` 新增：
+     - `description`
+     - `public_type`
+     - `comments`
+   - `stdfield.stdfield` 解析：
+     - `chineseName`
+     - `dataType`
+     - `dictionaryType`
+     - `description`
+     - `public_type`
+   - `.uftstructure` 字段解析：
+     - `properties.comments`
+
+3. 增强表结构索引 schema
+   - `table_fields` 新增：
+     - `description`
+     - `public_type`
+     - `comments`
+   - `table_fields_fts` 同步纳入这些字段，后续字段释义和展示类型也可被 FTS 检索
+
+4. 增加标准字段路径自动发现
+   - 如果未显式传 `--stdfield`
+   - 或传入路径不存在
+   - 会从 `source_root` 及其上级目录的 `metadata/stdfield.stdfield` 自动发现
+
+5. 更新文档
+   - `docs/QUICKSTART.md`
+   - `docs/INDEX_SCHEMA.md`
+
+### 验证
+
+- `PYTHONPATH=src python3 -m py_compile src/uses_indexer/table_parser.py src/uses_indexer/table_indexer.py build_indexes.py`
+  - 结果：通过
+- `PYTHONPATH=src python3 -m pytest tests/test_table_indexer.py tests/test_mcp.py::test_initialize_and_tool_listing -q`
+  - 结果：`2 passed`
+- 重建表结构索引：
+  - `PYTHONPATH=src python3 -m uses_indexer build-table-index /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure --db ./examples/business_table_index.db --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/stdfield.stdfield --mdbobject /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/mdbobject.mdbobject --output ./examples/business_table_index_summary.json`
+  - 结果：成功
+
+### 重建后数据
+
+- 表数量：`1204`
+- 字段数量：`24672`
+- 索引数量：`2542`
+- 标准字段数量：`15262`
+- 字段中文名覆盖：`24672 / 24672`
+- 字段数据类型覆盖：`24672 / 24672`
+- 字典类型覆盖：`5923 / 24672`
+
+### uses_entrust 验证
+
+现在只查索引库即可得到：
+
+- `fund_account`：资产账户 / `HsFundAccount` / `C18`
+- `entrust_no`：委托编号 / `HsSerialNo` / `N10`
+- `branch_no`：分支机构 / `HsBranchNo` / 字典 `100` / `N5`
+- `position_str`：定位串 / `HsPosStr` / `C100` / 注释为拼接规则
+
+### 结论
+
+- 这不是表结构索引整体构建失败，而是标准字段元数据没有加载
+- 修复后表结构问答可以只依赖索引库回答字段含义、类型、字典和注释
+- 后续查询表结构时不应回退原文件，除非明确是在调试索引构建问题

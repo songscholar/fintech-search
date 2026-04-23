@@ -141,7 +141,7 @@ def build_full_index(indexer, code_root, examples_dir, *, skip_vectors: bool = F
 def build_table_index(table_indexer, uftstructure_root, examples_dir):
     print("[4/4] 构建表结构索引...")
     table_db_path = examples_dir / "business_table_index.db"
-    stdfield_path = uftstructure_root / "stdfield.stdfield"
+    stdfield_path = uftstructure_root.parent / "metadata" / "stdfield.stdfield"
     mdbobject_path = uftstructure_root / "mdbobject.mdbobject"
     
     def build():

@@ -170,7 +170,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 PYTHONPATH=src python3 -m uses_indexer build-table-index \
   /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure \
   --db ./examples/business_table_index.db \
-  --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/stdfield.stdfield \
+  --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/stdfield.stdfield \
   --mdbobject /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/mdbobject.mdbobject
 ```
 
