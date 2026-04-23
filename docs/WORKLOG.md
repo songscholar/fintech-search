@@ -767,3 +767,34 @@
 - 增加更精确的表访问与关系抽取
 - 增加更丰富的模型适配器
 - 增加更强的 MCP 能力和更多可组合工具
+
+### 阶段 35：前后端联调与功能号问答主候选修复
+
+- 完成前端当前实际使用接口联调：
+  - `/health`
+  - `/db-summary`
+  - `/query`
+  - `/evidence`
+  - `/ask`
+  - `/answer`
+  - `/debug-bundle`
+  - `/agent/providers`
+  - `/agent/chat`
+- 修复 `333002功能有哪些业务逻辑` 这类自然问题：
+  - 检索层识别纯数字功能号为 `object_id_terms`
+  - `object_id` 命中的主服务获得 `object_id_focus_match`
+  - `LS_SESEXT_NORMALORDER_ENTER / object_id=333002` 现在稳定排在第一位
+- 修复回答层主候选判定：
+  - location 类问题优先最高单条证据
+  - 避免次级检查原子因重复块聚合分反超主服务
+- 前端静态资源补齐：
+  - `/favicon.ico` 返回 `204`
+- 浏览器验证：
+  - `整套分析` 能完成 query/evidence/answer/trace 渲染
+  - 结果页、系统页、设计说明页、智能体页、主页切换正常
+  - 智能体设置弹窗正常打开
+- 自动化验证：
+  - `tests/test_api.py::test_http_server_serves_json`
+  - `tests/test_indexer.py::test_query_index_prefers_object_id_for_business_logic_question`
+  - `tests/test_qa.py::test_ask_uses_best_object_id_hit_as_primary_for_location_question`
+  - `tests/test_qa.py::test_ask_builds_prompt_and_draft_answer`

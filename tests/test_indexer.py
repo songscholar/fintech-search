@@ -640,6 +640,26 @@ def test_query_index_uses_fts_and_rerank(tmp_path: Path) -> None:
     assert any("证券代码获取" in str(hit["matched_text"]) for hit in result["hits"])
 
 
+def test_query_index_prefers_object_id_for_business_logic_question(tmp_path: Path) -> None:
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
+    (source_dir / "LS_FLOW.uftservice").write_text(
+        CALLER_XML.replace('objectId="2"', 'objectId="333002"'),
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+
+    result = indexer.query_index(db_path, "333002功能有哪些业务逻辑", limit=5)
+
+    assert result["hit_count"] >= 1
+    assert result["hits"][0]["procedure_name"] == "LS_FLOW"
+    assert result["hits"][0]["object_id"] == "333002"
+    assert "object_id_focus_match" in result["hits"][0]["reasons"]
+
+
 def test_query_index_includes_vector_retrieval_for_related_query(tmp_path: Path) -> None:
     indexer, db_path = _build_sample_index(tmp_path)
 

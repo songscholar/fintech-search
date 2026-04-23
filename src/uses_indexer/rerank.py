@@ -30,6 +30,11 @@ def analyze_query(query: str) -> dict[str, object]:
     lowered = query.lower()
     tokens = tokenize_query(query)
     token_set = set(tokens)
+    object_id_terms = {
+        token
+        for token in token_set
+        if re.fullmatch(r"\d{3,}", token)
+    }
     procedure_terms_ordered: list[str] = []
     seen_procedure_terms: set[str] = set()
     for match in QUERY_PROCEDURE_RE.finditer(query):
@@ -120,6 +125,7 @@ def analyze_query(query: str) -> dict[str, object]:
         "token_set": token_set,
         "procedure_terms": sorted(procedure_terms),
         "procedure_terms_ordered": procedure_terms_ordered,
+        "object_id_terms": sorted(object_id_terms),
         "variable_terms": sorted(variable_terms),
         "table_terms": sorted(table_terms),
         "focus_terms": sorted(focus_terms),
@@ -267,6 +273,10 @@ def rerank_candidate(
         score += 100.0
         score_breakdown["name_bonus"] += 100.0
         reasons.append("object_id_exact_match")
+    elif candidate.get("object_id") and str(candidate.get("object_id")).lower() in set(query_analysis.get("object_id_terms") or []):
+        score += 120.0
+        score_breakdown["name_bonus"] += 120.0
+        reasons.append("object_id_focus_match")
 
     if candidate["hit_type"] == "chunk":
         score += 5.0

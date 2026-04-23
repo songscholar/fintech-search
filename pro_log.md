@@ -5237,3 +5237,56 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 元数据索引边界基本合理
 - 代码索引构建逻辑存在一个明确漏收集问题，已修复
 - 当前磁盘上的 `business_code_index.db` 仍是旧构建结果，需要重建代码索引后才会包含这 `97` 个 `.uftatomservice`
+
+## 1.2.61 - 前后端联调与功能号问答主候选修复
+
+### 背景
+
+对本地前端 `http://127.0.0.1:8000/` 做前后端联调时，接口整体可访问，但发现自然问题 `333002功能有哪些业务逻辑` 存在一个质量问题：
+
+- `/query` 原先容易把包含 `@function_id == 333002` 的检查原子排在主服务前面
+- `/answer` 草稿回答会因为同一检查原子多块命中，使用聚合分反超真正的功能号主服务
+- 浏览器访问还会产生 `/favicon.ico` 404 噪音
+
+### 本轮改动
+
+1. 检索重排增强
+   - `analyze_query()` 新增 `object_id_terms`
+   - 对 `333002功能有哪些业务逻辑` 这类问题，把纯数字功能号识别为 `object_id` 焦点
+   - `rerank_candidate()` 对候选 `object_id` 命中问题中的功能号增加 `object_id_focus_match`
+
+2. 回答主候选判定增强
+   - QA 草稿候选组保留 `best_item_score` 和 `first_rank`
+   - 对 `location / implementation_location` 类型问题，优先使用最高单条证据决定主候选
+   - 避免重复命中的次级检查块通过聚合分反超主服务
+
+3. 前端服务静态资源补齐
+   - `/favicon.ico` 返回 `204`
+   - 清理浏览器联调时的无关 404
+
+### 联调结果
+
+- `GET /`：200
+- `GET /ui`：200
+- `GET /assets/styles.css`：200
+- `GET /assets/app.js`：200
+- `GET /favicon.ico`：204
+- `GET /health`：200
+- `GET /db-summary`：200，当前代码库 `files=23895`、`chunks=201368`
+- `POST /query`：200，`333002功能有哪些业务逻辑` 第一命中 `LS_SESEXT_NORMALORDER_ENTER / object_id=333002`
+- `POST /evidence`：200，第一证据 `LS_SESEXT_NORMALORDER_ENTER / object_id=333002`
+- `POST /ask`：200，主候选 `LS_SESEXT_NORMALORDER_ENTER`
+- `POST /answer`：200，最终回答主候选 `LS_SESEXT_NORMALORDER_ENTER`
+- `POST /debug-bundle`：200，query/evidence/answer 打包正常
+- `POST /agent/chat`：使用临时 OpenAI-compatible mock provider 验证通过，能携带检索上下文和附件返回
+
+### 浏览器验证
+
+- 主页 `整套分析` 可正常触发 query/evidence/answer/trace
+- 结果页、系统页、设计说明页、智能体页、主页导航切换正常
+- 智能体设置弹窗可正常打开
+
+### 自动化验证
+
+- `pytest tests/test_api.py::test_http_server_serves_json tests/test_indexer.py::test_query_index_prefers_object_id_for_business_logic_question tests/test_qa.py::test_ask_uses_best_object_id_hit_as_primary_for_location_question tests/test_qa.py::test_ask_builds_prompt_and_draft_answer -q`
+  - 结果：`4 passed`

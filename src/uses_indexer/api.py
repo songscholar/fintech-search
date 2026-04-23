@@ -649,6 +649,8 @@ def _resolve_web_response(path: str) -> tuple[int, str, bytes] | None:
     route = parsed.path
     if route in {"", "/", "/ui"}:
         return _read_static_file(WEB_INDEX_PATH)
+    if route == "/favicon.ico":
+        return HTTPStatus.NO_CONTENT, "image/x-icon", b""
     asset_path = WEB_ASSET_PATHS.get(route)
     if asset_path is None:
         return None

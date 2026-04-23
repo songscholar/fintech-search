@@ -125,6 +125,25 @@ def test_ask_builds_prompt_and_draft_answer(tmp_path: Path) -> None:
     assert result["draft_answer"]["primary_candidate"]["procedure_name"] == "AF_SAMPLE"
 
 
+def test_ask_uses_best_object_id_hit_as_primary_for_location_question(tmp_path: Path) -> None:
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    (source_dir / "AF_SAMPLE.uftatomfunction").write_text(SAMPLE_XML, encoding="utf-8")
+    (source_dir / "LS_FLOW.uftservice").write_text(
+        CALLER_XML.replace('objectId="2"', 'objectId="333002"'),
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "index.db"
+    indexer = SQLiteIndexer()
+    indexer.build_index(source_dir, db_path)
+    qa = CodebaseQA(indexer)
+
+    result = qa.ask(db_path, "333002功能有哪些业务逻辑", evidence_limit=3, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["primary_candidate"]["procedure_name"] == "LS_FLOW"
+    assert "当前索引最优先命中的实现位置是 LS_FLOW" in result["draft_answer"]["answer"]
+
+
 def test_ask_returns_insufficient_evidence_when_no_hits(tmp_path: Path) -> None:
     qa, db_path = _prepare_qa(tmp_path)
 

@@ -242,6 +242,7 @@ class CodebaseQA:
                     "procedure_profile": dict(item.get("procedure_profile") or {}),
                     "aggregate_score": 0.0,
                     "best_item_score": -1.0,
+                    "first_rank": item.get("rank") or 999999,
                     "matched_via": set(),
                     "sources": set(),
                 },
@@ -259,7 +260,7 @@ class CodebaseQA:
 
         grouped_candidates = sorted(
             candidate_groups.values(),
-            key=lambda item: (-float(item["aggregate_score"]), str(item["procedure_name"]), str(item["file_path"])),
+            key=lambda item: self._candidate_group_sort_key(query_type, item),
         )
         lead_group = grouped_candidates[0]
         lead = next(
@@ -280,6 +281,7 @@ class CodebaseQA:
             "match_source": lead_group["match_source"],
             "procedure_profile": dict(lead_group.get("procedure_profile") or {}),
             "aggregate_score": round(float(lead_group["aggregate_score"]), 3),
+            "best_item_score": round(float(lead_group["best_item_score"]), 3),
             "matched_via": sorted(str(item) for item in lead_group.get("matched_via", set())),
         }
         secondary_candidates = [
@@ -292,6 +294,7 @@ class CodebaseQA:
                 "match_source": item["match_source"],
                 "procedure_profile": dict(item.get("procedure_profile") or {}),
                 "aggregate_score": round(float(item["aggregate_score"]), 3),
+                "best_item_score": round(float(item.get("best_item_score") or 0.0), 3),
                 "matched_via": sorted(str(value) for value in item.get("matched_via", set())),
             }
             for item in grouped_candidates[1:3]
@@ -558,6 +561,23 @@ class CodebaseQA:
             "review_required": review_required,
             "decision": decision,
         }
+
+    def _candidate_group_sort_key(self, query_type: str, item: dict[str, object]) -> tuple[float, float, int, str, str]:
+        if query_type in {"implementation_location", "location"}:
+            return (
+                -float(item.get("best_item_score") or 0.0),
+                -float(item.get("aggregate_score") or 0.0),
+                int(item.get("first_rank") or 999999),
+                str(item.get("procedure_name") or ""),
+                str(item.get("file_path") or ""),
+            )
+        return (
+            -float(item.get("aggregate_score") or 0.0),
+            -float(item.get("best_item_score") or 0.0),
+            int(item.get("first_rank") or 999999),
+            str(item.get("procedure_name") or ""),
+            str(item.get("file_path") or ""),
+        )
 
     def _build_query_specific_summary(
         self,

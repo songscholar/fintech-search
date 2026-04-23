@@ -476,6 +476,12 @@ def test_http_server_serves_json(tmp_path: Path) -> None:
         assert response.status == 200
         assert "initializeConsole" in body
 
+        conn.request("GET", "/favicon.ico")
+        response = conn.getresponse()
+        body = response.read()
+        assert response.status == 204
+        assert body == b""
+
         conn.request("GET", "/health")
         response = conn.getresponse()
         body = json.loads(response.read().decode("utf-8"))
