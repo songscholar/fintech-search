@@ -280,6 +280,7 @@ class CodebaseQA:
         if query_specific_summary:
             summary_points.append(query_specific_summary)
         profile_hints: list[str] = []
+        graph_hints: list[str] = []
         for item in top_evidence[1:]:
             summary_points.append(
                 f"另一个候选过程是 {item['procedure_name']}，命中的关键文本是 {item['matched_text']}。"
@@ -370,6 +371,14 @@ class CodebaseQA:
                     f"{item['procedure_name']} 属于 topic 发布过程。"
                     + (f" 发布主题包括 {topics}。" if topics else "")
                 )
+            if str(item.get("retrieval_source") or "") == "relation_graph_profile":
+                graph_focus_value = str(item.get("graph_focus_value") or "")
+                graph_focus_role = str(item.get("graph_focus_role") or "")
+                if graph_focus_value:
+                    graph_hints.append(
+                        f"{item['procedure_name']} 的结构化关系图显示 {graph_focus_value}"
+                        + (f" 角色为 {graph_focus_role}。" if graph_focus_role else "。")
+                    )
             if query_type == "failure_flow":
                 recovered_blocks = list(item.get("recovered_blocks") or [])
                 failure_blocks = [
@@ -381,6 +390,41 @@ class CodebaseQA:
                     failure_hints.append(
                         f"{item['procedure_name']} 覆盖失败处理块 {', '.join(dict.fromkeys(failure_blocks))}。"
                     )
+
+        if not graph_hints:
+            lead_profile = dict(primary_candidate.get("procedure_profile") or {})
+            relation_graph = dict(lead_profile.get("relation_graph") or {})
+            fallback_hint = ""
+            if query_type in {"variable_write", "variable_read", "variable_flow"}:
+                variable_terms = [str(term).lower() for term in (question_analysis.get("variable_terms") or []) if str(term).strip()]
+                for item in relation_graph.get("variables") or []:
+                    name = str(item.get("name") or "")
+                    role = str(item.get("role") or "")
+                    if not name:
+                        continue
+                    if variable_terms and not any(term in name.lower() for term in variable_terms):
+                        continue
+                    fallback_hint = (
+                        f"{primary_candidate['procedure_name']} 的结构化关系图显示 {name}"
+                        + (f" 角色为 {role}。" if role else "。")
+                    )
+                    break
+            elif query_type in {"table_write", "table_read", "table_access"}:
+                table_terms = [str(term).lower() for term in (question_analysis.get("table_terms") or []) if str(term).strip()]
+                for item in relation_graph.get("tables") or []:
+                    name = str(item.get("name") or "")
+                    role = str(item.get("role") or "")
+                    if not name:
+                        continue
+                    if table_terms and not any(term in name.lower() for term in table_terms):
+                        continue
+                    fallback_hint = (
+                        f"{primary_candidate['procedure_name']} 的结构化关系图显示 {name}"
+                        + (f" 角色为 {role}。" if role else "。")
+                    )
+                    break
+            if fallback_hint:
+                graph_hints.append(fallback_hint)
 
         answer_lines = [f"结论: 围绕“{question}”，当前索引最优先命中的实现位置是 {lead['procedure_name']}。"]
         section_label = QUERY_SECTION_LABELS.get(query_type, "实现位置")
@@ -401,6 +445,8 @@ class CodebaseQA:
         for line in failure_hints[:2]:
             answer_lines.append(f"- {line}")
         for line in profile_hints[:2]:
+            answer_lines.append(f"- {line}")
+        for line in graph_hints[:1]:
             answer_lines.append(f"- {line}")
         for line in related_hints[:2]:
             answer_lines.append(f"- {line}")
@@ -452,7 +498,7 @@ class CodebaseQA:
             secondary_candidates=secondary_candidates,
             primary_candidate=primary_candidate,
         )
-        prioritized_hints = [*path_hints, *flow_path_hints, *profile_hints, *related_hints]
+        prioritized_hints = [*path_hints, *flow_path_hints, *graph_hints, *profile_hints, *related_hints]
         review_required = self._should_require_review(
             query_type=query_type,
             primary_candidate=primary_candidate,

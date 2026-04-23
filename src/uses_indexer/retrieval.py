@@ -789,16 +789,22 @@ class RetrievalService:
                         "object_id": row[7] if row[7] else None,
                         "line_start": None,
                         "line_end": None,
-                        "matched_text": match_detail,
+                        "matched_text": str(match_detail["label"]),
                         "match_source": "relation_graph_entity",
                         "retrieval_source": "relation_graph_profile",
                         "base_score": score,
                         "source_rank": score / 10.0,
-                        "search_text": f"{term} {match_detail} {row[3]}",
+                        "search_text": f"{term} {match_detail['label']} {row[3]}",
                         "procedure_summary": str(row[3]),
                         "feature_flags": json.loads(str(row[4] or "{}")),
                         "procedure_profile": profile,
-                        "reasons": [f"relation_graph_{mode}={term}"],
+                        "graph_focus_type": mode,
+                        "graph_focus_value": str(match_detail["value"]),
+                        "graph_focus_role": str(match_detail["role"]),
+                        "reasons": [
+                            f"relation_graph_{mode}={term}",
+                            f"relation_graph_role={match_detail['role']}",
+                        ],
                     }
                 )
                 if len(candidates) >= limit:
@@ -811,30 +817,34 @@ class RetrievalService:
         *,
         mode: str,
         term: str,
-    ) -> str | None:
+    ) -> dict[str, str] | None:
         lowered = term.lower()
         relation_graph = dict(profile.get("relation_graph") or {})
         if mode == "table":
             for item in relation_graph.get("tables") or []:
-                name = str(dict(item).get("name") or "")
+                item_dict = dict(item)
+                name = str(item_dict.get("name") or "")
                 if lowered == name.lower():
-                    return f"{name} ({dict(item).get('mode') or 'unknown'})"
+                    role = str(item_dict.get("mode") or "unknown")
+                    return {"label": f"{name} ({role})", "value": name, "role": role}
         elif mode == "variable":
             for item in relation_graph.get("variables") or []:
-                name = str(dict(item).get("name") or "")
+                item_dict = dict(item)
+                name = str(item_dict.get("name") or "")
                 normalized = name.lower().replace("@", "")
                 if lowered.replace("@", "") == normalized:
-                    return f"{name} ({dict(item).get('mode') or 'unknown'})"
+                    role = str(item_dict.get("mode") or "unknown")
+                    return {"label": f"{name} ({role})", "value": name, "role": role}
         elif mode == "topic":
             for name in relation_graph.get("topics") or []:
                 text = str(name)
                 if lowered in text.lower():
-                    return text
+                    return {"label": text, "value": text, "role": "publisher"}
         elif mode == "metadata":
             for name in relation_graph.get("metadata_refs") or []:
                 text = str(name)
                 if lowered in text.lower():
-                    return text
+                    return {"label": text, "value": text, "role": "referencer"}
         return None
 
     def _run_path_bridge_queries(
@@ -2284,4 +2294,7 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
         "reasons": list(candidate["reasons"]),
         "matched_via": list(candidate.get("matched_via", [])),
         "procedure_profile": dict(candidate.get("procedure_profile") or {}),
+        "graph_focus_type": candidate.get("graph_focus_type"),
+        "graph_focus_value": candidate.get("graph_focus_value"),
+        "graph_focus_role": candidate.get("graph_focus_role"),
     }

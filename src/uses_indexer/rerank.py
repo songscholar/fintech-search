@@ -185,6 +185,8 @@ def rerank_candidate(
     chunk_features = dict(candidate.get("chunk_features") or {})
     feature_flags = dict(candidate.get("feature_flags") or {})
     procedure_profile = dict(candidate.get("procedure_profile") or {})
+    graph_focus_role = str(candidate.get("graph_focus_role") or "")
+    graph_focus_type = str(candidate.get("graph_focus_type") or "")
 
     overlap_tokens = [token for token in query_tokens if token in search_text]
     coverage = len(set(overlap_tokens))
@@ -479,6 +481,8 @@ def _intent_bonus(
     hit_type = str(candidate.get("hit_type") or "")
     match_source = str(candidate.get("match_source") or "").lower()
     combined = f"{search_text} {matched_text} {procedure_name}".lower()
+    graph_focus_type = str(candidate.get("graph_focus_type") or "").lower()
+    graph_focus_role = str(candidate.get("graph_focus_role") or "").lower()
 
     for term in query_analysis["procedure_terms"]:
         if str(term) and str(term) in combined:
@@ -529,6 +533,13 @@ def _intent_bonus(
         if candidate.get("retrieval_source") == "relation_graph_profile":
             bonus += 10.0
             reasons.append("intent_relation_graph_table")
+            if graph_focus_type == "table" and (
+                (query_analysis["wants_table_write"] and graph_focus_role in {"write", "read_write"})
+                or (query_analysis["wants_table_read"] and graph_focus_role in {"read", "read_write"})
+                or (not query_analysis["wants_table_write"] and not query_analysis["wants_table_read"])
+            ):
+                bonus += 5.0
+                reasons.append(f"relation_graph_role_match={graph_focus_role}")
 
         if query_analysis["wants_table_write"] and contains_any(combined, SQL_WRITE_HINTS):
             bonus += 12.0
@@ -578,6 +589,13 @@ def _intent_bonus(
         if candidate.get("retrieval_source") == "relation_graph_profile":
             bonus += 8.0
             reasons.append("intent_relation_graph_variable")
+            if graph_focus_type == "variable" and (
+                (query_analysis.get("wants_variable_write") and graph_focus_role in {"write", "read_write"})
+                or (query_analysis.get("wants_variable_read") and graph_focus_role in {"read", "read_write"})
+                or (not query_analysis.get("wants_variable_write") and not query_analysis.get("wants_variable_read"))
+            ):
+                bonus += 5.0
+                reasons.append(f"relation_graph_role_match={graph_focus_role}")
 
     if query_analysis["wants_failure_flow"]:
         if hit_type == "block":

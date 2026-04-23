@@ -260,3 +260,4 @@ def test_ask_decision_reports_evidence_alignment(tmp_path: Path) -> None:
     result = qa.ask(db_path, "@fund_account 变量链路", evidence_limit=4, context_window=1, related_limit=2)
 
     assert result["draft_answer"]["decision"]["evidence_alignment"] in {"aligned", "divergent", "partial"}
+    assert any("结构化关系图显示" in item for item in result["draft_answer"]["answer"].splitlines() if item.startswith("- "))

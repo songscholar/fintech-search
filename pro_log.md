@@ -4618,3 +4618,71 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 `relation_graph` 已经不只是知识底座，还开始直接参与检索
 - 当前 flow path 已经从“能找出来”推进到“能解释主辅路径和桥接角色”
 - 当前回答决策开始显式表达证据是否一致，而不只是冲突类型
+
+## 1.2.52 - 结构化关系图角色直通 Retrieval / Evidence / QA
+
+### 背景
+
+上一轮已经让 `relation_graph` 直接参与召回，但结构化命中的“实体角色”还没有稳定贯穿到排序、证据和草答层。
+
+这会带来两个问题：
+
+- 检索虽然能命中 `relation_graph_profile`，但 rerank 还不知道它命中的到底是 `read / write / read_write`
+- QA 也不一定会把这条“结构化关系图命中”明确说出来
+
+### 本轮改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - `relation_graph_profile` 命中现在会显式带上：
+     - `graph_focus_type`
+     - `graph_focus_value`
+     - `graph_focus_role`
+   - 当前端、debug 和后续层拿到 hit 时，已经可以知道：
+     - 命中的是 table / variable / topic / metadata 哪一类
+     - 命中的具体值
+     - 它在关系图里的角色
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - 对 `relation_graph_profile` 新增 role-aware intent bonus
+   - table / variable 问题现在不只看“命中了关系图”，还会看：
+     - 当前问题偏 read 还是 write
+     - 当前命中的 graph role 是否匹配
+   - 这样结构化关系图开始真正参与“精排决策”，而不是只做补充召回
+
+3. 更新 `src/uses_indexer/evidence.py`
+   - evidence block 现在也保留：
+     - `graph_focus_type`
+     - `graph_focus_value`
+     - `graph_focus_role`
+   - 这样后续 QA / LLM / 前端调试面板都能看到结构化关系图命中的上下文
+
+4. 更新 `src/uses_indexer/qa.py`
+   - 当 top evidence 命中 `relation_graph_profile` 时，会显式输出：
+     - `XX 的结构化关系图显示 YY 角色为 ZZ`
+   - 同时新增兜底逻辑：
+     - 即使 top evidence 不是 `relation_graph_profile`
+     - 只要主候选过程画像里的 `relation_graph` 能匹配当前 table / variable focus
+     - 也会补出同样的结构化关系图提示
+
+5. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_uses_relation_graph_profile_for_variable_queries`
+       - 验证 variable 查询会暴露 `graph_focus_type / graph_focus_role`
+   - `tests/test_qa.py`
+     - `test_ask_decision_reports_evidence_alignment`
+       - 验证草答会显式带出“结构化关系图显示 ...”
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/evidence.py src/uses_indexer/qa.py tests/test_indexer.py tests/test_qa.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_relation_graph_profile_for_variable_queries tests/test_qa.py::test_ask_decision_reports_evidence_alignment tests/test_indexer.py::test_query_index_expands_variable_flow_path_for_path_queries tests/test_indexer.py::test_query_index_expands_table_flow_path_for_path_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+  - 结果：`5 passed`
+- 额外保护回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前 `relation_graph` 已经不只是“能召回”，而是开始把命中的角色语义真正传递到排序、证据和草答层
+- 当前 table / variable 查询在结构化关系图上的 read/write 判断更稳定了
+- 当前 QA 输出开始更明确地区分“这是文本命中”还是“这是结构化关系图命中”

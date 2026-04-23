@@ -1212,3 +1212,96 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 整体证据还不完整
 
 这让“为什么需要人工复核”从一个笼统判断，进一步变成了更可解释的诊断结果。
+
+## 最新 relation-graph 角色语义贯通
+
+这一轮继续围绕三个核心问题往下推进：
+
+- 关系索引还不够强
+- 知识底座还不够硬
+- 回答决策还不够体系化
+
+重点不是再增加一个新的召回来源，而是把 `relation_graph` 命中的“角色语义”真正贯穿到 retrieval / evidence / QA。
+
+### 1. `relation_graph_profile` 开始带角色化焦点字段
+
+现在 `relation_graph_profile` 命中除了原有的：
+
+- `retrieval_source = relation_graph_profile`
+
+之外，还会显式暴露：
+
+- `graph_focus_type`
+- `graph_focus_value`
+- `graph_focus_role`
+
+也就是说，当前系统不仅知道：
+
+- 命中了一个结构化关系图实体
+
+还知道：
+
+- 它是 table / variable / topic / metadata 哪一类
+- 它对应的具体值是什么
+- 它在关系图里是 read / write / read_write 还是其他角色
+
+这一步让结构化知识图不再只是“有命中”，而开始具备更明确的业务角色语义。
+
+### 2. role-aware rerank 让关系图真正参与精排
+
+在此基础上，`rerank` 现在不会只给 `relation_graph_profile` 一个统一 bonus，而是会继续看：
+
+- 当前 query type 是 table 还是 variable
+- 当前 query 更偏 read 还是 write
+- 当前 graph role 是否与该意图一致
+
+例如：
+
+- 表写入问题会更偏好 `graph_focus_role in {write, read_write}`
+- 变量读取问题会更偏好 `graph_focus_role in {read, read_write}`
+
+所以当前结构化关系图已经从：
+
+- 召回层的补充候选
+
+进一步推进成：
+
+- 精排层可解释、可利用的角色化证据
+
+### 3. evidence 和 QA 都开始显式表达结构化关系图命中
+
+这轮还把同一套角色字段继续往下游传递：
+
+- evidence block 现在保留：
+  - `graph_focus_type`
+  - `graph_focus_value`
+  - `graph_focus_role`
+- QA 草答在命中 `relation_graph_profile` 时，会显式写出：
+  - `XX 的结构化关系图显示 YY 角色为 ZZ`
+
+同时还增加了一个重要兜底：
+
+- 即使 top evidence 最终不是 `relation_graph_profile`
+- 只要主候选过程画像中的 `relation_graph` 能匹配当前 table / variable focus
+- QA 也会补出这条结构化提示
+
+这意味着当前用户看到的回答开始能更明确地区分：
+
+- 这是普通文本命中
+- 还是结构化关系图已经明确声明了该实体和角色
+
+### 4. 当前这条主线的意义
+
+到这一轮为止，这条链路已经形成了更完整的闭环：
+
+- 知识底座：`procedure_profile.relation_graph`
+- 关系索引：`relation_graph_profile`
+- 精排：role-aware rerank
+- 证据：graph focus 字段直通 evidence
+- 草答：结构化关系图提示显式输出
+
+所以这次不是简单多了一点摘要，而是：
+
+- 结构化知识图更像真正的一等检索对象了
+- 检索命中的“角色语义”开始在系统内部完整流动
+- 回答层也开始把这种结构化证据直接说给用户

@@ -940,6 +940,8 @@ def test_query_index_uses_relation_graph_profile_for_variable_queries(tmp_path: 
     ]
     assert graph_hits
     assert any("relation_graph_variable=@fund_account" in " ".join(hit["reasons"]) for hit in graph_hits)
+    assert any(hit["graph_focus_type"] == "variable" for hit in graph_hits)
+    assert any(hit["graph_focus_role"] in {"read", "read_write"} for hit in graph_hits)
 
 
 def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:
