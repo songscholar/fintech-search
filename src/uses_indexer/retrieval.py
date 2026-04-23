@@ -889,6 +889,18 @@ class RetrievalService:
         if not focus_specs:
             return []
 
+        has_graph_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'procedure_graph_entities'"
+        ).fetchone()
+        if has_graph_table:
+            indexed_candidates = self._run_relation_graph_entity_index_queries(
+                conn,
+                focus_specs=focus_specs,
+                limit=limit,
+            )
+            if indexed_candidates:
+                return indexed_candidates
+
         rows = conn.execute(
             """
             SELECT
@@ -947,6 +959,85 @@ class RetrievalService:
                         "reasons": [
                             f"relation_graph_{mode}={term}",
                             f"relation_graph_role={match_detail['role']}",
+                        ],
+                    }
+                )
+                if len(candidates) >= limit:
+                    return candidates[:limit]
+        return candidates[:limit]
+
+    def _run_relation_graph_entity_index_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        focus_specs: list[tuple[str, str, float]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[int, str, str]] = set()
+        for mode, term, score in focus_specs:
+            rows = conn.execute(
+                """
+                SELECT
+                  pge.procedure_id,
+                  pge.file_id,
+                  pge.procedure_name,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  pf.profile_json,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  pge.entity_name,
+                  pge.entity_role,
+                  pge.detail_json
+                FROM procedure_graph_entities pge
+                JOIN procedure_features pf ON pf.procedure_id = pge.procedure_id
+                JOIN procedures p ON p.id = pge.procedure_id
+                JOIN files f ON f.id = pge.file_id
+                WHERE pge.entity_type = ?
+                  AND lower(pge.entity_name) = lower(?)
+                ORDER BY pge.ordinal, pge.procedure_name
+                LIMIT ?
+                """,
+                (mode, term, limit),
+            ).fetchall()
+            for row in rows:
+                key = (int(row[0]), mode, str(term).lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                role = str(row[10] or "")
+                entity_name = str(row[9] or term)
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[8]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[6] if row[6] else None,
+                        "object_id": row[7] if row[7] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": f"{entity_name} ({role})" if role else entity_name,
+                        "match_source": "relation_graph_entity",
+                        "retrieval_source": "relation_graph_profile",
+                        "base_score": score,
+                        "source_rank": score / 10.0,
+                        "search_text": f"{term} {entity_name} {role} {row[3]}",
+                        "procedure_summary": str(row[3]),
+                        "feature_flags": json.loads(str(row[4] or "{}")),
+                        "procedure_profile": json.loads(str(row[5] or "{}")),
+                        "graph_focus_type": mode,
+                        "graph_focus_value": entity_name,
+                        "graph_focus_role": role,
+                        "reasons": [
+                            f"relation_graph_{mode}={term}",
+                            f"relation_graph_role={role}",
+                            "relation_graph_indexed",
                         ],
                     }
                 )

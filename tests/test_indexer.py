@@ -323,6 +323,14 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
         WHERE procedure_name = 'AF_DEEP'
         """
     ).fetchone()
+    graph_entity_rows = conn.execute(
+        """
+        SELECT entity_type, entity_name, entity_role
+        FROM procedure_graph_entities
+        WHERE procedure_name = 'AF_DEEP'
+        ORDER BY entity_type, entity_name
+        """
+    ).fetchall()
     bridge_row = conn.execute(
         """
         SELECT summary_text, feature_flags_json
@@ -350,6 +358,7 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
         assert f"chunk_role: {chunk_role}" in str(embedding_text)
 
     assert procedure_row is not None
+    assert graph_entity_rows
     assert bridge_row is not None
     assert failure_row is not None
     summary_text, profile_json, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json = procedure_row
@@ -371,6 +380,14 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
     assert any("uses_dynamic_table" in template for template in profile["dynamic_sql_templates"])
     assert profile["relation_graph"]["tables"]
     assert profile["relation_graph"]["variables"]
+    assert ("table", "uses_deep_table", "read_write") in {
+        (str(row[0]), str(row[1]), str(row[2]))
+        for row in graph_entity_rows
+    }
+    assert ("variable", "@fund_account", "read") in {
+        (str(row[0]), str(row[1]), str(row[2]))
+        for row in graph_entity_rows
+    }
     assert feature_flags["has_table_reads"] is True
     assert feature_flags["has_table_writes"] is True
     assert feature_flags["has_variable_reads"] is True

@@ -543,6 +543,27 @@ class IndexBuildService:
         }
         if "profile_json" not in procedure_feature_columns:
             conn.execute("ALTER TABLE procedure_features ADD COLUMN profile_json TEXT NOT NULL DEFAULT '{}'")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS procedure_graph_entities (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              procedure_id INTEGER NOT NULL,
+              file_id INTEGER NOT NULL,
+              procedure_name TEXT NOT NULL,
+              entity_type TEXT NOT NULL,
+              entity_name TEXT NOT NULL,
+              entity_role TEXT NOT NULL DEFAULT '',
+              ordinal INTEGER NOT NULL DEFAULT 0,
+              detail_json TEXT NOT NULL DEFAULT '{}'
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_procedure_graph_entities_proc ON procedure_graph_entities(procedure_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_procedure_graph_entities_lookup ON procedure_graph_entities(entity_type, entity_name, entity_role)"
+        )
 
     def _unit_code_fingerprint(self, unit: ParsedUnit) -> str:
         payload = [

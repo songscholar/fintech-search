@@ -1420,3 +1420,126 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 结构化知识图能够更直接地产出主证据
 - 主证据能更稳定地进入 QA 和 agent
 - QA 和 agent 开始共享同一套决策框架
+
+## 最新 relation-graph 物化索引
+
+这一轮继续解决三个核心问题：
+
+- 关系索引还不够强
+- 知识底座还不够硬
+- 回答决策还不够体系化
+
+这次重点不是继续往 `profile_json` 上叠更多字段，而是把 `relation_graph` 本身推进成真正的持久化结构化索引。
+
+### 1. `relation_graph` 现在有了独立的结构化索引表
+
+当前 schema 新增了：
+
+- `procedure_graph_entities`
+
+它把原先只存在于 `procedure_profile.relation_graph` 里的结构化实体，正式物化成数据库表。
+
+当前会落库的实体包括：
+
+- tables
+- variables
+- topics
+- metadata refs
+
+每条实体记录至少有：
+
+- `procedure_id`
+- `file_id`
+- `procedure_name`
+- `entity_type`
+- `entity_name`
+- `entity_role`
+- `ordinal`
+- `detail_json`
+
+所以这一步的本质是：
+
+- 结构化关系图不再只是 profile 里的附属 JSON
+- 而是开始拥有自己的一等索引表
+
+### 2. retrieval 开始优先走结构化实体表，而不是现扫 JSON
+
+在此基础上，`_run_relation_graph_queries()` 现在会优先使用：
+
+- `procedure_graph_entities`
+
+来做 `relation_graph_profile` 检索。
+
+也就是说，当前 retrieval 已经从：
+
+- 逐过程读取 `profile_json`
+- 在 Python 里匹配 `relation_graph`
+
+进一步推进成：
+
+- 先利用结构化实体索引表按 `entity_type + entity_name` 做 SQL 定位
+- 再回表拿 `procedure_features`
+
+只有在旧库还没有 `procedure_graph_entities` 时，才回退到原来的 JSON 扫描路径。
+
+这一点对三条主线都有意义：
+
+- 关系索引更强：结构化实体开始成为真正的检索入口
+- 知识底座更硬：结构化知识不再只以 JSON 形式存在
+- 后续扩展更稳：topic / metadata / table / variable 的召回可以更自然地继续进化
+
+### 3. index build / write 已经把这层知识稳定沉淀下来
+
+为了让这张表真正可靠，这轮同步做了两件事：
+
+- 运行时 schema 迁移会自动补：
+  - `procedure_graph_entities`
+  - 相关索引
+- `upsert_procedure_features()` 在刷新过程画像时，会同步：
+  - 删除旧的 graph entities
+  - 重建新的 graph entities
+
+这意味着当前“过程画像刷新”和“结构化图索引刷新”已经绑定在一起，不会出现：
+
+- profile 已更新
+- graph entity 索引却还是旧的
+
+这种知识漂移。
+
+### 4. agent/chat 也开始更直接消费 grounded decision
+
+这一轮还顺手继续推进了“回答决策统一”：
+
+- `AgentGateway` 在构建 prompt 时，不再只塞 JSON context
+- 还会显式加入 grounded QA 的简短决策摘要
+
+这份摘要会告诉 agent：
+
+- query type
+- review_required
+- state
+- conflict_kind
+- evidence_alignment
+- primary_candidate
+
+所以当前聊天页 agent 开始更接近：
+
+- 和 `answering.py` 共用同一套 grounded decision 基线
+
+而不是：
+
+- 只共享一份上下文 JSON
+
+### 5. 当前这条主线的意义
+
+到这一轮为止，系统已经从：
+
+- `relation_graph` 只是 profile 里的结构化摘要
+
+进一步推进到：
+
+- `relation_graph` 既是 profile 里的知识
+- 也是数据库里的独立索引表
+- 同时还能继续进入 retrieval / evidence / QA / agent
+
+所以现在“关系索引还不够强”和“知识底座还不够硬”这两个问题，已经开始被真正从底层结构上解决，而不只是继续在上层调排序。

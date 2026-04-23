@@ -4751,3 +4751,92 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 `relation_graph` 已经不只会命中过程，还开始稳定地产出更像主证据的 chunk 上下文
 - 当前聊天页 agent 已经开始和 grounded answer 共用同一套 `decision / candidate / review_required` 判断
 - 当前“关系索引 / 知识底座 / 回答决策”这三条线开始真正收敛到同一套结构化语义上
+
+## 1.2.54 - relation_graph 物化为结构化索引表
+
+### 背景
+
+前几轮已经让 `relation_graph`：
+
+- 进入 `procedure_profile`
+- 进入 `relation_graph_profile`
+- 再进入 `relation_graph_focus_context`
+
+但它还有一个明显短板：
+
+- 当前检索仍然主要是从 `procedure_features.profile_json` 里现扫 `relation_graph`
+
+这意味着：
+
+- 关系索引虽然在变强，但仍然不够“索引化”
+- 知识底座虽然在变厚，但很多结构化知识仍然没有被持久化成一等表
+
+### 本轮改动
+
+1. 更新 `src/uses_indexer/schema.py`
+   - 新增结构化索引表：
+     - `procedure_graph_entities`
+   - 字段包括：
+     - `procedure_id`
+     - `file_id`
+     - `procedure_name`
+     - `entity_type`
+     - `entity_name`
+     - `entity_role`
+     - `ordinal`
+     - `detail_json`
+   - 同时补了：
+     - `idx_procedure_graph_entities_proc`
+     - `idx_procedure_graph_entities_lookup`
+
+2. 更新 `src/uses_indexer/index_build.py`
+   - 运行时 schema 迁移现在会确保：
+     - `procedure_graph_entities`
+   - 在旧库上也能自动补这张表和索引
+
+3. 更新 `src/uses_indexer/index_write.py`
+   - `upsert_procedure_features()` 现在不只会写 `profile_json`
+   - 还会把 `relation_graph` 里的：
+     - tables
+     - variables
+     - topics
+     - metadata refs
+   - 同步物化到 `procedure_graph_entities`
+
+4. 更新 `src/uses_indexer/retrieval.py`
+   - `_run_relation_graph_queries()` 现在优先走：
+     - `procedure_graph_entities`
+   - 而不是先全量扫 `procedure_features.profile_json`
+   - 如果旧库还没有这张表，才回退到原来的 JSON 扫描逻辑
+
+5. 顺手更新 `src/uses_indexer/agent_gateway.py`
+   - 在前一轮统一 `decision` 的基础上，又把 grounded QA 的决策摘要显式写进 agent prompt
+   - 让聊天页 agent 更容易直接遵循：
+     - query type
+     - review_required
+     - primary_candidate
+     - evidence_alignment
+
+6. 更新测试
+   - `tests/test_indexer.py`
+     - `test_build_index_populates_chunk_features_and_procedure_features`
+       - 现在会验证 `procedure_graph_entities` 的实体行
+   - 继续保护：
+     - `relation_graph_profile`
+     - `relation_graph_focus_context`
+     - agent grounded decision 上下文
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/schema.py src/uses_indexer/index_build.py src/uses_indexer/index_write.py src/uses_indexer/retrieval.py src/uses_indexer/agent_gateway.py tests/test_indexer.py tests/test_api.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_chunk_features_and_procedure_features tests/test_indexer.py::test_query_index_uses_relation_graph_profile_for_variable_queries tests/test_indexer.py::test_query_index_uses_relation_graph_focus_context_for_variable_queries tests/test_api.py::test_agent_gateway_context_bundle_exposes_grounded_decision tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+  - 结果：`5 passed`
+- 额外保护回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前 `relation_graph` 已经从 profile 里的 JSON，进一步推进成数据库里的结构化索引表
+- 当前“知识底座”开始不只是 rich profile，而是有了更像一等实体索引的持久化形态
+- 当前后续 retrieval / evidence / QA 的很多增强，已经有了更稳的结构化基座

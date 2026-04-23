@@ -205,6 +205,20 @@ CREATE TABLE IF NOT EXISTS procedure_features (
   FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS procedure_graph_entities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  procedure_id INTEGER NOT NULL,
+  file_id INTEGER NOT NULL,
+  procedure_name TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_name TEXT NOT NULL,
+  entity_role TEXT NOT NULL DEFAULT '',
+  ordinal INTEGER NOT NULL DEFAULT 0,
+  detail_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY(procedure_id) REFERENCES procedures(id) ON DELETE CASCADE,
+  FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS block_edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   block_id INTEGER NOT NULL,
@@ -293,6 +307,8 @@ CREATE INDEX IF NOT EXISTS idx_chunk_vectors_provider ON chunk_vectors(provider,
 CREATE INDEX IF NOT EXISTS idx_blocks_procedure_seq ON blocks(procedure_id, seq);
 CREATE INDEX IF NOT EXISTS idx_blocks_type ON blocks(block_type);
 CREATE INDEX IF NOT EXISTS idx_procedure_features_file_id ON procedure_features(file_id);
+CREATE INDEX IF NOT EXISTS idx_procedure_graph_entities_proc ON procedure_graph_entities(procedure_id);
+CREATE INDEX IF NOT EXISTS idx_procedure_graph_entities_lookup ON procedure_graph_entities(entity_type, entity_name, entity_role);
 CREATE INDEX IF NOT EXISTS idx_block_edges_block ON block_edges(block_id);
 CREATE INDEX IF NOT EXISTS idx_block_edges_type ON block_edges(edge_type);
 """

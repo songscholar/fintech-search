@@ -1388,6 +1388,47 @@ class IndexWriteService:
                 "dynamic_sql_templates": dynamic_sql_templates[:4],
             },
         }
+        graph_entities: list[dict[str, object]] = []
+        for ordinal, item in enumerate(table_entities, start=1):
+            graph_entities.append(
+                {
+                    "entity_type": "table",
+                    "entity_name": str(item.get("name") or ""),
+                    "entity_role": str(item.get("mode") or ""),
+                    "ordinal": ordinal,
+                    "detail": {"source": "relation_graph.tables"},
+                }
+            )
+        for ordinal, item in enumerate(variable_entities, start=1):
+            graph_entities.append(
+                {
+                    "entity_type": "variable",
+                    "entity_name": str(item.get("name") or ""),
+                    "entity_role": str(item.get("mode") or ""),
+                    "ordinal": ordinal,
+                    "detail": {"source": "relation_graph.variables"},
+                }
+            )
+        for ordinal, name in enumerate(mc_topics[:6], start=1):
+            graph_entities.append(
+                {
+                    "entity_type": "topic",
+                    "entity_name": str(name),
+                    "entity_role": "publisher",
+                    "ordinal": ordinal,
+                    "detail": {"source": "relation_graph.topics"},
+                }
+            )
+        for ordinal, name in enumerate(metadata_refs[:6], start=1):
+            graph_entities.append(
+                {
+                    "entity_type": "metadata",
+                    "entity_name": str(name),
+                    "entity_role": "referencer",
+                    "ordinal": ordinal,
+                    "detail": {"source": "relation_graph.metadata_refs"},
+                }
+            )
         summary_parts = [procedure_name]
         if input_params:
             summary_parts.append(f"inputs {', '.join(input_params[:4])}")
@@ -1470,3 +1511,35 @@ class IndexWriteService:
             """,
             (procedure_id, procedure_name, summary_text),
         )
+        conn.execute(
+            "DELETE FROM procedure_graph_entities WHERE procedure_id = ?",
+            (procedure_id,),
+        )
+        for entity in graph_entities:
+            if not str(entity.get("entity_name") or "").strip():
+                continue
+            conn.execute(
+                """
+                INSERT INTO procedure_graph_entities(
+                  procedure_id,
+                  file_id,
+                  procedure_name,
+                  entity_type,
+                  entity_name,
+                  entity_role,
+                  ordinal,
+                  detail_json
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    procedure_id,
+                    file_id,
+                    procedure_name,
+                    str(entity["entity_type"]),
+                    str(entity["entity_name"]),
+                    str(entity.get("entity_role") or ""),
+                    int(entity.get("ordinal") or 0),
+                    json_dumps(dict(entity.get("detail") or {})),
+                ),
+            )

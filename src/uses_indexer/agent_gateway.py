@@ -335,9 +335,11 @@ def _sanitize_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
 def _build_user_prompt(*, message: str, context_bundle: dict[str, Any], attachments: list[AgentAttachment]) -> str:
     context_json = json.dumps(context_bundle, ensure_ascii=False, indent=2)
     attachment_text = _format_attachment_prompt(attachments)
+    decision_note = _format_grounded_decision_note(context_bundle)
     return (
         "用户问题：\n"
         f"{message.strip()}\n\n"
+        f"{decision_note}"
         "本地代码库上下文（来自当前 uses-indexer 服务）:\n"
         f"{context_json}\n\n"
         f"{attachment_text}"
@@ -373,6 +375,28 @@ def _complete_openai_compatible(config: AgentProviderConfig, messages: list[dict
         "usage": parsed.get("usage"),
         "raw_response": parsed,
     }
+
+
+def _format_grounded_decision_note(context_bundle: dict[str, Any]) -> str:
+    draft = dict(context_bundle.get("answer_draft") or {})
+    decision = dict(draft.get("decision") or {})
+    if not draft or not decision:
+        return ""
+    lines = [
+        "当前 grounded QA 决策摘要：",
+        f"- query_type: {draft.get('query_type') or 'unknown'}",
+        f"- review_required: {bool(draft.get('review_required'))}",
+    ]
+    if decision.get("state"):
+        lines.append(f"- state: {decision['state']}")
+    if decision.get("conflict_kind"):
+        lines.append(f"- conflict_kind: {decision['conflict_kind']}")
+    if decision.get("evidence_alignment"):
+        lines.append(f"- evidence_alignment: {decision['evidence_alignment']}")
+    primary_candidate = dict(draft.get("primary_candidate") or {})
+    if primary_candidate.get("procedure_name"):
+        lines.append(f"- primary_candidate: {primary_candidate['procedure_name']}")
+    return "\n".join(lines) + "\n\n"
 
 
 def _perform_request(http_request: request.Request, config: AgentProviderConfig) -> str:
