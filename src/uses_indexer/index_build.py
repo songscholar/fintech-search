@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import time
 from collections import Counter
@@ -33,6 +34,10 @@ CREATE TABLE IF NOT EXISTS indexed_files (
 """
 
 
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 class IndexBuildService:
     def __init__(self, owner: "SQLiteIndexer") -> None:
         self.owner = owner
@@ -45,6 +50,8 @@ class IndexBuildService:
         resume_vectors: bool = False,
         incremental: bool = False,
         index_type: str = "all",
+        skip_vectors: bool = False,
+        progress: bool = False,
     ) -> dict[str, object]:
         started_at = time.perf_counter()
         root = Path(source_root)
@@ -66,16 +73,43 @@ class IndexBuildService:
         self._ensure_index_state_schema(conn)
         self._ensure_runtime_schema(conn)
 
+        phase_events: list[dict[str, object]] = []
+
+        def record_phase(name: str, detail: dict[str, object] | None = None) -> None:
+            event = {
+                "phase": name,
+                "elapsed_seconds": round(time.perf_counter() - started_at, 3),
+            }
+            if detail:
+                event.update(detail)
+            phase_events.append(event)
+            if progress or _truthy_env("USES_INDEXER_BUILD_PROGRESS"):
+                suffix = f" {json.dumps(detail, ensure_ascii=False)}" if detail else ""
+                print(f"[build-index] {name}{suffix}", flush=True)
+
+        record_phase("collect_files_start", {"index_type": index_type})
         files = self._collect_files(root, index_type=index_type)
+        record_phase("collect_files_done", {"file_count": len(files)})
         initial_embedder_info = self.owner.embedder.info
         parse_cache: dict[str, ParsedUnit] = {}
         parse_stats = {"hits": 0, "misses": 0}
 
         try:
+            record_phase("index_files_start")
             with conn:
                 self._store_index_metadata(conn, root=root, file_count=len(files), index_type=index_type, embedder_info=initial_embedder_info)
                 counters = self._index_files(conn, files, parse_cache=parse_cache, parse_stats=parse_stats)
-                write_service.refresh_all_procedure_features(conn)
+            record_phase("index_files_committed", {"parsed_unit_count": len(parse_cache)})
+
+            record_phase("refresh_procedure_features_start")
+            feature_stats = write_service.refresh_all_procedure_features(
+                conn,
+                progress_callback=record_phase if progress or _truthy_env("USES_INDEXER_BUILD_PROGRESS") else None,
+            )
+            record_phase("refresh_procedure_features_done", feature_stats)
+
+            record_phase("upsert_indexed_file_state_start")
+            with conn:
                 self._upsert_indexed_file_state(
                     conn,
                     files,
@@ -83,13 +117,30 @@ class IndexBuildService:
                     parse_cache=parse_cache,
                     parse_stats=parse_stats,
                 )
+            record_phase("upsert_indexed_file_state_done")
 
-            vector_stats = write_service.populate_missing_chunk_vectors(conn)
+            if skip_vectors:
+                vector_stats = {
+                    "skipped": True,
+                    "reason": "skip_vectors",
+                    "missing_before": write_service.missing_chunk_vector_count(conn),
+                    "inserted": 0,
+                    "batches": 0,
+                    "missing_after": write_service.missing_chunk_vector_count(conn),
+                    "provider_counts": {},
+                }
+                record_phase("populate_vectors_skipped", {"missing_vectors": vector_stats["missing_after"]})
+            else:
+                record_phase("populate_vectors_start")
+                vector_stats = write_service.populate_missing_chunk_vectors(conn)
+                record_phase("populate_vectors_done", vector_stats)
         finally:
             conn.close()
         self.owner._vector_cache.clear()
 
+        record_phase("summarize_db_start")
         db_summary = self.owner.summarize_db(db_file)
+        record_phase("summarize_db_done")
         return self._build_summary_payload(
             db_file=db_file,
             root=root,
@@ -102,6 +153,9 @@ class IndexBuildService:
                 "parsed_unit_count": len(parse_cache),
                 "parse_cache_hits": int(parse_stats["hits"]),
                 "parse_cache_misses": int(parse_stats["misses"]),
+                "phase_events": phase_events,
+                "procedure_feature_refresh": feature_stats,
+                "skip_vectors": skip_vectors,
             },
         )
 
@@ -563,6 +617,18 @@ class IndexBuildService:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_procedure_graph_entities_lookup ON procedure_graph_entities(entity_type, entity_name, entity_role)"
+        )
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_params_file_category ON params(file_id, category, seq);
+            CREATE INDEX IF NOT EXISTS idx_statements_procedure ON statements(procedure_id);
+            CREATE INDEX IF NOT EXISTS idx_actions_procedure ON actions(procedure_id);
+            CREATE INDEX IF NOT EXISTS idx_variable_refs_procedure_type ON variable_refs(procedure_id, access_type);
+            CREATE INDEX IF NOT EXISTS idx_edges_procedure_type ON edges(procedure_id, edge_type);
+            CREATE INDEX IF NOT EXISTS idx_edges_call_target ON edges(edge_type, target_name);
+            CREATE INDEX IF NOT EXISTS idx_edges_call_source ON edges(edge_type, source_name);
+            CREATE INDEX IF NOT EXISTS idx_blocks_procedure_type ON blocks(procedure_id, block_type);
+            """
         )
         conn.execute(
             """

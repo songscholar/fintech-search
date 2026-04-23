@@ -8,6 +8,7 @@ from pathlib import Path
 class IndexDefinition:
     key: str
     db_name: str
+    summary_name: str
     label: str
     description: str
     includes_code: bool
@@ -20,6 +21,7 @@ INDEX_DEFINITIONS: dict[str, IndexDefinition] = {
     "code": IndexDefinition(
         key="code",
         db_name="business_code_index.db",
+        summary_name="business_code_index_summary.json",
         label="代码索引",
         description="仅包含 USES/UFT DSL 代码文件，不包含 metadata 元数据文件。",
         includes_code=True,
@@ -30,6 +32,7 @@ INDEX_DEFINITIONS: dict[str, IndexDefinition] = {
     "metadata": IndexDefinition(
         key="metadata",
         db_name="business_metadata_index.db",
+        summary_name="business_metadata_index_summary.json",
         label="元数据索引",
         description="仅包含 metadata 目录下的标准字段、常量、错误号、宏、主题域等元数据。",
         includes_code=False,
@@ -39,6 +42,7 @@ INDEX_DEFINITIONS: dict[str, IndexDefinition] = {
     "full": IndexDefinition(
         key="full",
         db_name="business_full_index.db",
+        summary_name="business_full_index_summary.json",
         label="全量索引",
         description="同时包含代码文件和 metadata 元数据文件，用于综合检索。",
         includes_code=True,
@@ -48,6 +52,7 @@ INDEX_DEFINITIONS: dict[str, IndexDefinition] = {
     "table": IndexDefinition(
         key="table",
         db_name="business_table_index.db",
+        summary_name="business_table_index_summary.json",
         label="表结构索引",
         description="仅包含 .uftstructure 表结构、字段、索引和表空间关系。",
         includes_code=False,
@@ -57,6 +62,7 @@ INDEX_DEFINITIONS: dict[str, IndexDefinition] = {
     "subset": IndexDefinition(
         key="subset",
         db_name="uses_codes_index.db",
+        summary_name="uses_codes_index_summary.json",
         label="子库回归索引",
         description="仅保留 uses_codes 子目录的较小范围索引，主要用于回归测试。",
         includes_code=True,

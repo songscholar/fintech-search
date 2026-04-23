@@ -2,10 +2,12 @@
 import sys
 import time
 import threading
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+from uses_indexer.index_catalog import INDEX_DEFINITIONS
 from uses_indexer.indexer import SQLiteIndexer
 from uses_indexer.parser import UftDslParser
 from uses_indexer.table_indexer import TableIndexer
@@ -55,6 +57,24 @@ def build_single_index(index_name: str, db_path: Path, build_func):
     return result
 
 
+def _write_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_index_artifacts(
+    *,
+    examples_dir: Path,
+    index_key: str,
+    build_summary: dict,
+    db_summary: dict,
+) -> None:
+    definition = INDEX_DEFINITIONS[index_key]
+    merged_summary = dict(build_summary)
+    merged_summary["db_summary"] = db_summary
+    merged_summary["db_path"] = str(examples_dir / definition.db_name)
+    _write_json(examples_dir / definition.summary_name, merged_summary)
+
+
 def main():
     print("=" * 80)
     print("构建剩余的两个索引...")
@@ -78,10 +98,16 @@ def main():
     full_db_path = examples_dir / "business_full_index.db"
     
     def build_full_index():
-        return indexer.build_index(str(code_root), str(full_db_path), index_type="all")
+        return indexer.build_index(str(code_root), str(full_db_path), index_type="all", progress=True)
     
     try:
         result = build_single_index("3/4", full_db_path, build_full_index)
+        write_index_artifacts(
+            examples_dir=examples_dir,
+            index_key="full",
+            build_summary=result,
+            db_summary=indexer.summarize_db(full_db_path),
+        )
         print(f"  文件数: {result.get('file_count', 'N/A')}")
         print(f"  过程数: {result.get('procedure_count', 'N/A')}")
         print(f"  元数据条目数: {result.get('metadata_entries', 'N/A')}")
@@ -105,6 +131,12 @@ def main():
     
     try:
         result = build_single_index("4/4", table_db_path, build_table_index)
+        write_index_artifacts(
+            examples_dir=examples_dir,
+            index_key="table",
+            build_summary=result,
+            db_summary=table_indexer.db_summary(table_db_path),
+        )
         print(f"  表数量: {result.get('table_count', 'N/A')}")
         print(f"  字段数量: {result.get('field_count', 'N/A')}")
         print(f"  索引数量: {result.get('index_count', 'N/A')}")

@@ -52,6 +52,8 @@ class SQLiteIndexer:
         resume_vectors: bool = False,
         incremental: bool = False,
         index_type: str = "all",
+        skip_vectors: bool = False,
+        progress: bool = False,
     ) -> dict[str, object]:
         return self._index_build_service.build_index(
             source_root,
@@ -59,6 +61,8 @@ class SQLiteIndexer:
             resume_vectors=resume_vectors,
             incremental=incremental,
             index_type=index_type,
+            skip_vectors=skip_vectors,
+            progress=progress,
         )
 
     def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path, index_type: str = "all") -> dict[str, object]:

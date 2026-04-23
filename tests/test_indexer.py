@@ -430,6 +430,37 @@ def test_build_index_populates_vectors_in_global_batches(tmp_path: Path) -> None
     assert result["vector_stats"]["missing_after"] == 0
 
 
+def test_build_index_can_skip_vectors_and_creates_perf_indexes(tmp_path: Path) -> None:
+    source_dir = _write_sample_sources(tmp_path)
+    db_path = tmp_path / "index.db"
+    embedder = RecordingBatchEmbedder(batch_size=1000)
+    indexer = SQLiteIndexer(embedder=embedder)
+
+    result = indexer.build_index(source_dir, db_path, skip_vectors=True)
+
+    conn = sqlite3.connect(db_path)
+    chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    vector_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0]
+    index_names = {
+        str(row[0])
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index'"
+        ).fetchall()
+    }
+    conn.close()
+
+    assert chunk_count > 0
+    assert vector_count == 0
+    assert embedder.calls == []
+    assert result["vector_stats"]["skipped"] is True
+    assert result["vector_stats"]["missing_after"] == chunk_count
+    assert result["build_stats"]["skip_vectors"] is True
+    assert result["build_stats"]["phase_events"]
+    assert "idx_edges_procedure_type" in index_names
+    assert "idx_variable_refs_procedure_type" in index_names
+    assert "idx_statements_procedure" in index_names
+
+
 def test_build_index_commits_vector_batches_before_failure(tmp_path: Path) -> None:
     source_dir = _write_sample_sources(tmp_path)
     db_path = tmp_path / "index.db"

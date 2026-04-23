@@ -147,7 +147,6 @@ flowchart LR
 摘要文件：
 
 - `examples/business_code_index_summary.json`
-- `examples/business_code_db_summary.json`
 - `examples/business_code_mc_publish_example.json`
 
 说明：
@@ -414,7 +413,7 @@ python3 -m uses_indexer build-index \
 ```bash
 python3 -m uses_indexer db-summary \
   --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_db_summary.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_summary.json
 ```
 
 执行简单关键词查询：

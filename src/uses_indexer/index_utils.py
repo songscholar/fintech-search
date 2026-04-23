@@ -107,6 +107,14 @@ def merge_candidate(
     if retrieval_source not in matched_via:
         matched_via.append(retrieval_source)
     existing["matched_via"] = matched_via
+    existing["reasons"] = dedupe_strings(
+        [str(item) for item in existing.get("reasons", [])]
+        + [str(item) for item in candidate.get("reasons", [])]
+    )
+
+    for field in ("graph_focus_type", "graph_focus_value", "graph_focus_role"):
+        if existing.get(field) in {None, ""} and candidate.get(field) not in {None, ""}:
+            existing[field] = candidate[field]
 
     if float(candidate["base_score"]) > float(existing["base_score"]):
         for field in ("matched_text", "match_source", "retrieval_source", "base_score", "source_rank"):

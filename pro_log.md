@@ -4999,3 +4999,60 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前“结构化实体 -> 代表性上下文”这条链已经前移到 retrieval 层，而不只是 evidence 层
 - 当前 query hits 开始更稳定地区分“过程命中”和“最像主证据的上下文命中”
 - 当前 `graph entity -> focus context -> primary evidence` 的闭环更完整了
+
+## 1.2.57 - 建库性能阶段化优化
+
+### 背景
+
+在关系图、过程画像和结构化实体索引变厚之后，全量代码索引构建开始明显变慢。只读排查确认：
+
+- 当前构建进程持续满 CPU，不是死锁
+- `.db-wal` 会持续增长到 GB 级
+- 主库在大事务提交前仍显示很小
+- `refresh_all_procedure_features()` 会对每个过程反复访问大表
+
+### 本轮改动
+
+1. 补齐建库阶段关键组合索引
+   - `idx_params_file_category`
+   - `idx_statements_procedure`
+   - `idx_actions_procedure`
+   - `idx_variable_refs_procedure_type`
+   - `idx_edges_procedure_type`
+   - `idx_edges_call_target`
+   - `idx_edges_call_source`
+   - `idx_blocks_procedure_type`
+
+2. 拆分全量建库事务
+   - `index_files` 单独提交
+   - `refresh_procedure_features` 单独分批提交
+   - `indexed_files` 状态写入单独提交
+   - `populate_vectors` 继续保持独立批量事务
+
+3. 过程画像分批刷新
+   - `refresh_all_procedure_features()` 支持 batch 刷新
+   - 默认每批 `500` 个过程
+   - 每批独立提交，降低单次事务压力
+
+4. 向量阶段可拆分
+   - `build-index` 新增 `--skip-vectors`
+   - `build_indexes.py` 新增 `--skip-vectors`
+   - 后续可用 `--resume-vectors` 补齐 `chunk_vectors`
+
+5. 构建阶段可观测性
+   - `build-index` 新增 `--progress`
+   - summary 的 `build_stats.phase_events` 会记录阶段耗时
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/index_build.py src/uses_indexer/index_write.py src/uses_indexer/indexer.py src/uses_indexer/cli.py build_indexes.py build_all_indexes.py build_remaining_indexes.py tests/test_indexer.py`
+  - 结果：通过
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_can_skip_vectors_and_creates_perf_indexes tests/test_indexer.py::test_build_index_populates_vectors_in_global_batches tests/test_indexer.py::test_build_index_resume_vectors_skips_existing_vectors`
+  - 结果：`3 passed`
+
+### 结论
+
+- 下一次全量建库会更容易定位阶段耗时
+- 过程画像刷新不再挤在一个超大事务里
+- 大库可以先构建结构索引，再独立补齐向量
+- 当前正在运行的旧构建进程不会被这些代码改动影响

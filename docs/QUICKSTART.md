@@ -116,9 +116,12 @@ python3 build_indexes.py --mode full
 ```bash
 # 同时构建代码索引、元数据索引、表结构索引
 python3 build_indexes.py --mode three
+
+# 大库可先跳过向量，结构索引建好后再补齐 chunk_vectors
+python3 build_indexes.py --mode three --skip-vectors
 ```
 
-这个模式会按顺序构建三个索引，包含完整的错误处理和进度监控。
+这个模式会按顺序构建三个专用索引：代码索引、元数据索引、表结构索引；全量索引仍然通过 `--mode full` 单独构建。
 
 ##### 场景 3：构建所有四个索引
 
@@ -137,8 +140,11 @@ python3 build_indexes.py --mode all
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
   --db ./examples/business_code_index.db \
-  --index-type code
+  --index-type code \
+  --progress
 ```
+
+如果只想先建结构索引，可以加 `--skip-vectors`；后续再用 `--resume-vectors` 补齐向量。
 
 ##### 构建元数据专用索引（仅元数据文件）
 

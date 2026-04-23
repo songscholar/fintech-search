@@ -49,7 +49,7 @@
 | `code` | 仅构建代码索引 | 代码索引 |
 | `metadata` | 仅构建元数据索引 | 元数据索引 |
 | `table` | 仅构建表结构索引 | 表结构索引 |
-| `three` | 一次构建三个专用索引 | 代码索引、元数据索引、表结构索引 |
+| `three` | 一次构建三个专用索引 | 代码索引、元数据索引、表结构索引（不包含全量索引） |
 | `full` | 仅构建全量索引 | 全量索引（包含代码+元数据） |
 | `all` | 构建所有四个索引 | 代码索引、元数据索引、全量索引、表结构索引 |
 
@@ -84,6 +84,14 @@ python3 build_indexes.py --mode three
 - 完整的异常处理，某个索引构建失败不会影响其他索引
 - 详细的进度和统计信息输出
 
+如果只想先构建结构索引，后续再补向量，可以使用：
+
+```bash
+python3 build_indexes.py --mode three --skip-vectors
+```
+
+这个模式会跳过 `chunk_vectors` 写入，适合大库先获得 FTS、关系图、证据组装能力。后续可用 CLI 的 `--resume-vectors` 补齐向量。
+
 **场景 3：构建全量索引**
 
 当你需要一个包含所有信息的综合索引时使用：
@@ -112,6 +120,17 @@ python3 build_indexes.py --mode all
 ### 使用 CLI 命令逐个构建
 
 如果需要更精细的控制，可以使用 CLI 命令逐个构建索引。详见 [QUICKSTART.md](QUICKSTART.md) 中的详细说明。
+
+CLI 也支持阶段日志和向量拆分：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db ./examples/business_code_index.db \
+  --index-type code \
+  --skip-vectors \
+  --progress
+```
 
 当前推荐默认代码检索库是：
 

@@ -811,7 +811,11 @@ class RetrievalService:
                         "procedure_summary": str(row[6]),
                         "feature_flags": json.loads(str(row[7] or "{}")),
                         "procedure_profile": json.loads(str(row[8] or "{}")),
-                        "reasons": [f"table_flow_bridge={table_name}", f"table_flow_mode={flow_mode}"],
+                        "reasons": [
+                            f"table_flow_bridge={table_name}",
+                            f"table_flow_mode={flow_mode}",
+                            f"call_chain_bridge={table_name}",
+                        ],
                     }
                 )
 
@@ -874,7 +878,11 @@ class RetrievalService:
                         "procedure_summary": str(row[6]),
                         "feature_flags": json.loads(str(row[7] or "{}")),
                         "procedure_profile": json.loads(str(row[8] or "{}")),
-                        "reasons": [f"variable_flow_bridge={variable_name}", f"variable_flow_mode={flow_mode}"],
+                        "reasons": [
+                            f"variable_flow_bridge={variable_name}",
+                            f"variable_flow_mode={flow_mode}",
+                            f"call_chain_bridge={variable_name}",
+                        ],
                     }
                 )
 

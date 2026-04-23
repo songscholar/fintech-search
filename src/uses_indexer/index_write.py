@@ -33,7 +33,13 @@ class IndexWriteService:
     def __init__(self, owner: "SQLiteIndexer") -> None:
         self.owner = owner
 
-    def refresh_all_procedure_features(self, conn: sqlite3.Connection) -> None:
+    def refresh_all_procedure_features(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        batch_size: int = 500,
+        progress_callback: object | None = None,
+    ) -> dict[str, object]:
         rows = conn.execute(
             """
             SELECT p.id, p.file_id, p.name
@@ -41,13 +47,32 @@ class IndexWriteService:
             ORDER BY p.id
             """
         ).fetchall()
-        for procedure_id, file_id, procedure_name in rows:
-            self.upsert_procedure_features(
-                conn,
-                file_id=int(file_id),
-                procedure_id=int(procedure_id),
-                procedure_name=str(procedure_name),
-            )
+        if not rows:
+            return {"procedure_count": 0, "batch_size": batch_size, "batches": 0}
+
+        batch_size = max(int(batch_size), 1)
+        batches = 0
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start:start + batch_size]
+            with conn:
+                for procedure_id, file_id, procedure_name in batch:
+                    self.upsert_procedure_features(
+                        conn,
+                        file_id=int(file_id),
+                        procedure_id=int(procedure_id),
+                        procedure_name=str(procedure_name),
+                    )
+            batches += 1
+            if callable(progress_callback):
+                progress_callback(
+                    "refresh_procedure_features_batch",
+                    {
+                        "processed": min(start + len(batch), len(rows)),
+                        "total": len(rows),
+                        "batch_size": batch_size,
+                    },
+                )
+        return {"procedure_count": len(rows), "batch_size": batch_size, "batches": batches}
 
     def refresh_procedure_features_for_paths(
         self,

@@ -108,6 +108,13 @@ class CodebaseQA:
             context_window=effective_context_window,
             related_limit=effective_related_limit,
         )
+        if self._should_discard_weak_evidence(evidence_bundle["evidence"]):
+            evidence_bundle = {
+                **evidence_bundle,
+                "evidence_count": 0,
+                "evidence": [],
+                "llm_context": "当前没有检索到足够直接的代码证据。",
+            }
 
         prompt_package = {
             "system_prompt": SYSTEM_PROMPT,
@@ -141,6 +148,29 @@ class CodebaseQA:
                 llm_context,
             ]
         )
+
+    def _should_discard_weak_evidence(self, evidence: list[dict[str, object]]) -> bool:
+        if not evidence:
+            return False
+
+        strongest_similarity = 0.0
+        for item in evidence:
+            matched_via = {
+                str(value)
+                for value in (item.get("matched_via") or [item.get("retrieval_source")])
+                if str(value)
+            }
+            if not matched_via or matched_via - {"vector_chunk"}:
+                return False
+            for reason in item.get("reasons") or []:
+                text = str(reason)
+                if text.startswith("vector_similarity="):
+                    try:
+                        strongest_similarity = max(strongest_similarity, float(text.split("=", 1)[1]))
+                    except ValueError:
+                        continue
+
+        return strongest_similarity < 0.2
 
     def _build_draft_answer(self, question: str, evidence: list[dict[str, object]]) -> dict[str, object]:
         question_analysis = analyze_query(question)

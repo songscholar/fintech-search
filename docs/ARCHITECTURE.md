@@ -1647,6 +1647,68 @@ SQL 恢复这边也有一个仓库特性要处理：
 
 这正是“关系索引更强、知识底座更硬”最关键的一步。
 
+## 建库性能收口
+
+全量代码索引在引入 `procedure_profile`、`relation_graph`、`procedure_graph_entities` 和多路 FTS 后，建库成本显著上升。当前建库链路已经做了第一轮性能收口，重点不是减少索引内容，而是降低同等知识厚度下的写入和刷新成本。
+
+### 1. 补齐关键组合索引
+
+过程画像刷新会反复访问 `params / statements / actions / variable_refs / edges / blocks`。现在 schema 增加了面向建库阶段的组合索引：
+
+- `idx_params_file_category`
+- `idx_statements_procedure`
+- `idx_actions_procedure`
+- `idx_variable_refs_procedure_type`
+- `idx_edges_procedure_type`
+- `idx_edges_call_target`
+- `idx_edges_call_source`
+- `idx_blocks_procedure_type`
+
+这些索引主要服务 `refresh_all_procedure_features()` 和增量刷新，目标是避免过程数变大后，每个过程画像都触发越来越贵的全表扫描。
+
+### 2. 拆分全量建库事务
+
+全量建库不再把“基础索引写入、过程画像刷新、文件状态写入”全部包在一个超大事务里，而是拆成阶段性提交：
+
+- `index_files`
+- `refresh_procedure_features`
+- `upsert_indexed_file_state`
+- `populate_vectors`
+- `summarize_db`
+
+这样 WAL 不会无限堆在一个未提交事务里，中途失败时也更容易判断损失范围。
+
+### 3. 过程画像分批刷新
+
+`refresh_all_procedure_features()` 现在按 batch 刷新过程画像和结构化图实体。默认每批 `500` 个过程并独立提交，避免一次事务覆盖所有过程画像刷新。
+
+这一步不是降低知识质量，而是让 `procedure_features / procedure_graph_entities / procedure_graph_entities_fts` 的维护更适合大库。
+
+### 4. 向量阶段可拆分
+
+`build-index` 和 `build_indexes.py` 现在支持跳过向量：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db ./examples/business_code_index.db \
+  --index-type code \
+  --skip-vectors \
+  --progress
+```
+
+之后可以再补齐向量：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer build-index \
+  /Users/songzuoqiang/Documents/agent/code \
+  --db ./examples/business_code_index.db \
+  --index-type code \
+  --resume-vectors
+```
+
+这个模式适合大库场景先快速得到可用的 FTS / 关系 / 证据检索索引，再把 `chunk_vectors` 放到可恢复阶段单独完成。
+
 ## 最新 representative context 前移
 
 这一轮继续沿着三个核心问题往下做，重点是把：

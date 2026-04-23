@@ -74,6 +74,16 @@ def main() -> int:
         action="store_true",
         help="Incrementally update an existing SQLite index by re-indexing changed files only.",
     )
+    build_index_parser.add_argument(
+        "--skip-vectors",
+        action="store_true",
+        help="Build structural indexes only and leave chunk vectors for a later --resume-vectors run.",
+    )
+    build_index_parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print build phase progress while indexing.",
+    )
 
     db_summary_parser = subparsers.add_parser("db-summary", help="Show SQLite index summary.")
     db_summary_parser.add_argument("--db", required=True, help="SQLite database path.")
@@ -344,6 +354,8 @@ def main() -> int:
             resume_vectors=args.resume_vectors,
             incremental=args.incremental,
             index_type=args.index_type,
+            skip_vectors=args.skip_vectors,
+            progress=args.progress,
         )
     elif args.command == "query-index":
         data = indexer.query_index(args.db, args.query, limit=args.limit, debug=args.debug)
