@@ -533,6 +533,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
             bonus += 5.0
             reasons.append("intent_table_feature_source")
+        if candidate.get("retrieval_source") == "fts_graph_entity":
+            bonus += 16.0
+            reasons.append("intent_table_graph_entity_fts")
         if candidate.get("retrieval_source") == "relation_graph_profile":
             bonus += 10.0
             reasons.append("intent_relation_graph_table")
@@ -592,6 +595,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_statement"}:
             bonus += 5.0
             reasons.append("intent_variable_feature_source")
+        if candidate.get("retrieval_source") == "fts_graph_entity":
+            bonus += 14.0
+            reasons.append("intent_variable_graph_entity_fts")
         if candidate.get("retrieval_source") == "relation_graph_profile":
             bonus += 8.0
             reasons.append("intent_relation_graph_variable")
@@ -650,6 +656,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
             bonus += 6.0
             reasons.append("intent_metadata_feature_source")
+        if candidate.get("retrieval_source") == "fts_graph_entity":
+            bonus += 14.0
+            reasons.append("intent_metadata_graph_entity_fts")
         if candidate.get("retrieval_source") == "relation_graph_focus_context":
             bonus += 14.0
             reasons.append("intent_relation_graph_context_metadata")
@@ -664,6 +673,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_action", "fts_edge"}:
             bonus += 6.0
             reasons.append("intent_topic_feature_source")
+        if candidate.get("retrieval_source") == "fts_graph_entity":
+            bonus += 14.0
+            reasons.append("intent_topic_graph_entity_fts")
         if candidate.get("retrieval_source") == "relation_graph_focus_context":
             bonus += 14.0
             reasons.append("intent_relation_graph_context_topic")

@@ -117,6 +117,16 @@ class RetrievalService:
         for candidate in relation_candidates:
             merge_candidate(candidates, candidate)
 
+        graph_entity_fts_candidates = self._run_graph_entity_fts_queries(
+            conn,
+            query_analysis=query_analysis,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["graph_entity_fts"] = [self._trace_candidate(item) for item in graph_entity_fts_candidates[:20]]
+        source_counts["graph_entity_fts"] = len(graph_entity_fts_candidates)
+        for candidate in graph_entity_fts_candidates:
+            merge_candidate(candidates, candidate)
+
         relation_graph_candidates = self._run_relation_graph_queries(
             conn,
             query_analysis=query_analysis,
@@ -458,6 +468,104 @@ class RetrievalService:
                     )
                     if len(candidates) >= limit:
                         return candidates
+        return candidates[:limit]
+
+    def _run_graph_entity_fts_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        has_graph_fts = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'procedure_graph_entities_fts'"
+        ).fetchone()
+        if not has_graph_fts:
+            return []
+
+        focus_specs: list[tuple[str, str, float]] = []
+        focus_specs.extend(("table", str(term), 86.0) for term in query_analysis.get("table_terms", [])[:4])
+        focus_specs.extend(("variable", str(term), 84.0) for term in query_analysis.get("variable_terms", [])[:4])
+        if query_analysis.get("wants_topic"):
+            focus_specs.extend(("topic", str(term), 88.0) for term in query_analysis.get("focus_terms", [])[:4])
+        if query_analysis.get("wants_metadata"):
+            focus_specs.extend(("metadata", str(term), 86.0) for term in query_analysis.get("focus_terms", [])[:4])
+        if not focus_specs:
+            return []
+
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[int, str, str]] = set()
+        for mode, term, score in focus_specs:
+            fts_term = build_fts_query(term)
+            if not fts_term:
+                continue
+            rows = conn.execute(
+                """
+                SELECT
+                  pge.procedure_id,
+                  pge.file_id,
+                  pge.procedure_name,
+                  pf.summary_text,
+                  pf.feature_flags_json,
+                  pf.profile_json,
+                  p.chinese_name,
+                  p.object_id,
+                  f.path,
+                  pge.entity_name,
+                  pge.entity_role
+                FROM procedure_graph_entities_fts
+                JOIN procedure_graph_entities pge ON pge.id = procedure_graph_entities_fts.rowid
+                JOIN procedure_features pf ON pf.procedure_id = pge.procedure_id
+                JOIN procedures p ON p.id = pge.procedure_id
+                JOIN files f ON f.id = pge.file_id
+                WHERE procedure_graph_entities_fts MATCH ?
+                  AND pge.entity_type = ?
+                ORDER BY bm25(procedure_graph_entities_fts)
+                LIMIT ?
+                """,
+                (fts_term, mode, limit),
+            ).fetchall()
+            for row in rows:
+                key = (int(row[0]), mode, str(row[9]).lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                entity_name = str(row[9] or term)
+                entity_role = str(row[10] or "")
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[8]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[6] if row[6] else None,
+                        "object_id": row[7] if row[7] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": f"{entity_name} ({entity_role})" if entity_role else entity_name,
+                        "match_source": "graph_entity_name",
+                        "retrieval_source": "fts_graph_entity",
+                        "base_score": score,
+                        "source_rank": score / 10.0,
+                        "search_text": f"{term} {entity_name} {entity_role} {row[3]}",
+                        "procedure_summary": str(row[3]),
+                        "feature_flags": json.loads(str(row[4] or "{}")),
+                        "procedure_profile": json.loads(str(row[5] or "{}")),
+                        "graph_focus_type": mode,
+                        "graph_focus_value": entity_name,
+                        "graph_focus_role": entity_role,
+                        "reasons": [
+                            f"fts_graph_entity={term}",
+                            f"relation_graph_role={entity_role}",
+                            "relation_graph_fts",
+                        ],
+                    }
+                )
+                if len(candidates) >= limit:
+                    return candidates[:limit]
         return candidates[:limit]
 
     def _run_relation_graph_context_queries(

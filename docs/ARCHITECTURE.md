@@ -1543,3 +1543,106 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 同时还能继续进入 retrieval / evidence / QA / agent
 
 所以现在“关系索引还不够强”和“知识底座还不够硬”这两个问题，已经开始被真正从底层结构上解决，而不只是继续在上层调排序。
+
+## 最新 graph-entity FTS 主检索推进
+
+这一轮继续解决两个底层问题：
+
+- 关系索引还不够强
+- 知识底座还不够硬
+
+相比上一轮“把 `relation_graph` 物化成表”，这轮更进一步的目标是：
+
+- 让这张结构化实体表不只是持久化存档
+- 而是直接成为 query-type 主检索配方的一部分
+
+### 1. `procedure_graph_entities` 现在有了自己的 FTS 入口
+
+当前 schema 新增了：
+
+- `procedure_graph_entities_fts`
+
+它索引的内容包括：
+
+- `entity_type`
+- `entity_name`
+- `entity_role`
+- `procedure_name`
+- `file_path`
+
+所以这一步的意义是：
+
+- 结构化关系图实体不再只能做精确 SQL 定位
+- 也开始拥有专门的全文检索入口
+
+这对下面几类问题尤其有价值：
+
+- topic 发布
+- metadata 定义
+- table access / table flow
+- variable flow / variable read / variable write
+
+因为这些问题本质上都很适合“先查结构化实体”，而不是先把整个过程摘要或代码块全文扫一遍。
+
+### 2. retrieval 现在开始直接消费 `fts_graph_entity`
+
+在此基础上，这轮新增了：
+
+- `_run_graph_entity_fts_queries()`
+
+当前 retrieval 会按 query type 从 `procedure_graph_entities_fts` 直接做检索，并产出：
+
+- `retrieval_source = fts_graph_entity`
+
+这意味着现在系统在 table / variable / topic / metadata 这些问题上，已经开始形成三层结构化主链路：
+
+1. `fts_graph_entity`
+2. `relation_graph_profile`
+3. `relation_graph_focus_context`
+
+也就是说：
+
+- 先由结构化实体 FTS 找到候选过程
+- 再由结构化实体精确关系补强
+- 再由 graph focus context 把过程落成更适合展示的 chunk
+
+这条链已经明显比单纯“文本 FTS + rerank”更像真正的关系索引系统。
+
+### 3. rerank 和 evidence 也开始把 graph-entity FTS 当成主来源
+
+为了让这层新索引真正进入主检索配方，这轮还同步做了两件事：
+
+- `rerank` 对 `fts_graph_entity` 增加了 query-type intent bonus
+- `evidence` 选择层也开始偏好 `fts_graph_entity`
+
+所以当前：
+
+- `fts_graph_entity` 不只是一个补充命中来源
+- 而是会真正影响最终排序与证据面
+
+这一步的意义很大，因为它让“知识底座”第一次开始直接驱动：
+
+- 候选过程排序
+- 证据面收敛
+
+而不只是给 profile 多补一点摘要字段。
+
+### 4. 当前这条主线的意义
+
+到这一轮为止，`relation_graph` 这条线已经从：
+
+- profile 里的 JSON
+
+一路推进成：
+
+- `procedure_graph_entities`
+- `procedure_graph_entities_fts`
+- `relation_graph_profile`
+- `relation_graph_focus_context`
+
+所以当前系统已经开始具备更像“结构化知识图 + 多层关系检索”的形态，而不是简单的：
+
+- 代码全文检索
+- 外加一些规则 rerank
+
+这正是“关系索引更强、知识底座更硬”最关键的一步。

@@ -4840,3 +4840,88 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 `relation_graph` 已经从 profile 里的 JSON，进一步推进成数据库里的结构化索引表
 - 当前“知识底座”开始不只是 rich profile，而是有了更像一等实体索引的持久化形态
 - 当前后续 retrieval / evidence / QA 的很多增强，已经有了更稳的结构化基座
+
+## 1.2.55 - procedure_graph_entities 升级为 FTS 主检索入口
+
+### 背景
+
+上一轮已经把 `relation_graph` 物化成：
+
+- `procedure_graph_entities`
+
+但它仍然主要承担：
+
+- 精确实体匹配
+- 结构化补召回
+
+如果要继续解决“关系索引还不够强”和“知识底座还不够硬”，下一步更关键的是：
+
+- 让这张结构化实体表本身成为 query-type 主检索配方的一部分
+
+### 本轮改动
+
+1. 更新 `src/uses_indexer/schema.py`
+   - 新增：
+     - `procedure_graph_entities_fts`
+   - 这张 FTS 表索引：
+     - `entity_type`
+     - `entity_name`
+     - `entity_role`
+     - `procedure_name`
+     - `file_path`
+
+2. 更新 `src/uses_indexer/index_build.py`
+   - 运行时 schema 迁移现在也会自动补：
+     - `procedure_graph_entities_fts`
+   - 保证旧库在增量/升级场景下也能得到这层能力
+
+3. 更新 `src/uses_indexer/index_write.py`
+   - 在写入 `procedure_graph_entities` 时，同步写入：
+     - `procedure_graph_entities_fts`
+   - 刷新过程画像时，也会先清理旧的 graph entity FTS 行，再重建新的行
+
+4. 更新 `src/uses_indexer/retrieval.py`
+   - 新增：
+     - `_run_graph_entity_fts_queries()`
+   - 当前 table / variable / topic / metadata 查询，会直接从 `procedure_graph_entities_fts` 做专门检索
+   - 产出的召回来源是：
+     - `fts_graph_entity`
+   - 这样结构化知识图已经不只是“精确关系表”，而是开始拥有自己的全文主检索入口
+
+5. 更新 `src/uses_indexer/rerank.py`
+   - 对 `fts_graph_entity` 增加 query-type intent bonus：
+     - table
+     - variable
+     - metadata
+     - topic
+   - 所以结构化实体 FTS 不只是“能进候选池”，还会参与主排序
+
+6. 更新 `src/uses_indexer/evidence.py`
+   - evidence 选择层也开始偏好：
+     - `fts_graph_entity`
+   - 这样最终证据面更容易出现“结构化实体命中 + 过程级画像 + 代表性 chunk”的组合
+
+7. 更新测试
+   - `tests/test_indexer.py`
+     - `test_build_index_populates_chunk_features_and_procedure_features`
+       - 现在会验证 `procedure_graph_entities_fts` 已写入
+     - `test_query_index_uses_graph_entity_fts_for_topic_queries`
+       - 验证 topic 查询已经能直接命中 `fts_graph_entity`
+   - 变量关系图测试也更新为兼容：
+     - 结构化关系图命中可能来自 `relation_graph_profile`
+     - 也可能来自 `fts_graph_entity`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/schema.py src/uses_indexer/index_build.py src/uses_indexer/index_write.py src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/evidence.py tests/test_indexer.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_build_index_populates_chunk_features_and_procedure_features tests/test_indexer.py::test_query_index_uses_relation_graph_profile_for_variable_queries tests/test_indexer.py::test_query_index_uses_relation_graph_focus_context_for_variable_queries tests/test_indexer.py::test_query_index_uses_graph_entity_fts_for_topic_queries tests/test_api.py::test_agent_gateway_context_bundle_exposes_grounded_decision`
+  - 结果：`5 passed`
+- 额外保护回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前 `procedure_graph_entities` 已经不只是持久化表，还升级成了可全文检索的一等索引入口
+- 当前 query-type 主检索配方开始真正优先消费结构化知识图，而不是只依赖普通文本 FTS
+- 当前“关系索引”和“知识底座”两条主线开始在数据库层真正合并

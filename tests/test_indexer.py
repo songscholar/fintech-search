@@ -331,6 +331,9 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
         ORDER BY entity_type, entity_name
         """
     ).fetchall()
+    graph_entity_fts_count = conn.execute(
+        "SELECT COUNT(*) FROM procedure_graph_entities_fts"
+    ).fetchone()[0]
     bridge_row = conn.execute(
         """
         SELECT summary_text, feature_flags_json
@@ -359,6 +362,7 @@ def test_build_index_populates_chunk_features_and_procedure_features(tmp_path: P
 
     assert procedure_row is not None
     assert graph_entity_rows
+    assert graph_entity_fts_count >= len(graph_entity_rows)
     assert bridge_row is not None
     assert failure_row is not None
     summary_text, profile_json, read_tables_json, write_tables_json, variable_writes_json, feature_flags_json = procedure_row
@@ -956,7 +960,11 @@ def test_query_index_uses_relation_graph_profile_for_variable_queries(tmp_path: 
         or "relation_graph_profile" in hit.get("matched_via", [])
     ]
     assert graph_hits
-    assert any("relation_graph_variable=@fund_account" in " ".join(hit["reasons"]) for hit in graph_hits)
+    assert any(
+        "relation_graph_variable=@fund_account" in " ".join(hit["reasons"])
+        or "fts_graph_entity=@fund_account" in " ".join(hit["reasons"])
+        for hit in graph_hits
+    )
     assert any(hit["graph_focus_type"] == "variable" for hit in graph_hits)
     assert any(hit["graph_focus_role"] in {"read", "read_write"} for hit in graph_hits)
 
@@ -974,6 +982,21 @@ def test_query_index_uses_relation_graph_focus_context_for_variable_queries(tmp_
     assert context_hits
     assert any(hit["graph_focus_type"] == "variable" for hit in context_hits)
     assert any(hit["graph_focus_value"] == "@fund_account" for hit in context_hits)
+
+
+def test_query_index_uses_graph_entity_fts_for_topic_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_mc_publish_index(tmp_path)
+
+    result = indexer.query_index(db_path, "CNST_MC_UFT_OPTSYNC topic 发布", limit=20)
+
+    graph_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "fts_graph_entity"
+        or "fts_graph_entity" in hit.get("matched_via", [])
+    ]
+    assert graph_hits
+    assert any(hit["graph_focus_type"] == "topic" for hit in graph_hits)
+    assert any("CNST_MC_UFT_OPTSYNC" in str(hit["graph_focus_value"]) for hit in graph_hits)
 
 
 def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:

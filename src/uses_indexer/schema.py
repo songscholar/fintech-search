@@ -282,6 +282,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS procedure_features_fts USING fts5(
   tokenize='unicode61 remove_diacritics 0'
 );
 
+CREATE VIRTUAL TABLE IF NOT EXISTS procedure_graph_entities_fts USING fts5(
+  entity_type,
+  entity_name,
+  entity_role,
+  procedure_name,
+  file_path,
+  tokenize='unicode61 remove_diacritics 0'
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(
   block_type,
   anchor_name,

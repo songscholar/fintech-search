@@ -564,6 +564,18 @@ class IndexBuildService:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_procedure_graph_entities_lookup ON procedure_graph_entities(entity_type, entity_name, entity_role)"
         )
+        conn.execute(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS procedure_graph_entities_fts USING fts5(
+              entity_type,
+              entity_name,
+              entity_role,
+              procedure_name,
+              file_path,
+              tokenize='unicode61 remove_diacritics 0'
+            )
+            """
+        )
 
     def _unit_code_fingerprint(self, unit: ParsedUnit) -> str:
         payload = [

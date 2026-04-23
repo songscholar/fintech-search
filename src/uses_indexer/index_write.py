@@ -1083,6 +1083,11 @@ class IndexWriteService:
         procedure_id: int,
         procedure_name: str,
     ) -> None:
+        file_path_row = conn.execute(
+            "SELECT path FROM files WHERE id = ?",
+            (file_id,),
+        ).fetchone()
+        file_path = str(file_path_row[0]) if file_path_row and file_path_row[0] else ""
         params_by_category: dict[str, list[str]] = {}
         for category, param_name, param_id in conn.execute(
             """
@@ -1512,13 +1517,17 @@ class IndexWriteService:
             (procedure_id, procedure_name, summary_text),
         )
         conn.execute(
+            "DELETE FROM procedure_graph_entities_fts WHERE rowid IN (SELECT id FROM procedure_graph_entities WHERE procedure_id = ?)",
+            (procedure_id,),
+        )
+        conn.execute(
             "DELETE FROM procedure_graph_entities WHERE procedure_id = ?",
             (procedure_id,),
         )
         for entity in graph_entities:
             if not str(entity.get("entity_name") or "").strip():
                 continue
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO procedure_graph_entities(
                   procedure_id,
@@ -1543,3 +1552,26 @@ class IndexWriteService:
                     json_dumps(dict(entity.get("detail") or {})),
                 ),
             )
+            graph_entity_id = int(cursor.lastrowid or 0)
+            if graph_entity_id:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO procedure_graph_entities_fts(
+                      rowid,
+                      entity_type,
+                      entity_name,
+                      entity_role,
+                      procedure_name,
+                      file_path
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        graph_entity_id,
+                        str(entity["entity_type"]),
+                        str(entity["entity_name"]),
+                        str(entity.get("entity_role") or ""),
+                        procedure_name,
+                        file_path,
+                    ),
+                )
