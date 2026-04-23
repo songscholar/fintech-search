@@ -4925,3 +4925,77 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前 `procedure_graph_entities` 已经不只是持久化表，还升级成了可全文检索的一等索引入口
 - 当前 query-type 主检索配方开始真正优先消费结构化知识图，而不是只依赖普通文本 FTS
 - 当前“关系索引”和“知识底座”两条主线开始在数据库层真正合并
+
+## 1.2.56 - 代表性上下文前移到 Retrieval 层
+
+### 背景
+
+前几轮已经形成了这样一条结构化链路：
+
+- `fts_graph_entity`
+- `relation_graph_profile`
+- `relation_graph_focus_context`
+
+但还有一个重要问题没有彻底解决：
+
+- 同一个过程里，虽然这些命中已经会合流
+- 但 retrieval 层还没有稳定地把“最像主证据的那块上下文”显式提到前面
+
+这会导致：
+
+- query hits 看起来还是更偏过程级 summary
+- 真正更像主证据的 `relation_graph_focus_context` 要等到 evidence 层才慢慢收口
+
+### 本轮改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 在 `_apply_procedure_aggregate_rerank()` 里新增“代表性上下文”判定
+   - 当同一过程已经同时命中：
+     - `relation_graph_focus_context`
+     - `fts_graph_entity` 或 `relation_graph_profile`
+   - 且问题类型属于：
+     - table / variable / topic / metadata
+   - 那么会把这组过程标记为：
+     - `representative_context = true`
+
+2. 在 retrieval 层增加 representative bonus
+   - 如果候选本身就是 `relation_graph_focus_context`
+   - 并且所在过程已经形成“结构化实体命中 + 代表性上下文”闭环
+   - 就会拿到：
+     - `representative_context_bonus`
+   - 这样最像主证据的上下文块会更稳定地提前，而不是继续被过程级 summary 压住
+
+3. 修正 group 统计方式
+   - 之前过程聚合主要看单条 candidate 当前的 `retrieval_source`
+   - 现在改成按 `matched_via` 全量统计
+   - 所以像已经被合流的：
+     - `fts_graph_entity`
+     - `relation_graph_profile`
+     - `relation_graph_focus_context`
+   - 都会被正确识别进同一组结构化证据链
+
+4. 更新公开命中结构
+   - query hit 现在会带：
+     - `representative_context`
+   - 这样前端和调试视图可以直接区分：
+     - 普通过程命中
+     - 已经被判定为“代表性上下文”的过程/块命中
+
+5. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_uses_relation_graph_focus_context_for_variable_queries`
+       - 现在会验证 `representative_context` 已对外暴露
+
+### 验证
+
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_relation_graph_focus_context_for_variable_queries tests/test_indexer.py::test_query_index_uses_relation_graph_profile_for_variable_queries tests/test_indexer.py::test_query_index_uses_graph_entity_fts_for_topic_queries tests/test_api.py::test_agent_gateway_context_bundle_exposes_grounded_decision`
+  - 结果：`4 passed`
+- 额外保护回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_qa.py::test_ask_surfaces_topic_profile_hints_for_topic_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前“结构化实体 -> 代表性上下文”这条链已经前移到 retrieval 层，而不只是 evidence 层
+- 当前 query hits 开始更稳定地区分“过程命中”和“最像主证据的上下文命中”
+- 当前 `graph entity -> focus context -> primary evidence` 的闭环更完整了

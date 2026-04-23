@@ -1646,3 +1646,108 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 外加一些规则 rerank
 
 这正是“关系索引更强、知识底座更硬”最关键的一步。
+
+## 最新 representative context 前移
+
+这一轮继续沿着三个核心问题往下做，重点是把：
+
+- 结构化实体命中
+- 过程级代表性上下文
+- 最终主证据
+
+这三者的关系，尽量在 retrieval 层就收紧，而不是把最后的判断全部压到 evidence 层。
+
+### 1. retrieval 现在开始显式识别“代表性上下文”
+
+当前系统里，同一个过程可能同时命中：
+
+- `fts_graph_entity`
+- `relation_graph_profile`
+- `relation_graph_focus_context`
+
+这些命中本来就在描述同一件事：
+
+- 这个过程在结构化知识图里命中了某个实体
+- 并且这个过程内部还有一块更贴近问题类型的上下文块
+
+这一轮开始，`_apply_procedure_aggregate_rerank()` 会把这种闭环显式识别出来，并把该过程标成：
+
+- `representative_context = true`
+
+当前适用的问题类型主要是：
+
+- table
+- variable
+- topic
+- metadata
+
+所以系统现在开始能更明确地区分：
+
+- 这是普通过程级命中
+- 还是“结构化实体命中 + 代表性上下文”已经同时成立的命中
+
+### 2. representative context bonus 让最像主证据的块提前
+
+在识别出这类闭环之后，这轮还新增了：
+
+- `representative_context_bonus`
+
+也就是说，如果一条 candidate 本身就是：
+
+- `relation_graph_focus_context`
+
+并且它所属过程已经有：
+
+- `fts_graph_entity` 或 `relation_graph_profile`
+
+做结构化支撑，那么这条上下文块会被 retrieval 进一步前提。
+
+这一步很重要，因为它意味着：
+
+- 最像主证据的块，不再只能依赖 evidence 排序去“捞出来”
+- 而是在 retrieval 排序里就开始被更明确地区分
+
+所以现在结构化链路已经更接近：
+
+- 结构化实体命中确定过程
+- 代表性上下文命中确定最像主证据的块
+- evidence / QA 再基于它继续收口
+
+### 3. 过程聚合现在按 `matched_via` 统计，而不是只看单条 `retrieval_source`
+
+为了让这层判断真正可靠，这轮还修了一个很关键的细节：
+
+- 之前过程聚合时，主要看单条 candidate 当前的 `retrieval_source`
+- 但很多候选其实已经被 merge 过，真正完整的来源集合在 `matched_via`
+
+现在 group 统计改成了：
+
+- 按 `matched_via` 全量统计来源
+
+所以像：
+
+- `fts_graph_entity`
+- `relation_graph_profile`
+- `relation_graph_focus_context`
+
+即使已经被合流进其他更强的命中里，也仍然会被正确识别为同一组结构化证据链的一部分。
+
+这一步实际上把“结构化证据闭环”的判定从脆弱变成了更稳。
+
+### 4. 当前这条主线的意义
+
+到这一轮为止，这条链已经不再只是：
+
+- 结构化实体能命中
+- 结构化上下文也能命中
+
+而是进一步推进成：
+
+- retrieval 层开始知道哪条命中更像“主证据块”
+- query hit 开始对外暴露 `representative_context`
+- evidence 层接手时，候选面已经更干净、更像最终答案
+
+所以这一步的本质是：
+
+- 关系索引不只是“查得出”，而开始更像“会自动挑主证据”
+- 知识底座不只是“有结构”，而开始能驱动主证据选择

@@ -316,35 +316,76 @@ class RetrievalService:
                     "count": 0,
                     "matched_via": set(),
                     "sources": set(),
+                    "has_graph_focus_context": False,
+                    "has_graph_entity_source": False,
                 },
             )
             group["score_total"] = float(group["score_total"]) + float(candidate.get("score") or 0.0)
             group["count"] = int(group["count"]) + 1
-            group["matched_via"].update(candidate.get("matched_via") or [candidate.get("retrieval_source")])
-            group["sources"].add(str(candidate.get("retrieval_source") or ""))
+            matched_via = {
+                str(item)
+                for item in (candidate.get("matched_via") or [candidate.get("retrieval_source")])
+                if str(item)
+            }
+            group["matched_via"].update(matched_via)
+            group["sources"].update(matched_via)
+            retrieval_source = str(candidate.get("retrieval_source") or "")
+            if "relation_graph_focus_context" in matched_via:
+                group["has_graph_focus_context"] = True
+            if matched_via & {"fts_graph_entity", "relation_graph_profile"}:
+                group["has_graph_entity_source"] = True
 
         reranked: list[dict[str, object]] = []
         query_type = str(query_analysis.get("query_type") or "")
+        graph_driven_query = query_type in {
+            "topic_publish",
+            "metadata_definition",
+            "table_write",
+            "table_read",
+            "table_access",
+            "variable_write",
+            "variable_read",
+            "variable_flow",
+        }
         for candidate in ranked:
             key = (str(candidate.get("procedure_name") or ""), str(candidate.get("file_path") or ""))
             group = grouped[key]
             aggregate_score = float(group["score_total"])
             aggregate_hits = int(group["count"])
             aggregate_bonus = min(max(aggregate_hits - 1, 0) * 2.0, 6.0)
-            if query_type in {"topic_publish", "metadata_definition", "table_write", "table_read", "table_access", "variable_write", "variable_read", "variable_flow"}:
+            if graph_driven_query:
                 aggregate_bonus += min(len(group["sources"]) * 0.8, 2.4)
+            representative_bonus = 0.0
+            retrieval_source = str(candidate.get("retrieval_source") or "")
+            if (
+                graph_driven_query
+                and bool(group["has_graph_focus_context"])
+                and bool(group["has_graph_entity_source"])
+                and retrieval_source == "relation_graph_focus_context"
+            ):
+                representative_bonus = 18.0
+            candidate["representative_context"] = bool(
+                graph_driven_query
+                and bool(group["has_graph_focus_context"])
+                and bool(group["has_graph_entity_source"])
+            )
             candidate["aggregate_score"] = round(aggregate_score, 6)
             candidate["aggregate_hit_count"] = aggregate_hits
             candidate["matched_via"] = sorted(str(item) for item in group["matched_via"] if str(item))
-            if aggregate_bonus:
-                candidate["score"] = round(float(candidate["score"]) + aggregate_bonus, 6)
+            total_bonus = aggregate_bonus + representative_bonus
+            if total_bonus:
+                candidate["score"] = round(float(candidate["score"]) + total_bonus, 6)
                 reasons = list(candidate.get("reasons", []))
                 reasons.append(f"procedure_aggregate_hits={aggregate_hits}")
                 reasons.append(f"procedure_aggregate_bonus={aggregate_bonus:.3f}")
+                if representative_bonus:
+                    reasons.append(f"representative_context_bonus={representative_bonus:.3f}")
                 candidate["reasons"] = reasons
                 debug_rerank = dict(candidate.get("debug_rerank") or {})
                 debug_rerank["procedure_aggregate_score"] = round(aggregate_score, 6)
                 debug_rerank["procedure_aggregate_hits"] = aggregate_hits
+                if representative_bonus:
+                    debug_rerank["representative_context_bonus"] = representative_bonus
                 debug_rerank["score_after_procedure_aggregate"] = round(float(candidate["score"]), 6)
                 candidate["debug_rerank"] = debug_rerank
             reranked.append(candidate)
@@ -2639,4 +2680,5 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
         "graph_focus_type": candidate.get("graph_focus_type"),
         "graph_focus_value": candidate.get("graph_focus_value"),
         "graph_focus_role": candidate.get("graph_focus_role"),
+        "representative_context": bool(candidate.get("representative_context")),
     }

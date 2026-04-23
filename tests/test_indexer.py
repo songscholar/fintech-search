@@ -982,6 +982,7 @@ def test_query_index_uses_relation_graph_focus_context_for_variable_queries(tmp_
     assert context_hits
     assert any(hit["graph_focus_type"] == "variable" for hit in context_hits)
     assert any(hit["graph_focus_value"] == "@fund_account" for hit in context_hits)
+    assert any(hit["representative_context"] is True for hit in context_hits)
 
 
 def test_query_index_uses_graph_entity_fts_for_topic_queries(tmp_path: Path) -> None:
