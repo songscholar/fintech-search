@@ -1137,3 +1137,78 @@ SQL 恢复这边也有一个仓库特性要处理：
 - 还是因为整体证据不足
 
 这一步让回答决策从“状态判断”进一步变成“冲突分类 + 建议动作”。
+
+## 最新 relation-graph 检索推进
+
+这一轮又把“结构化知识底座”继续往检索层推进了一层，不再只是把 `relation_graph` 存在 `procedure_profile` 里备用，而是开始直接拿它做召回和决策。
+
+### 1. `relation_graph` 本身开始直接参与检索
+
+现在除了：
+
+- `fts_procedure_feature`
+- `relation_*_edge`
+- `relation_*_flow_bridge`
+- `relation_*_flow_path`
+
+之外，又新增了：
+
+- `relation_graph_profile`
+
+这层召回会直接从结构化 `relation_graph` 里匹配：
+
+- tables
+- variables
+- topics
+- metadata_refs
+
+所以系统现在不只是在“文本摘要里碰巧提到了这个实体”时命中，而是已经开始支持：
+
+- 过程画像里明确存在该实体
+- 过程画像里明确声明了该实体的角色
+
+这样的结构化召回。
+
+### 2. flow path 不再只有“有路径”，而开始区分主路径和辅助路径
+
+这轮在：
+
+- `relation_variable_flow_path`
+- `relation_table_flow_path`
+
+里新增了：
+
+- `..._flow_priority=main|support`
+- `flow_path_role=endpoint|bridge`
+
+也就是说，系统现在开始区分：
+
+- 当前最重要的主链路
+- 只是辅助说明的陪衬链路
+- 路径中的端点过程
+- 路径中的桥接过程
+
+这让 flow path 不再只是“多出几条路径候选”，而开始具备更明确的解释结构。
+
+### 3. 回答决策继续推进到“证据一致性”
+
+在之前已经有：
+
+- `state`
+- `conflict_kind`
+- `recommendation`
+
+的基础上，这轮又新增了：
+
+- `evidence_alignment`
+  - `aligned`
+  - `divergent`
+  - `partial`
+
+所以当前回答决策已经可以更明确地区分：
+
+- 多个候选虽然接近，但其实来自同类证据
+- 多个候选接近，而且证据来源本身出现分歧
+- 整体证据还不完整
+
+这让“为什么需要人工复核”从一个笼统判断，进一步变成了更可解释的诊断结果。

@@ -194,6 +194,7 @@ class CodebaseQA:
         bridge_candidates: list[str] = []
         failure_hints: list[str] = []
         flow_path_hints: list[str] = []
+        support_flow_path_hints: list[str] = []
         retrieval_sources = {str(item.get("retrieval_source") or "") for item in top_evidence}
 
         candidate_groups: OrderedDict[tuple[str, str], dict[str, object]] = OrderedDict()
@@ -318,9 +319,11 @@ class CodebaseQA:
                 "",
             )
             if table_flow_path_reason:
-                flow_path_hints.append(
-                    "表访问链路为 " + table_flow_path_reason.removeprefix("table_flow_path=") + "。"
-                )
+                hint = "表访问链路为 " + table_flow_path_reason.removeprefix("table_flow_path=") + "。"
+                if "table_flow_priority=main" in item.get("reasons", []):
+                    flow_path_hints.append(hint)
+                else:
+                    support_flow_path_hints.append(hint)
             variable_flow_path_reason = next(
                 (
                     str(reason)
@@ -330,9 +333,11 @@ class CodebaseQA:
                 "",
             )
             if variable_flow_path_reason:
-                flow_path_hints.append(
-                    "变量链路为 " + variable_flow_path_reason.removeprefix("variable_flow_path=") + "。"
-                )
+                hint = "变量链路为 " + variable_flow_path_reason.removeprefix("variable_flow_path=") + "。"
+                if "variable_flow_priority=main" in item.get("reasons", []):
+                    flow_path_hints.append(hint)
+                else:
+                    support_flow_path_hints.append(hint)
             if outgoing_calls:
                 related_hints.append(
                     f"{item['procedure_name']} 还关联调用 {', '.join(outgoing_calls[:3])}。"
@@ -432,6 +437,10 @@ class CodebaseQA:
         if uncertainties:
             answer_lines.append("不确定点:")
             for item in uncertainties:
+                answer_lines.append(f"- {item}")
+        if support_flow_path_hints:
+            answer_lines.append("辅助链路:")
+            for item in support_flow_path_hints[:2]:
                 answer_lines.append(f"- {item}")
 
         confidence = self._estimate_confidence(
@@ -603,6 +612,7 @@ class CodebaseQA:
             if secondary_candidates
             else set()
         )
+        evidence_alignment = "aligned"
         if not secondary_candidates:
             state = "resolved"
             conflict_summary = ""
@@ -616,6 +626,7 @@ class CodebaseQA:
             conflict_kind = "candidate_competition"
             if primary_sources and secondary_sources and primary_sources != secondary_sources:
                 conflict_kind = "evidence_divergence"
+                evidence_alignment = "divergent"
         else:
             state = "resolved"
             conflict_summary = ""
@@ -625,6 +636,7 @@ class CodebaseQA:
             if not conflict_summary:
                 conflict_summary = "当前证据整体偏弱，需要保守解释并继续核验上下文。"
             conflict_kind = "low_confidence"
+            evidence_alignment = "partial"
         recommendation = (
             "优先查看主候选的上下游调用和相同实体的链路证据。"
             if conflict_kind in {"candidate_competition", "evidence_divergence"}
@@ -639,6 +651,7 @@ class CodebaseQA:
             "secondary_score": round(secondary_score, 3),
             "score_gap": score_gap,
             "conflict_kind": conflict_kind,
+            "evidence_alignment": evidence_alignment,
             "conflict_summary": conflict_summary,
             "recommendation": recommendation,
         }

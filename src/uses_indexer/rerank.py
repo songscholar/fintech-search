@@ -526,6 +526,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
             bonus += 5.0
             reasons.append("intent_table_feature_source")
+        if candidate.get("retrieval_source") == "relation_graph_profile":
+            bonus += 10.0
+            reasons.append("intent_relation_graph_table")
 
         if query_analysis["wants_table_write"] and contains_any(combined, SQL_WRITE_HINTS):
             bonus += 12.0
@@ -572,6 +575,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_statement"}:
             bonus += 5.0
             reasons.append("intent_variable_feature_source")
+        if candidate.get("retrieval_source") == "relation_graph_profile":
+            bonus += 8.0
+            reasons.append("intent_relation_graph_variable")
 
     if query_analysis["wants_failure_flow"]:
         if hit_type == "block":
@@ -620,6 +626,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_edge"}:
             bonus += 6.0
             reasons.append("intent_metadata_feature_source")
+        if candidate.get("retrieval_source") == "relation_graph_profile":
+            bonus += 8.0
+            reasons.append("intent_relation_graph_metadata")
 
     if query_analysis.get("wants_topic"):
         if "publishes_mc_topic" in combined or "mc_topic" in combined or "topic" in combined:
@@ -628,6 +637,9 @@ def _intent_bonus(
         if candidate.get("retrieval_source") in {"fts_procedure_feature", "fts_action", "fts_edge"}:
             bonus += 6.0
             reasons.append("intent_topic_feature_source")
+        if candidate.get("retrieval_source") == "relation_graph_profile":
+            bonus += 8.0
+            reasons.append("intent_relation_graph_topic")
 
     if query_analysis["wants_procedure"] and not query_analysis["wants_call_chain"]:
         if hit_type == "procedure":

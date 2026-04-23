@@ -338,6 +338,8 @@ def _evidence_priority_score(candidate: dict[str, object], *, query_type: str) -
             score += 12.0
         if retrieval_source == "relation_table_flow_path":
             score += 18.0
+        if retrieval_source == "relation_graph_profile":
+            score += 10.0
         if match_source in {"table_edge_relation", "block_summary"}:
             score += 6.0
 
@@ -348,6 +350,8 @@ def _evidence_priority_score(candidate: dict[str, object], *, query_type: str) -
             score += 12.0
         if retrieval_source == "relation_variable_flow_path":
             score += 18.0
+        if retrieval_source == "relation_graph_profile":
+            score += 10.0
         if match_source in {"variable_edge_relation", "assignment"}:
             score += 6.0
 
@@ -362,12 +366,16 @@ def _evidence_priority_score(candidate: dict[str, object], *, query_type: str) -
     if query_type == "topic_publish":
         if retrieval_source in {"fts_action", "fts_edge", "fts_procedure_feature"}:
             score += 12.0
+        if retrieval_source == "relation_graph_profile":
+            score += 10.0
         if hit_type in {"action", "procedure"}:
             score += 6.0
 
     if query_type == "metadata_definition":
         if retrieval_source in {"fts_edge", "fts_procedure_feature"}:
             score += 12.0
+        if retrieval_source == "relation_graph_profile":
+            score += 10.0
         if hit_type in {"procedure", "statement"}:
             score += 6.0
 

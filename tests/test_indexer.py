@@ -910,6 +910,7 @@ def test_query_index_expands_variable_flow_path_for_path_queries(tmp_path: Path)
     ]
     assert path_hits
     assert any("variable_flow_path=" in " ".join(hit["reasons"]) for hit in path_hits)
+    assert any("variable_flow_priority=main" in " ".join(hit["reasons"]) for hit in path_hits)
 
 
 def test_query_index_expands_table_flow_path_for_path_queries(tmp_path: Path) -> None:
@@ -924,6 +925,21 @@ def test_query_index_expands_table_flow_path_for_path_queries(tmp_path: Path) ->
     ]
     assert path_hits
     assert any("table_flow_path=" in " ".join(hit["reasons"]) for hit in path_hits)
+    assert any("table_flow_priority=main" in " ".join(hit["reasons"]) for hit in path_hits)
+
+
+def test_query_index_uses_relation_graph_profile_for_variable_queries(tmp_path: Path) -> None:
+    indexer, db_path = _build_sample_index(tmp_path)
+
+    result = indexer.query_index(db_path, "@fund_account 变量链路", limit=20)
+
+    graph_hits = [
+        hit for hit in result["hits"]
+        if hit["retrieval_source"] == "relation_graph_profile"
+        or "relation_graph_profile" in hit.get("matched_via", [])
+    ]
+    assert graph_hits
+    assert any("relation_graph_variable=@fund_account" in " ".join(hit["reasons"]) for hit in graph_hits)
 
 
 def test_query_index_uses_failure_block_relation_for_failure_queries(tmp_path: Path) -> None:

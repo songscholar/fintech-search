@@ -117,6 +117,16 @@ class RetrievalService:
         for candidate in relation_candidates:
             merge_candidate(candidates, candidate)
 
+        relation_graph_candidates = self._run_relation_graph_queries(
+            conn,
+            query_analysis=query_analysis,
+            limit=max(candidate_limit // 2, 8),
+        )
+        source_trace["relation_graph"] = [self._trace_candidate(item) for item in relation_graph_candidates[:20]]
+        source_counts["relation_graph"] = len(relation_graph_candidates)
+        for candidate in relation_graph_candidates:
+            merge_candidate(candidates, candidate)
+
         flow_bridge_candidates = self._run_entity_flow_bridge_queries(
             conn,
             query_analysis=query_analysis,
@@ -634,6 +644,7 @@ class RetrievalService:
             seed_names = load_seed_procedures(mode=mode, term=term)
             if len(seed_names) < 2:
                 return
+            first_path = True
             for source_name in seed_names:
                 for target_name in seed_names:
                     if source_name == target_name:
@@ -647,6 +658,8 @@ class RetrievalService:
                     if not path or len(path) < 2:
                         continue
                     path_label = " -> ".join(path)
+                    path_priority = "main" if first_path else "support"
+                    first_path = False
                     for step_index, procedure_name in enumerate(path, start=1):
                         row = conn.execute(
                             """
@@ -688,10 +701,17 @@ class RetrievalService:
                                 "procedure_summary": str(row[5]),
                                 "feature_flags": json.loads(str(row[6] or "{}")),
                                 "procedure_profile": json.loads(str(row[7] or "{}")),
+                                "flow_path_role": (
+                                    "endpoint"
+                                    if step_index in {1, len(path)}
+                                    else "bridge"
+                                ),
+                                "flow_path_priority": path_priority,
                                 "reasons": [
                                     f"{mode}_flow_path={path_label}",
                                     f"{mode}_flow_focus={term}",
                                     f"{mode}_flow_step={step_index}/{len(path)}",
+                                    f"{mode}_flow_priority={path_priority}",
                                 ],
                             }
                         )
@@ -708,6 +728,114 @@ class RetrievalService:
                 return candidates[:limit]
 
         return candidates[:limit]
+
+    def _run_relation_graph_queries(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        query_analysis: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        focus_specs: list[tuple[str, str, float]] = []
+        focus_specs.extend(("table", str(term), 92.0) for term in query_analysis.get("table_terms", [])[:4])
+        focus_specs.extend(("variable", str(term), 89.0) for term in query_analysis.get("variable_terms", [])[:4])
+        if query_analysis.get("wants_topic"):
+            focus_specs.extend(("topic", str(term), 93.0) for term in query_analysis.get("focus_terms", [])[:4])
+        if query_analysis.get("wants_metadata"):
+            focus_specs.extend(("metadata", str(term), 90.0) for term in query_analysis.get("focus_terms", [])[:4])
+        if not focus_specs:
+            return []
+
+        rows = conn.execute(
+            """
+            SELECT
+              pf.procedure_id,
+              pf.file_id,
+              pf.procedure_name,
+              pf.summary_text,
+              pf.feature_flags_json,
+              pf.profile_json,
+              p.chinese_name,
+              p.object_id,
+              f.path
+            FROM procedure_features pf
+            JOIN procedures p ON p.id = pf.procedure_id
+            JOIN files f ON f.id = pf.file_id
+            """
+        ).fetchall()
+
+        candidates: list[dict[str, object]] = []
+        seen: set[tuple[int, str, str]] = set()
+        for row in rows:
+            profile = json.loads(str(row[5] or "{}"))
+            for mode, term, score in focus_specs:
+                match_detail = self._match_relation_graph_focus(profile, mode=mode, term=term)
+                if not match_detail:
+                    continue
+                key = (int(row[0]), mode, term.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(
+                    {
+                        "hit_type": "procedure",
+                        "entity_id": int(row[0]),
+                        "procedure_id": int(row[0]),
+                        "file_id": int(row[1]),
+                        "statement_id": None,
+                        "file_path": str(row[8]),
+                        "procedure_name": str(row[2]),
+                        "chinese_name": row[6] if row[6] else None,
+                        "object_id": row[7] if row[7] else None,
+                        "line_start": None,
+                        "line_end": None,
+                        "matched_text": match_detail,
+                        "match_source": "relation_graph_entity",
+                        "retrieval_source": "relation_graph_profile",
+                        "base_score": score,
+                        "source_rank": score / 10.0,
+                        "search_text": f"{term} {match_detail} {row[3]}",
+                        "procedure_summary": str(row[3]),
+                        "feature_flags": json.loads(str(row[4] or "{}")),
+                        "procedure_profile": profile,
+                        "reasons": [f"relation_graph_{mode}={term}"],
+                    }
+                )
+                if len(candidates) >= limit:
+                    return candidates[:limit]
+        return candidates[:limit]
+
+    def _match_relation_graph_focus(
+        self,
+        profile: dict[str, object],
+        *,
+        mode: str,
+        term: str,
+    ) -> str | None:
+        lowered = term.lower()
+        relation_graph = dict(profile.get("relation_graph") or {})
+        if mode == "table":
+            for item in relation_graph.get("tables") or []:
+                name = str(dict(item).get("name") or "")
+                if lowered == name.lower():
+                    return f"{name} ({dict(item).get('mode') or 'unknown'})"
+        elif mode == "variable":
+            for item in relation_graph.get("variables") or []:
+                name = str(dict(item).get("name") or "")
+                normalized = name.lower().replace("@", "")
+                if lowered.replace("@", "") == normalized:
+                    return f"{name} ({dict(item).get('mode') or 'unknown'})"
+        elif mode == "topic":
+            for name in relation_graph.get("topics") or []:
+                text = str(name)
+                if lowered in text.lower():
+                    return text
+        elif mode == "metadata":
+            for name in relation_graph.get("metadata_refs") or []:
+                text = str(name)
+                if lowered in text.lower():
+                    return text
+        return None
 
     def _run_path_bridge_queries(
         self,

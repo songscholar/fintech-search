@@ -126,6 +126,9 @@ class CodebaseAnswerer:
         if decision.get("recommendation"):
             lines.append("处理建议:")
             lines.append(f"- {decision['recommendation']}")
+        if decision.get("evidence_alignment"):
+            lines.append("证据一致性:")
+            lines.append(f"- {decision['evidence_alignment']}")
         secondary_candidates = list(draft_answer.get("secondary_candidates") or [])
         if secondary_candidates:
             lines.append("其他近似候选:")

@@ -252,3 +252,11 @@ def test_ask_surfaces_flow_path_summary_for_variable_path_queries(tmp_path: Path
 
     summary_points = list(result["draft_answer"]["summary_points"])
     assert any("变量链路为" in item for item in summary_points)
+
+
+def test_ask_decision_reports_evidence_alignment(tmp_path: Path) -> None:
+    qa, db_path = _prepare_qa(tmp_path)
+
+    result = qa.ask(db_path, "@fund_account 变量链路", evidence_limit=4, context_window=1, related_limit=2)
+
+    assert result["draft_answer"]["decision"]["evidence_alignment"] in {"aligned", "divergent", "partial"}

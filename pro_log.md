@@ -4540,3 +4540,81 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 当前变量流 / 表流已经不只是“读写角色桥接”，而是开始具备明确的跨过程路径召回
 - 当前 flow path 已经贯通到 evidence 和 QA，而不是停留在检索内部
 - 当前回答决策已经从 `state` 进一步升级成 `conflict_kind + recommendation`
+
+## [1.2.67] - 2026-04-23
+
+### Step 74: 让 relation_graph 直接参与检索，并细化路径与证据一致性
+
+### 本步目标
+
+- 让结构化 `relation_graph` 不再只是 profile 附带信息，而开始直接参与检索
+- 让 flow path 从“存在路径”升级成“主路径 / 辅助路径 + 端点 / 桥接角色”
+- 让回答决策继续从 `conflict_kind` 往“证据一致性”推进
+
+### 本步改动
+
+1. 更新 `src/uses_indexer/retrieval.py`
+   - 新增 `_run_relation_graph_queries()`
+   - 新增召回来源：
+     - `relation_graph_profile`
+   - 当前会直接利用 `procedure_profile.relation_graph` 匹配：
+     - tables
+     - variables
+     - topics
+     - metadata_refs
+   - 同时 `relation_*_flow_path` 现在新增：
+     - `..._flow_priority=main|support`
+     - `flow_path_role=endpoint|bridge`
+
+2. 更新 `src/uses_indexer/rerank.py`
+   - `relation_graph_profile` 现在对：
+     - table
+     - variable
+     - topic
+     - metadata
+   - 都有专属加权
+   - 这样结构化画像召回不再只是“能进来”，而是会在对应问题类型里拿到合理排序
+
+3. 更新 `src/uses_indexer/evidence.py`
+   - evidence 选择层开始优先照顾：
+     - `relation_graph_profile`
+   - 让最终展示给 QA/LLM 的证据，更可能是“结构化命中的过程画像”，而不只是文本片段
+
+4. 更新 `src/uses_indexer/qa.py`
+   - flow path 摘要现在会区分：
+     - 主链路
+     - 辅助链路
+   - `decision` 新增：
+     - `evidence_alignment`
+       - `aligned`
+       - `divergent`
+       - `partial`
+
+5. 更新 `src/uses_indexer/answering.py`
+   - guarded answer 现在会把：
+     - `证据一致性`
+   - 也写回最终回答
+
+6. 更新测试
+   - `tests/test_indexer.py`
+     - `test_query_index_uses_relation_graph_profile_for_variable_queries`
+     - flow path 断言新增 `..._flow_priority=main`
+   - `tests/test_qa.py`
+     - `test_ask_decision_reports_evidence_alignment`
+   - `tests/test_answering.py`
+     - 验证 guarded answer 会输出 `证据一致性`
+
+### 验证
+
+- `python3 -m py_compile src/uses_indexer/retrieval.py src/uses_indexer/rerank.py src/uses_indexer/evidence.py src/uses_indexer/qa.py src/uses_indexer/answering.py tests/test_indexer.py tests/test_qa.py tests/test_answering.py`
+- `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_expands_variable_flow_path_for_path_queries tests/test_indexer.py::test_query_index_expands_table_flow_path_for_path_queries tests/test_indexer.py::test_query_index_uses_relation_graph_profile_for_variable_queries tests/test_qa.py::test_ask_surfaces_flow_path_summary_for_variable_path_queries tests/test_qa.py::test_ask_decision_reports_evidence_alignment tests/test_answering.py::test_answer_uses_guarded_draft_for_close_multi_candidate_table_question`
+- 结果：`6 passed`
+- 额外回归：
+  - `PYTHONPATH=src pytest -q tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_write_queries tests/test_indexer.py::test_query_index_uses_exact_variable_edge_relation_for_variable_read_queries tests/test_indexer.py::test_query_index_uses_exact_table_edge_relation_for_table_write_queries tests/test_indexer.py::test_query_index_uses_explicit_path_bridge_for_two_procedures tests/test_indexer.py::test_query_index_surfaces_procedure_aggregate_metrics_for_topic_queries tests/test_qa.py::test_ask_uses_metadata_specific_summary_for_metadata_queries tests/test_answering.py::test_answer_uses_guarded_draft_for_low_confidence_questions`
+  - 结果：`7 passed`
+
+### 结论
+
+- 当前 `relation_graph` 已经不只是知识底座，还开始直接参与检索
+- 当前 flow path 已经从“能找出来”推进到“能解释主辅路径和桥接角色”
+- 当前回答决策开始显式表达证据是否一致，而不只是冲突类型
