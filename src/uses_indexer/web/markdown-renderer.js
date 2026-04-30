@@ -1,4 +1,4 @@
-import { marked } from 'https://cdn.jsdelivr.net/npm/marked@12/lib/marked.esm.js';
+import { marked } from '/assets/marked.esm.js';
 
 let hljsReady = false;
 
@@ -9,7 +9,7 @@ function loadHljs() {
       return resolve(window.hljs);
     }
     var script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js';
+    script.src = '/assets/highlight.min.js';
     script.onload = function() {
       hljsReady = true;
       resolve(window.hljs);

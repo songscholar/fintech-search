@@ -56,6 +56,8 @@ WEB_ASSET_PATHS = {
     "/assets/content-pages.css": WEB_DIR / "content-pages.css",
     "/assets/markdown-base.css": WEB_DIR / "markdown-base.css",
     "/assets/markdown-renderer.js": WEB_DIR / "markdown-renderer.js",
+    "/assets/marked.esm.js": WEB_DIR / "marked.esm.js",
+    "/assets/highlight.min.js": WEB_DIR / "highlight.min.js",
     "/assets/site-utils.js": WEB_DIR / "site-utils.js",
     "/assets/rain-effect.js": WEB_DIR / "rain-effect.js",
     "/assets/fonts/fonts.css": WEB_DIR / "fonts" / "fonts.css",

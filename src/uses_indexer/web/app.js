@@ -1,4 +1,12 @@
-import { renderMarkdown } from '/assets/markdown-renderer.js';
+let renderMarkdown = async function(md) {
+  var text = String(md || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<pre style="white-space:pre-wrap;font-family:var(--font-mono,monospace);color:#b0c4de;">' + text + '</pre>';
+};
+import('/assets/markdown-renderer.js').then(function(mod) {
+  if (mod && mod.renderMarkdown) renderMarkdown = mod.renderMarkdown;
+}).catch(function(err) {
+  console.warn('[app] markdown-renderer unavailable, using fallback:', err);
+});
 
 // Compatibility marker for legacy smoke tests: initializeConsole.
 
@@ -1409,7 +1417,11 @@ function clearChat() {
   var triggerEl = document.getElementById('globalSearchTrigger');
 
   function openSearch() {
-    if (!panel || !input) return;
+    console.log('[search] openSearch called, panel=', panel, 'input=', input);
+    if (!panel || !input) {
+      console.warn('[search] panel or input missing, aborting');
+      return;
+    }
     panel.classList.add('is-open');
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
@@ -1434,6 +1446,9 @@ function clearChat() {
       panel.style.background = '';
     }, 350);
   }
+
+  window.openGlobalSearch = openSearch;
+  window.closeGlobalSearch = closeSearch;
 
   window.__openDocFromSearch = function(name) {
     closeSearch();
