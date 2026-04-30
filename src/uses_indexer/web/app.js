@@ -1247,24 +1247,24 @@ function clearChat() {
 // ========================================================================
 
 (function installGlobalSearch() {
-  if (document.getElementById('globalSearchPanel')) return;
-
-  // Inject search panel
-  var searchPanel = document.createElement('div');
-  searchPanel.id = 'globalSearchPanel';
-  searchPanel.className = 'global-search-panel';
-  searchPanel.innerHTML = '' +
-    '<div class="global-search-dialog" role="dialog" aria-modal="true" aria-label="Global search">' +
-      '<div class="global-search-header">' +
-        '<input id="globalSearchInput" class="global-search-input" type="search" placeholder="搜索说明文档..." autocomplete="off">' +
-        '<button id="globalSearchClose" class="global-search-close" type="button" aria-label="Close search">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="6" y1="18" x2="18" y2="6"></line></svg>' +
-        '</button>' +
-      '</div>' +
-      '<div class="global-search-meta"><span id="globalSearchCount">0 entries</span><span>ESC / Ctrl+K</span></div>' +
-      '<div id="globalSearchResults" class="global-search-results"></div>' +
-    '</div>';
-  document.body.appendChild(searchPanel);
+  var searchPanel = document.getElementById('globalSearchPanel');
+  if (!searchPanel) {
+    searchPanel = document.createElement('div');
+    searchPanel.id = 'globalSearchPanel';
+    searchPanel.className = 'global-search-panel';
+    searchPanel.innerHTML = '' +
+      '<div class="global-search-dialog" role="dialog" aria-modal="true" aria-label="Global search">' +
+        '<div class="global-search-header">' +
+          '<input id="globalSearchInput" class="global-search-input" type="search" placeholder="搜索说明文档..." autocomplete="off">' +
+          '<button id="globalSearchClose" class="global-search-close" type="button" aria-label="Close search">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="6" y1="18" x2="18" y2="6"></line></svg>' +
+          '</button>' +
+        '</div>' +
+        '<div class="global-search-meta"><span id="globalSearchCount">0 entries</span><span>ESC / Ctrl+K</span></div>' +
+        '<div id="globalSearchResults" class="global-search-results"></div>' +
+      '</div>';
+    document.body.appendChild(searchPanel);
+  }
 
   // Inject search trigger button into nav-right (before settings button)
   if (!document.getElementById('globalSearchTrigger')) {
@@ -1280,35 +1280,6 @@ function clearChat() {
     } else if (navRight) {
       navRight.appendChild(trigger);
     }
-  }
-
-  // Inject styles
-  if (!document.getElementById('globalSearchStyles')) {
-    var style = document.createElement('style');
-    style.id = 'globalSearchStyles';
-    style.textContent =
-      '.global-search-panel{position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:80px 24px 24px;background:rgba(8,12,20,.12);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(12px);overflow:hidden;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility 0s .3s,background .3s ease}' +
-      '.global-search-panel.is-open{opacity:1;visibility:visible;transition:opacity .3s ease,visibility 0s,background .3s ease}' +
-      '.global-search-dialog{width:min(860px,100%);max-height:min(78vh,860px);overflow:hidden;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(15,23,42,.08);backdrop-filter:blur(48px) saturate(1.3);-webkit-backdrop-filter:blur(40px) saturate(1.3);box-shadow:0 24px 80px rgba(0,0,0,.35);transform:scale(.96) translateY(20px);opacity:0;transition:transform .45s cubic-bezier(.34,1.56,.64,1),opacity .35s ease,background .3s ease,border-color .3s ease,backdrop-filter .3s ease,-webkit-backdrop-filter .3s ease}' +
-      '.global-search-panel.is-open .global-search-dialog{transform:scale(1) translateY(0);opacity:1}' +
-      '.global-search-header{display:flex;align-items:center;gap:12px;padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,.06)}' +
-      '.global-search-input{flex:1;height:52px;padding:0 18px;border:1px solid rgba(255,255,255,.10);border-radius:16px;background:rgba(255,255,255,.03);color:#eef2f7;font:400 16px/1.2 var(--font-body,sans-serif);outline:none;transition:border-color .2s ease,background .2s ease,box-shadow .2s ease}' +
-      '.global-search-input:focus{border-color:rgba(96,165,250,.35);background:rgba(255,255,255,.07);box-shadow:0 0 0 3px rgba(96,165,250,.08)}' +
-      '.global-search-input::placeholder{color:#7a94ad;opacity:.7}' +
-      '.global-search-close{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:none;border-radius:14px;background:transparent;color:#7a94ad;cursor:pointer;transition:color .2s ease,background .2s ease}' +
-      '.global-search-close:hover{color:#eef2f7;background:rgba(255,255,255,.06)}' +
-      '.global-search-close svg{width:20px;height:20px}' +
-      '.global-search-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;color:#7a94ad;font-family:var(--font-mono,monospace);font-size:.72rem;border-bottom:1px solid rgba(255,255,255,.06)}' +
-      '.global-search-results{max-height:calc(78vh - 128px);overflow:auto;padding:8px 10px 14px}' +
-      '.global-search-item{display:block;padding:16px 14px;border-radius:18px;animation:searchItemIn .3s ease both;transition:background .2s ease;cursor:pointer;text-decoration:none}' +
-      '.global-search-item:hover{background:rgba(96,165,250,.08)}' +
-      '@keyframes searchItemIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}' +
-      '.global-search-item-title{font-family:var(--font-display,serif);font-size:1.08rem;letter-spacing:-.02em;margin-bottom:6px;color:#eef2f7}' +
-      '.global-search-item-excerpt{color:#b0c4de;font-size:.92rem;line-height:1.7}' +
-      '.global-search-item-meta{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-family:var(--font-mono,monospace);font-size:.7rem;color:#7a94ad;text-transform:uppercase;letter-spacing:.05em}' +
-      '.global-search-keyword{color:#60a5fa;font-weight:500}' +
-      '.global-search-empty{padding:44px 18px 48px;text-align:center;color:#7a94ad}';
-    document.head.appendChild(style);
   }
 
   // Search state
@@ -1417,7 +1388,6 @@ function clearChat() {
   var triggerEl = document.getElementById('globalSearchTrigger');
 
   function openSearch() {
-    console.log('[search] openSearch called, panel=', panel, 'input=', input);
     if (!panel || !input) {
       console.warn('[search] panel or input missing, aborting');
       return;
