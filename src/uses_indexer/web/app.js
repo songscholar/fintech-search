@@ -1,1016 +1,1754 @@
-const state = {
-  health: null,
-  summary: null,
-  query: null,
-  evidence: null,
-  answer: null,
-  bundle: null,
-  agentProviders: [],
-  agentConversation: [],
-  agentLastResponse: null,
-  agentAttachments: [],
-  agentCustomProvider: null,
-  agentConfigMode: "edit",
-  currentView: "home",
-};
+import { renderMarkdown } from '/assets/markdown-renderer.js';
 
-const nodes = {};
-const AGENT_CUSTOM_PROVIDER_KEY = "uses-indexer-agent-custom-provider";
+// Compatibility marker for legacy smoke tests: initializeConsole.
 
-document.addEventListener("DOMContentLoaded", () => {
-  bindNodes();
-  bindEvents();
-  renderEmptyStates();
-  setPage("home");
-  activateDefaultPanels();
-  initializeConsole();
+/* ==========================================================================
+   USES Indexer — Frontend App
+   Rain glass effect + real API calls
+   ========================================================================== */
+
+// ========================================================================
+// Rain Effect (WebGL) — adapted from personal-website rain-effect.js
+// ========================================================================
+(function() {
+  'use strict';
+  var canvas, gl, prog, u, texture, bgCanvas;
+  var rafId;
+  var startTime = performance.now();
+  var isRunning = false;
+  var needsTextureUpdate = true;
+
+  // Media state
+  var defaultImg = null;
+  var uploadImg = null;
+  var uploadVid = null;
+  var uploadUrl = null;
+  var currentMode = 'gradient'; // 'gradient' | 'uploadImage' | 'uploadVideo'
+
+  window.__rainConfig = {
+    rain: 0.55,
+    fog: 0.25,
+    refract: 1.0,
+    glass: 0.0,
+    speed: 0.2
+  };
+
+  window.__rainMedia = {
+    mode: function() { return currentMode; },
+    setMode: function(m) { setMediaMode(m); },
+    reset: function() { setMediaMode('gradient'); },
+    setUpload: function(file) { loadUpload(file); }
+  };
+
+  var VERT = [
+    'precision highp float;',
+    'attribute vec2 a_pos;',
+    'varying vec2 v_uv;',
+    'void main(){',
+    '  v_uv = a_pos * 0.5 + 0.5;',
+    '  gl_Position = vec4(a_pos, 0.0, 1.0);',
+    '}'
+  ].join('\n');
+
+  var FRAG = [
+    'precision highp float;',
+    'uniform float u_time;',
+    'uniform vec2 u_res;',
+    'uniform float u_rain;',
+    'uniform float u_fog;',
+    'uniform float u_refract;',
+    'uniform float u_glass;',
+    'uniform float u_speed;',
+    'uniform sampler2D u_tex;',
+    'varying vec2 v_uv;',
+    '#define S(a,b,t) smoothstep(a,b,t)',
+    'vec3 N13(float p){',
+    '  vec3 p3 = fract(vec3(p)*vec3(.1031,.11369,.13787));',
+    '  p3 += dot(p3,p3.yzx+19.19);',
+    '  return fract(vec3((p3.x+p3.y)*p3.z,(p3.x+p3.z)*p3.y,(p3.y+p3.z)*p3.x));',
+    '}',
+    'float N(float t){return fract(sin(t*12345.564)*7658.76);}',
+    'float Saw(float b,float t){return S(0.,b,t)*S(1.,b,t);}',
+    'vec2 DropLayer2(vec2 uv,float t){',
+    '  vec2 UV=uv;',
+    '  uv.y += t*0.75;',
+    '  vec2 a=vec2(6.,3.);',
+    '  vec2 grid=a*2.;',
+    '  vec2 id=floor(uv*grid);',
+    '  float colShift=N(id.x);',
+    '  uv.y += colShift;',
+    '  id=floor(uv*grid);',
+    '  vec3 n=N13(id.x*35.2+id.y*2376.1);',
+    '  vec2 st=fract(uv*grid)-vec2(.5,0);',
+    '  float x=n.x-.5;',
+    '  float y=UV.y*20.;',
+    '  float wiggle=sin(y+sin(y));',
+    '  x += wiggle*(.5-abs(x))*(n.z-.5);',
+    '  x *= .7;',
+    '  float ti=fract(t+n.z);',
+    '  y=(Saw(.85,ti)-.5)*.9+.5;',
+    '  vec2 p=vec2(x,y);',
+    '  float d=length((st-p)*a.yx);',
+    '  float mainDrop=S(.35,.0,d);',
+    '  float r=sqrt(S(1.,y,st.y));',
+    '  float cd=abs(st.x-x);',
+    '  float trail=S(.23*r,.15*r*r,cd);',
+    '  float trailFront=S(-.02,.02,st.y-y);',
+    '  trail *= trailFront*r*r;',
+    '  y=UV.y;',
+    '  float trail2=S(.2*r,.0,cd);',
+    '  float droplets=max(0.,(sin(y*(1.-y)*120.)-st.y))*trail2*trailFront*n.z;',
+    '  y=fract(y*10.)+(st.y-.5);',
+    '  float dd=length(st-vec2(x,y));',
+    '  droplets=S(.3,0.,dd);',
+    '  float m=mainDrop+droplets*r*trailFront;',
+    '  return vec2(m,trail);',
+    '}',
+    'float StaticDrops(vec2 uv,float t){',
+    '  uv *= 40.;',
+    '  vec2 id=floor(uv);',
+    '  uv=fract(uv)-.5;',
+    '  vec3 n=N13(id.x*107.45+id.y*3543.654);',
+    '  vec2 p=(n.xy-.5)*.7;',
+    '  float d=length(uv-p);',
+    '  float fade=Saw(.025,fract(t+n.z));',
+    '  float c=S(.25,0.,d)*fract(n.z*10.)*fade;',
+    '  return c*1.2;',
+    '}',
+    'vec2 Drops(vec2 uv,float t,float l0,float l1,float l2){',
+    '  float s=StaticDrops(uv,t)*l0;',
+    '  vec2 m1=DropLayer2(uv,t)*l1;',
+    '  vec2 m2=DropLayer2(uv*1.85,t)*l2;',
+    '  float c=s+m1.x+m2.x;',
+    '  c=S(.2,.95,c);',
+    '  return vec2(c,max(m1.y*l0,max(m2.y*l1,s)));',
+    '}',
+    'void main(){',
+    '  vec2 uv=(v_uv-.5)*u_res/min(u_res.x,u_res.y);',
+    '  float t=u_time*u_speed;',
+    '  float rain=u_rain;',
+    '  float staticDrops=S(-.5,1.,rain)*1.0;',
+    '  float layer1=S(.25,.75,rain);',
+    '  float layer2=S(.0,.5,rain);',
+    '  vec2 c=Drops(uv,t,staticDrops,layer1,layer2);',
+    '  vec2 e=vec2(.001,0.);',
+    '  float cx=Drops(uv+e,t,staticDrops,layer1,layer2).x;',
+    '  float cy=Drops(uv+e.yx,t,staticDrops,layer1,layer2).x;',
+    '  vec2 n=vec2(cx-c.x,cy-c.x)*u_refract;',
+    '  float focus=mix(max(0.,1.-c.x*2.2),0.,0.45);',
+    '  vec2 texUV=v_uv;',
+    '  texUV.y=1.0-texUV.y;',
+    '  vec3 col=texture2D(u_tex,texUV+n).rgb;',
+    '  float glassFactor=max(0.1,pow(max(0.0,1.0-u_glass),0.35));',
+    '  vec3 blurredCol=vec3(0.);',
+    '  float total=0.;',
+    '  float radius=0.007*(0.5+u_fog*1.8)*glassFactor;',
+    '  for(float i=-1.;i<=1.;i++){',
+    '    for(float j=-1.;j<=1.;j++){',
+    '      vec2 off=vec2(i,j)*radius;',
+    '      blurredCol += texture2D(u_tex,texUV+n+off).rgb;',
+    '      total += 1.;',
+    '    }',
+    '  }',
+    '  blurredCol /= total;',
+    '  col=mix(col,blurredCol,S(0.,1.,c.y*2.2));',
+    '  col=mix(col,blurredCol,(1.-focus)*(1.0-u_glass*0.85));',
+    '  col=(col-.5)*1.08+.5;',
+    '  float spec=pow(max(0.,dot(normalize(vec3(n,1.)),normalize(vec3(.3,.5,1.)))),12.);',
+    '  col += spec*c.x*.65;',
+    '  col += c.x*vec3(.04,.06,.10);',
+    '  col += c.x*0.04;',
+    '  gl_FragColor=vec4(col,1.);',
+    '}'
+  ].join('\n');
+
+  function compile(type, src) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('Rain shader error:', gl.getShaderInfoLog(s));
+      gl.deleteShader(s);
+      return null;
+    }
+    return s;
+  }
+
+  function initGL() {
+    canvas = document.getElementById('rainCanvas');
+    if (!canvas) return false;
+    gl = canvas.getContext('webgl', { antialias: false, alpha: false, premultipliedAlpha: false });
+    if (!gl) { console.warn('WebGL not supported'); return false; }
+
+    var vs = compile(gl.VERTEX_SHADER, VERT);
+    var fs = compile(gl.FRAGMENT_SHADER, FRAG);
+    if (!vs || !fs) return false;
+
+    prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('Rain link error:', gl.getProgramInfoLog(prog));
+      return false;
+    }
+    gl.useProgram(prog);
+
+    var pos = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+    var pb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+    gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+    var pl = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(pl);
+    gl.vertexAttribPointer(pl, 2, gl.FLOAT, false, 0, 0);
+
+    u = {
+      time: gl.getUniformLocation(prog, 'u_time'),
+      res: gl.getUniformLocation(prog, 'u_res'),
+      rain: gl.getUniformLocation(prog, 'u_rain'),
+      fog: gl.getUniformLocation(prog, 'u_fog'),
+      refract: gl.getUniformLocation(prog, 'u_refract'),
+      glass: gl.getUniformLocation(prog, 'u_glass'),
+      speed: gl.getUniformLocation(prog, 'u_speed'),
+      tex: gl.getUniformLocation(prog, 'u_tex')
+    };
+    gl.uniform1i(u.tex, 0);
+    bgCanvas = document.createElement('canvas');
+    return true;
+  }
+
+  function resize() {
+    if (!canvas || !gl) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    var w = Math.floor(window.innerWidth * dpr);
+    var h = Math.floor(window.innerHeight * dpr);
+    canvas.width = w; canvas.height = h;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    gl.viewport(0, 0, w, h);
+  }
+
+  // ============ Default background image ============
+
+  function createDefaultImage() {
+    var img = new Image();
+    img.onload = function() {
+      defaultImg = img;
+      needsTextureUpdate = true;
+    };
+    img.onerror = function() {
+      console.warn('Default background image failed to load');
+      defaultImg = null;
+      needsTextureUpdate = true;
+    };
+    img.src = '/assets/bg.png';
+  }
+
+  // ============ Media loading ============
+
+  function loadUpload(file) {
+    if (!file) return;
+    if (uploadUrl) { URL.revokeObjectURL(uploadUrl); uploadUrl = null; }
+    if (uploadImg) { uploadImg = null; }
+    if (uploadVid) { uploadVid.pause(); uploadVid = null; }
+
+    uploadUrl = URL.createObjectURL(file);
+
+    if (file.type.startsWith('video/')) {
+      uploadVid = document.createElement('video');
+      uploadVid.src = uploadUrl;
+      uploadVid.loop = true;
+      uploadVid.muted = true;
+      uploadVid.playsInline = true;
+      uploadVid.autoplay = true;
+      uploadVid.play().catch(function(){});
+      currentMode = 'uploadVideo';
+    } else {
+      uploadImg = new Image();
+      uploadImg.onload = function() { needsTextureUpdate = true; };
+      uploadImg.src = uploadUrl;
+      currentMode = 'uploadImage';
+    }
+    needsTextureUpdate = true;
+  }
+
+  function setMediaMode(mode) {
+    currentMode = mode;
+    needsTextureUpdate = true;
+  }
+
+  // ============ Texture update ============
+
+  function drawMedia(ctx, w, h, media) {
+    if (!media) return false;
+    var mw = media.videoWidth || media.naturalWidth || media.width || 1;
+    var mh = media.videoHeight || media.naturalHeight || media.height || 1;
+    var mr = mw / mh;
+    var cr = w / h;
+    var dw = w, dh = h;
+    if (cr > mr) dh = w / mr;
+    else dw = h * mr;
+    ctx.drawImage(media, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    return true;
+  }
+
+  function drawDefaultBackground(ctx, w, h) {
+    if (defaultImg) {
+      drawMedia(ctx, w, h, defaultImg);
+      return;
+    }
+    // Fallback gradient
+    var grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#0f172a');
+    grad.addColorStop(0.5, '#1e293b');
+    grad.addColorStop(1, '#0b1221');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function updateTexture() {
+    if (!gl || !bgCanvas) return;
+    var w = Math.floor(window.innerWidth);
+    var h = Math.floor(window.innerHeight);
+    bgCanvas.width = w; bgCanvas.height = h;
+    var ctx = bgCanvas.getContext('2d');
+
+    var drawn = false;
+    if (currentMode === 'uploadVideo' && uploadVid && uploadVid.readyState >= 2) {
+      drawn = drawMedia(ctx, w, h, uploadVid);
+    } else if (currentMode === 'uploadImage' && uploadImg && uploadImg.complete) {
+      drawn = drawMedia(ctx, w, h, uploadImg);
+    }
+
+    if (!drawn) {
+      drawDefaultBackground(ctx, w, h);
+    }
+
+    if (!texture) texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bgCanvas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  }
+
+  // ============ Render loop ============
+
+  function render() {
+    if (!isRunning || !gl) return;
+    var elapsed = (performance.now() - startTime) / 1000.0;
+    var w = canvas.width, h = canvas.height;
+    var cfg = window.__rainConfig || {};
+
+    var isVideo = currentMode === 'uploadVideo';
+    if (needsTextureUpdate || isVideo) {
+      updateTexture();
+      needsTextureUpdate = false;
+    }
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.uniform1f(u.time, elapsed);
+    gl.uniform2f(u.res, w, h);
+    gl.uniform1f(u.rain, cfg.rain != null ? cfg.rain : 0.55);
+    gl.uniform1f(u.fog, cfg.fog != null ? cfg.fog : 0.25);
+    gl.uniform1f(u.refract, cfg.refract != null ? cfg.refract : 1.0);
+    gl.uniform1f(u.glass, cfg.glass != null ? cfg.glass : 0.0);
+    gl.uniform1f(u.speed, cfg.speed != null ? cfg.speed : 0.2);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    rafId = requestAnimationFrame(render);
+  }
+
+  function onResize() { resize(); needsTextureUpdate = true; }
+
+  window.initRain = function() {
+    if (isRunning) return;
+    if (!document.getElementById('rainCanvas')) {
+      var rc = document.createElement('canvas');
+      rc.id = 'rainCanvas';
+      rc.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;pointer-events:none;';
+      document.body.insertBefore(rc, document.body.firstChild);
+    }
+    if (!initGL()) return;
+    resize();
+    createDefaultImage();
+    needsTextureUpdate = true;
+    startTime = performance.now();
+    isRunning = true;
+    window.addEventListener('resize', onResize);
+    rafId = requestAnimationFrame(render);
+  };
+
+  window.destroyRain = function() {
+    isRunning = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    window.removeEventListener('resize', onResize);
+    var rc = document.getElementById('rainCanvas');
+    if (rc && rc.parentNode) rc.parentNode.removeChild(rc);
+    canvas = null; gl = null; prog = null; texture = null; bgCanvas = null;
+    defaultImg = null;
+    if (uploadVid) { uploadVid.pause(); uploadVid = null; }
+    if (uploadUrl) { URL.revokeObjectURL(uploadUrl); uploadUrl = null; }
+    uploadImg = null;
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(window.initRain, 50); });
+  } else {
+    setTimeout(window.initRain, 50);
+  }
+})();
+
+
+// ========================================================================
+// App Logic
+// ========================================================================
+
+const API_BASE = '';
+
+// State
+let currentView = 'search';
+let currentTab = 'query';
+let providers = [];
+let lastRetrieval = null;
+let lastEvidence = null;
+let lastAnswer = null;
+
+// Chat history state
+let chatHistories = [];
+let currentChatId = null;
+const CHAT_STORAGE_KEY = 'uses_indexer_chat_histories';
+
+// DOM refs
+const els = {};
+
+function $(id) { return document.getElementById(id); }
+
+// Agent chat state
+let agentMode = 'daily';
+let chatAttachments = [];
+
+function initRefs() {
+  els.statusDot = $('status-dot');
+  els.statusText = $('status-text');
+  els.dbPath = $('db-path');
+  els.question = $('question-input');
+  els.limit = $('limit-input');
+  els.context = $('context-input');
+  els.related = $('related-input');
+  els.resultsCard = $('results-card');
+  els.queryResults = $('query-results');
+  els.evidenceResults = $('evidence-results');
+  els.answerResults = $('answer-results');
+  els.traceResults = $('trace-results');
+  els.queryMeta = $('query-meta');
+  els.evidenceMeta = $('evidence-meta');
+  els.answerMeta = $('answer-meta');
+  els.chatTranscript = $('chat-transcript');
+  els.chatInput = $('chat-input');
+  els.agentProvider = $('agent-provider');
+  els.toast = $('toast');
+  // settings
+  els.settingsOverlay = $('settingsOverlay');
+  els.settingsPanel = $('settingsPanel');
+  // context status tags
+  els.ctxRetrieval = $('ctx-retrieval');
+  els.ctxEvidence = $('ctx-evidence');
+  els.ctxDraft = $('ctx-draft');
+  // stats
+  els.statProcedures = $('stat-procedures');
+  els.statStatements = $('stat-statements');
+  els.statChunks = $('stat-chunks');
+  els.statBlocks = $('stat-blocks');
+  els.statCalls = $('stat-calls');
+  els.statTopics = $('stat-topics');
+  els.routeList = $('route-list');
+  // docs
+  els.docsList = $('docs-list');
+  els.docsPagination = $('docs-pagination');
+  els.docDetailTitle = $('doc-detail-title');
+  els.docDetailBody = $('doc-detail-body');
+  els.docDetailEyebrow = $('doc-detail-eyebrow');
+  // agent chat
+  els.retrievalHints = $('retrieval-hints');
+  els.attachmentList = $('attachment-list');
+  els.chatHistoryList = $('chat-history-list');
+}
+
+// ========================================================================
+// API helpers
+// ========================================================================
+
+async function apiPost(path, body) {
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+async function apiGet(path) {
+  const res = await fetch(API_BASE + path);
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+function postClientLog(level, event, message, context) {
+  const payload = {
+    level,
+    event,
+    message,
+    context: {
+      ...context,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+      occurred_at: new Date().toISOString()
+    }
+  };
+  fetch(API_BASE + '/client-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: true
+  }).catch(() => {});
+}
+
+window.addEventListener('error', event => {
+  postClientLog('error', 'frontend_error', event.message || 'Frontend error', {
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    stack: event.error && event.error.stack
+  });
 });
 
-function bindNodes() {
-  [
-    "server-pill",
-    "server-status-text",
-    "metric-db-path",
-    "metric-files",
-    "metric-chunks",
-    "metric-calls",
-    "db-path",
-    "question-input",
-    "limit-input",
-    "context-window-input",
-    "related-limit-input",
-    "status-strip",
-    "status-text",
-    "summary-procedures",
-    "summary-statements",
-    "summary-chunks",
-    "summary-blocks",
-    "summary-calls",
-    "summary-topics",
-    "query-results",
-    "evidence-results",
-    "answer-results",
-    "trace-results",
-    "query-meta",
-    "evidence-meta",
-    "answer-meta",
-    "route-cloud",
-    "agent-meta",
-    "agent-transcript",
-    "agent-attachment-strip",
-    "agent-input",
-    "agent-send",
-    "agent-clear",
-    "agent-open-config",
-    "agent-settings-menu",
-    "agent-open-model-settings",
-    "agent-open-model-create",
-    "agent-close-config",
-    "agent-save-config",
-    "agent-reset-config",
-    "agent-provider-select",
-    "agent-add-image",
-    "agent-add-file",
-    "agent-image-input",
-    "agent-file-input",
-    "agent-config-modal",
-    "agent-config-label",
-    "agent-config-model",
-    "agent-config-base-url",
-    "agent-config-api-key",
-  ].forEach((id) => {
-    nodes[id] = document.getElementById(id);
+window.addEventListener('unhandledrejection', event => {
+  const reason = event.reason;
+  postClientLog('error', 'frontend_unhandledrejection', reason && reason.message ? reason.message : String(reason), {
+    stack: reason && reason.stack
   });
+});
+
+// ========================================================================
+// UI helpers
+// ========================================================================
+
+function showToast(msg, type) {
+  els.toast.textContent = msg;
+  els.toast.className = 'toast' + (type === 'error' ? ' error' : '');
+  els.toast.classList.add('show');
+  setTimeout(() => els.toast.classList.remove('show'), 2800);
 }
 
-function bindEvents() {
-  document.querySelectorAll(".prompt-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      nodes["question-input"].value = chip.dataset.prompt || "";
-      nodes["question-input"].focus();
-      nodes["question-input"].animate(
-        [
-          { transform: "scale(1)" },
-          { transform: "scale(1.03)" },
-          { transform: "scale(1)" },
-        ],
-        { duration: 400, easing: "cubic-bezier(.175, .885, .32, 1.275)" },
-      );
-      // 添加点击反馈动画
-      chip.animate(
-        [
-          { transform: "scale(1)" },
-          { transform: "scale(0.95)" },
-          { transform: "scale(1)" },
-        ],
-        { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-      );
-    });
-  });
+function setLoading(btnId, loading) {
+  const btn = $(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  const icon = btn.querySelector('.btn-icon');
+  if (loading) {
+    if (icon) icon.style.display = 'none';
+    if (!btn.querySelector('.loading-spinner')) {
+      const s = document.createElement('span');
+      s.className = 'loading-spinner';
+      btn.insertBefore(s, btn.firstChild);
+    }
+  } else {
+    const s = btn.querySelector('.loading-spinner');
+    if (s) s.remove();
+    if (icon) icon.style.display = '';
+  }
+}
 
-  document.querySelectorAll(".run-button").forEach((button) => {
-    button.addEventListener("click", () => {
-      // 添加点击反馈动画
-      button.animate(
-        [
-          { transform: "scale(1)" },
-          { transform: "scale(0.95)" },
-          { transform: "scale(1)" },
-        ],
-        { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-      );
-      runAction(button.dataset.action);
-    });
-  });
+function setServerStatus(ok, msg) {
+  els.statusDot.className = 'status-dot' + (ok ? ' ready' : ' error');
+  els.statusText.textContent = msg || (ok ? '就绪' : '异常');
+}
 
-  document.querySelectorAll("[data-page-target]").forEach((button) => {
-    button.addEventListener("click", () => {
-      // 添加点击反馈动画
-      button.animate(
-        [
-          { transform: "scale(1)" },
-          { transform: "scale(0.95)" },
-          { transform: "scale(1)" },
-        ],
-        { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-      );
-      setPage(button.dataset.pageTarget);
-    });
-  });
+// ========================================================================
+// Navigation & Views
+// ========================================================================
 
-  document.querySelectorAll(".subtab").forEach((button) => {
-    button.addEventListener("click", () => {
-      // 添加点击反馈动画
-      button.animate(
-        [
-          { transform: "scale(1)" },
-          { transform: "scale(0.95)" },
-          { transform: "scale(1)" },
-        ],
-        { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-      );
-      setSubpanel(button);
-    });
-  });
+function setView(viewId) {
+  currentView = viewId;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  const view = $('view-' + viewId);
+  const link = document.querySelector('.nav-link[data-view="' + viewId + '"]');
+  if (view) view.classList.add('active');
+  if (link) link.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  updateContextStatus();
+  if (viewId === 'docs' && (!docFiles || docFiles.length === 0)) {
+    loadDocs();
+  }
+}
 
-  document.getElementById("refresh-summary").addEventListener("click", () => {
-    // 添加点击反馈动画
-    document.getElementById("refresh-summary").animate(
-      [
-        { transform: "scale(1)" },
-        { transform: "scale(0.95)" },
-        { transform: "scale(1)" },
-      ],
-      { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-    );
-    refreshSummary();
-  });
+function switchTab(tabId) {
+  currentTab = tabId;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+  const pane = $('tab-' + tabId);
+  if (btn) btn.classList.add('active');
+  if (pane) pane.classList.add('active');
+}
 
-  document.getElementById("hero-refresh").addEventListener("click", () => {
-    // 添加点击反馈动画
-    document.getElementById("hero-refresh").animate(
-      [
-        { transform: "scale(1)" },
-        { transform: "scale(0.95)" },
-        { transform: "scale(1)" },
-      ],
-      { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" },
-    );
-    refreshSummary();
-  });
+// ========================================================================
+// Data fetching
+// ========================================================================
 
-  nodes["agent-send"].addEventListener("click", () => {
-    runAgentChat();
-  });
+async function checkHealth() {
+  try {
+    const data = await apiGet('/health');
+    setServerStatus(true, data.status === 'ok' ? '就绪' : data.status);
+  } catch (e) {
+    setServerStatus(false, '未连接');
+  }
+}
 
-  nodes["agent-clear"].addEventListener("click", () => {
-    state.agentConversation = [];
-    state.agentLastResponse = null;
-    state.agentAttachments = [];
-    nodes["agent-input"].value = "";
-    renderAgentConversation();
-    renderAgentAttachments();
-    nodes["agent-meta"].textContent = "会话已清空";
-  });
+async function loadDbSummary() {
+  try {
+    const data = await apiGet('/db-summary');
+    const s = data || {};
+    els.statProcedures.textContent = fmtNum(s.procedures);
+    els.statStatements.textContent = fmtNum(s.statements);
+    els.statChunks.textContent = fmtNum(s.chunks);
+    els.statBlocks.textContent = fmtNum(s.blocks);
+    const edgeTypes = s.edge_type_counts || {};
+    els.statCalls.textContent = fmtNum(edgeTypes.calls_procedure);
+    els.statTopics.textContent = fmtNum(edgeTypes.publishes_mc_topic);
 
-  nodes["agent-provider-select"].addEventListener("change", () => {
-    renderAgentMeta();
-  });
-
-  nodes["agent-open-config"].addEventListener("click", () => {
-    toggleAgentSettingsMenu();
-  });
-
-  nodes["agent-open-model-settings"].addEventListener("click", () => {
-    state.agentConfigMode = "edit";
-    closeAgentSettingsMenu();
-    openAgentConfigModal();
-  });
-
-  nodes["agent-open-model-create"].addEventListener("click", () => {
-    state.agentConfigMode = "create";
-    closeAgentSettingsMenu();
-    openAgentConfigModal();
-  });
-
-  nodes["agent-close-config"].addEventListener("click", () => {
-    closeAgentConfigModal();
-  });
-
-  nodes["agent-save-config"].addEventListener("click", () => {
-    saveAgentConfig();
-  });
-
-  nodes["agent-reset-config"].addEventListener("click", () => {
-    resetAgentConfig();
-  });
-
-  nodes["agent-add-image"].addEventListener("click", () => {
-    nodes["agent-image-input"].click();
-  });
-
-  nodes["agent-add-file"].addEventListener("click", () => {
-    nodes["agent-file-input"].click();
-  });
-
-  nodes["agent-image-input"].addEventListener("change", async (event) => {
-    await addSelectedFiles(event.target.files, "image");
-    event.target.value = "";
-  });
-
-  nodes["agent-file-input"].addEventListener("change", async (event) => {
-    await addSelectedFiles(event.target.files, "file");
-    event.target.value = "";
-  });
-
-  document.addEventListener("keydown", (event) => {
-    const modifier = event.metaKey || event.ctrlKey;
-    if (modifier && event.key === "Enter") {
-      event.preventDefault();
-      if (state.currentView === "agent-view") {
-        runAgentChat();
-        return;
+    // route list from /health
+    try {
+      const health = await apiGet('/health');
+      if (health.routes) {
+        els.routeList.innerHTML = health.routes.map(r => {
+          const method = r.split(' ')[0].toLowerCase();
+          const path = r.split(' ').slice(1).join(' ');
+          return `<span class="route-tag"><span class="route-method ${method}">${method}</span>${escapeHtml(path)}</span>`;
+        }).join('');
       }
-      runAction("all");
+    } catch (_e) { /* ignore */ }
+
+    // default db path
+    if (s.db_path && !els.dbPath.value) {
+      els.dbPath.placeholder = s.db_path;
     }
-  });
-
-  nodes["agent-config-modal"].addEventListener("click", (event) => {
-    if (event.target === nodes["agent-config-modal"]) {
-      closeAgentConfigModal();
-    }
-  });
-
-  document.addEventListener("click", (event) => {
-    const settingsWrap = document.querySelector(".agent-settings-wrap");
-    if (settingsWrap && !settingsWrap.contains(event.target)) {
-      closeAgentSettingsMenu();
-    }
-  });
-
-  // 添加滚动动画效果
-  window.addEventListener("scroll", () => {
-    const scrolled = window.pageYOffset;
-    const rate = scrolled * -0.5;
-    document.querySelectorAll(".mesh").forEach((mesh) => {
-      mesh.style.transform = `translateY(${rate}px)`;
-    });
-  });
-}
-
-async function initializeConsole() {
-  setStatus("连接服务中，正在读取健康状态和数据库摘要…", "loading");
-  try {
-    await loadHealth();
-    await refreshSummary();
-    await loadAgentProviders();
-    renderAgentConversation();
-    renderAgentAttachments();
-    setStatus("控制台已就绪，可以直接开始检索。", "ready");
-  } catch (error) {
-    setStatus(error.message, "error");
+  } catch (e) {
+    console.error('db-summary error', e);
   }
 }
 
-async function loadHealth() {
-  const health = await fetchJson("/health", { method: "GET" });
-  state.health = health;
-  nodes["server-pill"].classList.remove("is-error");
-  nodes["server-pill"].classList.add("is-ready");
-  nodes["server-status-text"].textContent = "服务在线";
-  nodes["metric-db-path"].textContent = health.default_db_path || "未设置默认数据库";
-  renderCounter(nodes["metric-files"], 0);
-  renderCounter(nodes["metric-chunks"], 0);
-  renderCounter(nodes["metric-calls"], 0);
-  renderRoutes(health.routes || []);
+async function loadProviders() {
+  try {
+    const data = await apiGet('/agent/providers');
+    providers = data.items || [];
+    els.agentProvider.innerHTML = providers.map(p =>
+      `<option value="${escapeHtml(p.name)}">${escapeHtml(p.label || p.name)}</option>`
+    ).join('') || '<option value="">无可用模型</option>';
+  } catch (e) {
+    els.agentProvider.innerHTML = '<option value="">加载失败</option>';
+  }
 }
 
-async function refreshSummary() {
-  const dbPath = currentDbPath();
-  const query = dbPath ? `?db_path=${encodeURIComponent(dbPath)}` : "";
-  document.querySelectorAll(".summary-panel").forEach((panel) => panel.classList.add("is-loading"));
+function fmtNum(n) {
+  if (n == null) return '—';
+  return n.toLocaleString();
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ========================================================================
+// Search actions
+// ========================================================================
+
+function getPayload() {
+  return {
+    db_path: els.dbPath.value.trim() || undefined,
+    query: els.question.value.trim(),
+    limit: parseInt(els.limit.value, 10) || 6,
+    context_window: parseInt(els.context.value, 10) || 2,
+    related_limit: parseInt(els.related.value, 10) || 3
+  };
+}
+
+function validateQuery() {
+  if (!els.question.value.trim()) {
+    showToast('请输入问题', 'error');
+    els.question.focus();
+    return false;
+  }
+  return true;
+}
+
+async function runQuery() {
+  if (!validateQuery()) return;
+  setLoading('btn-query', true);
   try {
-    const summary = await fetchJson(`/db-summary${query}`, { method: "GET" });
-    state.summary = summary;
-    renderSummary(summary);
-    renderMetricSnapshot(summary);
+    const data = await apiPost('/query', { ...getPayload(), debug: true });
+    lastRetrieval = data;
+    renderQuery(data);
+    renderTrace(data.debug, 'query');
+    els.resultsCard.hidden = false;
+    switchTab('query');
+    showToast(`检索完成，${(data.results || []).length} 条命中`);
+  } catch (e) {
+    showToast('检索失败: ' + e.message, 'error');
   } finally {
-    document.querySelectorAll(".summary-panel").forEach((panel) => panel.classList.remove("is-loading"));
+    setLoading('btn-query', false);
   }
 }
 
-async function loadAgentProviders() {
-  const payload = await fetchJson("/agent/providers", { method: "GET" });
-  state.agentProviders = payload.items || [];
-  state.agentCustomProvider = loadAgentCustomProvider();
-  renderAgentProviders(payload);
+async function runEvidence() {
+  if (!validateQuery()) return;
+  setLoading('btn-evidence', true);
+  try {
+    const data = await apiPost('/evidence', { ...getPayload(), debug: true });
+    lastEvidence = data;
+    renderEvidence(data);
+    renderTrace(data.debug, 'evidence');
+    els.resultsCard.hidden = false;
+    switchTab('evidence');
+    showToast(`证据组装完成，${(data.evidence || []).length} 条`);
+  } catch (e) {
+    showToast('证据失败: ' + e.message, 'error');
+  } finally {
+    setLoading('btn-evidence', false);
+  }
 }
 
-async function runAction(action) {
-  const question = nodes["question-input"].value.trim();
-  if (!question) {
-    setStatus("先输入一个问题，再运行检索或回答。", "error");
-    nodes["question-input"].focus();
+async function runAnswer() {
+  if (!validateQuery()) return;
+  setLoading('btn-answer', true);
+  try {
+    const p = getPayload();
+    const data = await apiPost('/answer', { db_path: p.db_path, question: p.query, evidence_limit: p.limit, context_window: p.context_window, related_limit: p.related_limit, allow_draft_fallback: true });
+    lastAnswer = data;
+    renderAnswer(data);
+    els.resultsCard.hidden = false;
+    switchTab('answer');
+    showToast('回答生成完成');
+  } catch (e) {
+    showToast('回答失败: ' + e.message, 'error');
+  } finally {
+    setLoading('btn-answer', false);
+  }
+}
+
+async function runAll() {
+  if (!validateQuery()) return;
+  setLoading('btn-all', true);
+  try {
+    const payload = getPayload();
+    // Run sequentially: query -> evidence -> answer
+    const q = await apiPost('/query', { ...payload, debug: true });
+    lastRetrieval = q;
+    renderQuery(q);
+    renderTrace(q.debug, 'query');
+
+    const e = await apiPost('/evidence', { ...payload, debug: true });
+    lastEvidence = e;
+    renderEvidence(e);
+    renderTrace(e.debug, 'evidence');
+
+    const a = await apiPost('/answer', { db_path: payload.db_path, question: payload.query, evidence_limit: payload.limit, context_window: payload.context_window, related_limit: payload.related_limit, allow_draft_fallback: true });
+    lastAnswer = a;
+    renderAnswer(a);
+
+    els.resultsCard.hidden = false;
+    switchTab('answer');
+    showToast('整套分析完成');
+  } catch (err) {
+    showToast('分析失败: ' + err.message, 'error');
+  } finally {
+    setLoading('btn-all', false);
+  }
+}
+
+async function runBundle() {
+  if (!validateQuery()) return;
+  setLoading('btn-bundle', true);
+  try {
+    const payload = getPayload();
+    await apiPost('/debug-bundle', { db_path: payload.db_path, question: payload.query, limit: payload.limit, context_window: payload.context_window, related_limit: payload.related_limit });
+    showToast('Debug Bundle 已生成');
+  } catch (e) {
+    showToast('Bundle 失败: ' + e.message, 'error');
+  } finally {
+    setLoading('btn-bundle', false);
+  }
+}
+
+// ========================================================================
+// Rendering
+// ========================================================================
+
+function renderQuery(data) {
+  const results = data.results || [];
+  els.queryMeta.textContent = results.length + ' 条';
+  if (!results.length) {
+    els.queryResults.innerHTML = '<div class="empty-state">无命中结果</div>';
     return;
   }
+  els.queryResults.innerHTML = results.map((r, i) => {
+    const meta = [r.source_type, r.procedure_name, r.object_id].filter(Boolean).join(' · ');
+    const text = (r.text || r.excerpt || '').substring(0, 320);
+    return `
+      <div class="result-item">
+        <h4>${escapeHtml(r.name || r.procedure_name || '命中项 #' + (i+1))}</h4>
+        <div class="result-meta">${escapeHtml(meta)}</div>
+        <div class="result-code">${escapeHtml(text)}</div>
+      </div>
+    `;
+  }).join('');
+}
 
-  setPage("results-view");
-  setStatus(`正在执行 ${labelForAction(action)}…`, "loading");
-  toggleResultLoading(true);
+function renderEvidence(data) {
+  const ev = data.evidence || [];
+  els.evidenceMeta.textContent = ev.length + ' 条';
+  if (!ev.length) {
+    els.evidenceResults.innerHTML = '<div class="empty-state">无证据块</div>';
+    return;
+  }
+  els.evidenceResults.innerHTML = ev.map((item, i) => {
+    const text = (item.text || item.excerpt || '').substring(0, 400);
+    const meta = [item.procedure_name, item.source_type, item.rank ? 'rank:' + item.rank : null].filter(Boolean).join(' · ');
+    return `
+      <div class="result-item">
+        <h4>证据 #${i+1}${item.procedure_name ? ' — ' + escapeHtml(item.procedure_name) : ''}</h4>
+        <div class="result-meta">${escapeHtml(meta)}</div>
+        <div class="result-code">${escapeHtml(text)}</div>
+      </div>
+    `;
+  }).join('');
+}
 
+function renderAnswer(data) {
+  const text = data.answer || data.final_answer || data.draft_answer || '无回答';
+  const source = data.answer_source || (data.draft_answer ? 'draft' : 'unknown');
+  els.answerMeta.textContent = source;
+  // Simple markdown-ish formatting
+  let html = escapeHtml(text)
+    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/^#{1,6}\s+(.+)$/gm, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+  // Fix pre blocks
+  html = html.replace(/<pre><code>([\s\S]*?)<\/code><\/pre>/g, (m, code) => {
+    return '<pre><code>' + code.replace(/<br>/g, '\n') + '</code></pre>';
+  });
+  els.answerResults.innerHTML = `<div class="answer-body">${html}</div>`;
+}
+
+function renderTrace(debug, phase) {
+  if (!debug) return;
+  const items = [];
+  if (debug.query_type) items.push({ label: 'Query Type', value: debug.query_type });
+  if (debug.candidate_count != null) items.push({ label: 'Candidates', value: String(debug.candidate_count) });
+  if (debug.evidence_count != null) items.push({ label: 'Evidence', value: String(debug.evidence_count) });
+  if (debug.pruned_blocks != null) items.push({ label: 'Pruned', value: String(debug.pruned_blocks) });
+  if (debug.rerank_strategy) items.push({ label: 'Rerank', value: debug.rerank_strategy });
+  if (debug.answer_source) items.push({ label: 'Source', value: debug.answer_source });
+  if (phase) items.push({ label: 'Phase', value: phase });
+
+  if (!items.length) {
+    els.traceResults.innerHTML = '<div class="empty-state">无调试信息</div>';
+    return;
+  }
+  els.traceResults.innerHTML = items.map(it => `
+    <div class="trace-item">
+      <h4>${escapeHtml(it.label)}</h4>
+      <strong>${escapeHtml(it.value)}</strong>
+    </div>
+  `).join('');
+}
+
+// ========================================================================
+// Chat History Management
+// ========================================================================
+
+function loadChatHistories() {
   try {
-    if (action === "all") {
-      const [query, evidence, answer] = await Promise.all([
-        fetchQuery(question),
-        fetchEvidence(question),
-        fetchAnswer(question),
-      ]);
-      state.query = query;
-      state.evidence = evidence;
-      state.answer = answer;
-      renderQuery(query);
-      renderEvidence(evidence);
-      renderAnswer(answer);
-      renderTrace(query, evidence, answer, null);
-      activateDefaultPanels();
-    } else if (action === "query") {
-      state.query = await fetchQuery(question);
-      renderQuery(state.query);
-      renderTrace(state.query, state.evidence, state.answer, state.bundle);
-      activatePanelById("query-panel");
-    } else if (action === "evidence") {
-      state.evidence = await fetchEvidence(question);
-      renderEvidence(state.evidence);
-      renderTrace(state.query, state.evidence, state.answer, state.bundle);
-      activatePanelById("evidence-panel");
-    } else if (action === "answer") {
-      state.answer = await fetchAnswer(question);
-      renderAnswer(state.answer);
-      renderTrace(state.query, state.evidence, state.answer, state.bundle);
-      activatePanelById("answer-panel");
-    } else if (action === "bundle") {
-      state.bundle = await fetchBundle(question);
-      renderTrace(state.query, state.evidence, state.answer, state.bundle);
-      activatePanelById("trace-panel");
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+    if (raw) {
+      chatHistories = JSON.parse(raw);
     }
-    setStatus(`${labelForAction(action)}已完成。`, "ready");
-  } catch (error) {
-    setStatus(error.message, "error");
-  } finally {
-    toggleResultLoading(false);
+  } catch (e) {
+    console.error('Failed to load chat histories', e);
+    chatHistories = [];
   }
 }
 
-async function fetchQuery(question) {
-  return fetchJson("/query", {
-    method: "POST",
-    body: JSON.stringify({
-      query: question,
-      limit: numberValue(nodes["limit-input"], 6),
-      db_path: currentDbPathOrUndefined(),
-      debug: true,
-    }),
-  });
+function saveChatHistories() {
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistories));
+  } catch (e) {
+    console.error('Failed to save chat histories', e);
+  }
 }
 
-async function fetchEvidence(question) {
-  return fetchJson("/evidence", {
-    method: "POST",
-    body: JSON.stringify({
-      query: question,
-      limit: numberValue(nodes["limit-input"], 6),
-      context_window: numberValue(nodes["context-window-input"], 2),
-      related_limit: numberValue(nodes["related-limit-input"], 3),
-      db_path: currentDbPathOrUndefined(),
-      debug: true,
-    }),
-  });
+function generateChatId() {
+  return 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 }
 
-async function fetchAnswer(question) {
-  return fetchJson("/answer", {
-    method: "POST",
-    body: JSON.stringify({
-      question,
-      evidence_limit: numberValue(nodes["limit-input"], 6),
-      context_window: numberValue(nodes["context-window-input"], 2),
-      related_limit: numberValue(nodes["related-limit-input"], 3),
-      db_path: currentDbPathOrUndefined(),
-      allow_draft_fallback: true,
-    }),
-  });
+function generateChatTitle(text) {
+  if (!text) return '新对话';
+  const t = text.trim().replace(/\s+/g, ' ');
+  return t.length > 24 ? t.slice(0, 24) + '…' : t;
 }
 
-async function fetchBundle(question) {
-  return fetchJson("/debug-bundle", {
-    method: "POST",
-    body: JSON.stringify({
-      question,
-      limit: numberValue(nodes["limit-input"], 6),
-      context_window: numberValue(nodes["context-window-input"], 2),
-      related_limit: numberValue(nodes["related-limit-input"], 3),
-      db_path: currentDbPathOrUndefined(),
-    }),
-  });
+function createNewChat() {
+  const chat = {
+    id: generateChatId(),
+    title: '新对话',
+    messages: [],
+    mode: agentMode,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  chatHistories.unshift(chat);
+  saveChatHistories();
+  currentChatId = chat.id;
+  renderChatHistoryList();
+  clearTranscript();
+  chatAttachments = [];
+  renderAttachmentList();
+  showToast('已创建新对话');
 }
 
-async function fetchAgentChat(message) {
-  const provider = selectedAgentProvider();
-  return fetchJson("/agent/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      provider: provider && !provider.custom ? provider.name : undefined,
-      message,
-      history: state.agentConversation.slice(-6),
-      db_path: currentDbPathOrUndefined(),
-      include_retrieval: true,
-      include_evidence: true,
+function clearTranscript() {
+  if (els.chatTranscript) els.chatTranscript.innerHTML = '';
+}
+
+function loadChat(chatId) {
+  const chat = chatHistories.find(c => c.id === chatId);
+  if (!chat) return;
+  currentChatId = chatId;
+  renderChatHistoryList();
+  clearTranscript();
+  chatAttachments = [];
+  renderAttachmentList();
+  // Restore mode
+  if (chat.mode && chat.mode !== agentMode) {
+    setAgentMode(chat.mode);
+  }
+  // Restore messages
+  for (const msg of chat.messages) {
+    appendMessage(msg.text, msg.role === 'user' ? 'user' : 'assistant');
+  }
+}
+
+function renameChat(chatId) {
+  const chat = chatHistories.find(c => c.id === chatId);
+  if (!chat) return;
+  const input = document.getElementById('rename-input-' + chatId);
+  if (input) {
+    const newTitle = input.value.trim();
+    if (newTitle) {
+      chat.title = newTitle;
+      saveChatHistories();
+      renderChatHistoryList();
+    }
+    return;
+  }
+  // Enter rename mode
+  renderChatHistoryList(chatId);
+  const newInput = document.getElementById('rename-input-' + chatId);
+  if (newInput) {
+    newInput.focus();
+    newInput.select();
+  }
+}
+
+function cancelRename(chatId) {
+  renderChatHistoryList();
+}
+
+function deleteChat(chatId) {
+  if (!confirm('确定要删除这个对话吗？')) return;
+  chatHistories = chatHistories.filter(c => c.id !== chatId);
+  saveChatHistories();
+  if (currentChatId === chatId) {
+    if (chatHistories.length > 0) {
+      loadChat(chatHistories[0].id);
+    } else {
+      currentChatId = null;
+      clearTranscript();
+      createNewChat();
+    }
+  } else {
+    renderChatHistoryList();
+  }
+}
+
+function addMessageToHistory(role, text) {
+  if (!currentChatId) {
+    createNewChat();
+  }
+  const chat = chatHistories.find(c => c.id === currentChatId);
+  if (!chat) return;
+  chat.messages.push({
+    role: role,
+    text: text,
+    time: new Date().toISOString(),
+  });
+  // Auto-update title from first user message
+  if (role === 'user' && chat.title === '新对话' && chat.messages.length <= 2) {
+    chat.title = generateChatTitle(text);
+  }
+  chat.updatedAt = new Date().toISOString();
+  // Move to top
+  const idx = chatHistories.findIndex(c => c.id === currentChatId);
+  if (idx > 0) {
+    chatHistories.splice(idx, 1);
+    chatHistories.unshift(chat);
+  }
+  saveChatHistories();
+  renderChatHistoryList();
+}
+
+function renderChatHistoryList(renamingId) {
+  if (!els.chatHistoryList) return;
+  if (chatHistories.length === 0) {
+    els.chatHistoryList.innerHTML = '<div class="empty-state" style="padding:20px 0;font-size:0.78rem;">暂无历史对话</div>';
+    return;
+  }
+  els.chatHistoryList.innerHTML = chatHistories.map(chat => {
+    const isActive = chat.id === currentChatId;
+    const dateStr = new Date(chat.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    if (renamingId === chat.id) {
+      return `<div class="chat-history-item active">
+        <input type="text" id="rename-input-${chat.id}" class="history-rename-input" value="${escapeHtml(chat.title)}" onkeydown="if(event.key==='Enter'){renameChat('${chat.id}')}else if(event.key==='Escape'){cancelRename('${chat.id}')}" onblur="renameChat('${chat.id}')" />
+      </div>`;
+    }
+    return `<div class="chat-history-item ${isActive ? 'active' : ''}" onclick="loadChat('${chat.id}')">
+      <div class="history-info">
+        <span class="history-title">${escapeHtml(chat.title)}</span>
+        <span class="history-meta">${dateStr} · ${chat.messages.length} 条</span>
+      </div>
+      <div class="history-actions" onclick="event.stopPropagation()">
+        <button class="history-action-btn" onclick="renameChat('${chat.id}')" title="重命名">✎</button>
+        <button class="history-action-btn delete" onclick="deleteChat('${chat.id}')" title="删除">×</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function initChatHistory() {
+  loadChatHistories();
+  if (chatHistories.length === 0) {
+    createNewChat();
+  } else {
+    currentChatId = chatHistories[0].id;
+    loadChat(currentChatId);
+  }
+}
+
+// ========================================================================
+// Chat / Agent
+// ========================================================================
+
+function appendMessage(text, sender) {
+  const div = document.createElement('div');
+  div.className = 'chat-message ' + sender;
+  const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  let html = escapeHtml(text)
+    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  div.innerHTML = html + `<div class="msg-time">${time}</div>`;
+  els.chatTranscript.appendChild(div);
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+}
+
+function updateContextStatus() {
+  if (els.ctxRetrieval) {
+    const hasR = lastRetrieval && lastRetrieval.results && lastRetrieval.results.length;
+    els.ctxRetrieval.textContent = '检索: ' + (hasR ? lastRetrieval.results.length + ' 条' : '无');
+    els.ctxRetrieval.classList.toggle('active', !!hasR);
+  }
+  if (els.ctxEvidence) {
+    const hasE = lastEvidence && lastEvidence.evidence && lastEvidence.evidence.length;
+    els.ctxEvidence.textContent = '证据: ' + (hasE ? lastEvidence.evidence.length + ' 条' : '无');
+    els.ctxEvidence.classList.toggle('active', !!hasE);
+  }
+  if (els.ctxDraft) {
+    const hasD = lastAnswer && (lastAnswer.answer || lastAnswer.draft_answer);
+    els.ctxDraft.textContent = '草稿: ' + (hasD ? '有' : '无');
+    els.ctxDraft.classList.toggle('active', !!hasD);
+  }
+}
+
+function toggleSettings() {
+  const open = els.settingsPanel.classList.toggle('open');
+  els.settingsOverlay.classList.toggle('open', open);
+}
+
+function updateRainConfig() {
+  const cfg = window.__rainConfig || {};
+  cfg.rain = parseFloat($('cfg-rain').value);
+  cfg.fog = parseFloat($('cfg-fog').value);
+  cfg.refract = parseFloat($('cfg-refract').value);
+  cfg.speed = parseFloat($('cfg-speed').value);
+  cfg.glass = parseFloat($('cfg-glass').value);
+  $('val-rain').textContent = cfg.rain.toFixed(2);
+  $('val-fog').textContent = cfg.fog.toFixed(2);
+  $('val-refract').textContent = cfg.refract.toFixed(1);
+  $('val-speed').textContent = cfg.speed.toFixed(2);
+  $('val-glass').textContent = cfg.glass.toFixed(2);
+}
+
+function onBgModeClick(btn) {
+  const mode = btn.dataset.mode;
+  document.querySelectorAll('#bg-mode button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (mode === 'gradient') {
+    $('bg-upload-row').style.display = 'none';
+    window.__rainMedia.setMode('gradient');
+  } else {
+    $('bg-upload-row').style.display = 'block';
+    window.__rainMedia.setMode(mode);
+  }
+}
+
+function onBgUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  window.__rainMedia.setUpload(file);
+}
+
+function setAgentMode(mode) {
+  agentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  if (els.retrievalHints) {
+    els.retrievalHints.style.display = mode === 'business' ? 'flex' : 'none';
+  }
+  const placeholder = mode === 'daily'
+    ? '输入问题，智能助手将基于通用知识回答...'
+    : '输入问题，智能助手将结合代码库上下文回答...';
+  if (els.chatInput) els.chatInput.placeholder = placeholder;
+  // Save mode to current chat
+  if (currentChatId) {
+    const chat = chatHistories.find(c => c.id === currentChatId);
+    if (chat && chat.mode !== mode) {
+      chat.mode = mode;
+      saveChatHistories();
+    }
+  }
+}
+
+function triggerFileUpload() {
+  const input = $('file-upload');
+  if (input) input.click();
+}
+
+function onFileSelected(event) {
+  const files = event.target.files;
+  if (!files || !files.length) return;
+  const MAX_ATTACHMENTS = 5;
+  const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
+
+  for (const file of files) {
+    if (chatAttachments.length >= MAX_ATTACHMENTS) {
+      showToast('最多支持 5 个附件', 'error');
+      break;
+    }
+    if (file.type.startsWith('image/')) {
+      if (file.size > MAX_IMAGE_SIZE) {
+        showToast('图片大小不能超过 2MB: ' + file.name, 'error');
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        chatAttachments.push({
+          name: file.name,
+          media_kind: 'image',
+          mime_type: file.type,
+          size_bytes: file.size,
+          data_url: e.target.result
+        });
+        renderAttachmentList();
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        chatAttachments.push({
+          name: file.name,
+          media_kind: 'file',
+          mime_type: file.type || 'application/octet-stream',
+          size_bytes: file.size,
+          text_content: e.target.result
+        });
+        renderAttachmentList();
+      };
+      reader.readAsText(file);
+    }
+  }
+  event.target.value = '';
+}
+
+function renderAttachmentList() {
+  if (!els.attachmentList) return;
+  els.attachmentList.innerHTML = chatAttachments.map((att, i) => {
+    const thumb = att.media_kind === 'image' && att.data_url
+      ? `<img src="${escapeHtml(att.data_url)}" class="attachment-thumb" alt="" />`
+      : `<span style="font-size:1rem">📄</span>`;
+    return `<div class="attachment-item">${thumb}<span class="attachment-name">${escapeHtml(att.name)}</span><button class="attachment-remove" onclick="removeAttachment(${i})">&times;</button></div>`;
+  }).join('');
+}
+
+function removeAttachment(index) {
+  chatAttachments.splice(index, 1);
+  renderAttachmentList();
+}
+
+function clearChat() {
+  if (!currentChatId) return;
+  const chat = chatHistories.find(c => c.id === currentChatId);
+  if (chat) {
+    chat.messages = [];
+    chat.title = '新对话';
+    chat.updatedAt = new Date().toISOString();
+    saveChatHistories();
+    renderChatHistoryList();
+  }
+  els.chatTranscript.innerHTML = '';
+  chatAttachments = [];
+  renderAttachmentList();
+}
+
+// ========================================================================
+// Global Document Search — dynamically injected (ported from blog)
+// ========================================================================
+
+(function installGlobalSearch() {
+  if (document.getElementById('globalSearchPanel')) return;
+
+  // Inject search panel
+  var searchPanel = document.createElement('div');
+  searchPanel.id = 'globalSearchPanel';
+  searchPanel.className = 'global-search-panel';
+  searchPanel.innerHTML = '' +
+    '<div class="global-search-dialog" role="dialog" aria-modal="true" aria-label="Global search">' +
+      '<div class="global-search-header">' +
+        '<input id="globalSearchInput" class="global-search-input" type="search" placeholder="搜索说明文档..." autocomplete="off">' +
+        '<button id="globalSearchClose" class="global-search-close" type="button" aria-label="Close search">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="6" y1="18" x2="18" y2="6"></line></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="global-search-meta"><span id="globalSearchCount">0 entries</span><span>ESC / Ctrl+K</span></div>' +
+      '<div id="globalSearchResults" class="global-search-results"></div>' +
+    '</div>';
+  document.body.appendChild(searchPanel);
+
+  // Inject search trigger button into nav-right (before settings button)
+  if (!document.getElementById('globalSearchTrigger')) {
+    var trigger = document.createElement('button');
+    trigger.id = 'globalSearchTrigger';
+    trigger.className = 'nav-icon-btn';
+    trigger.type = 'button';
+    trigger.setAttribute('aria-label', 'Open search');
+    trigger.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.65" y2="16.65"></line></svg>';
+    var navRight = document.querySelector('#navbar .nav-right');
+    if (navRight && navRight.firstChild) {
+      navRight.insertBefore(trigger, navRight.firstChild);
+    } else if (navRight) {
+      navRight.appendChild(trigger);
+    }
+  }
+
+  // Inject styles
+  if (!document.getElementById('globalSearchStyles')) {
+    var style = document.createElement('style');
+    style.id = 'globalSearchStyles';
+    style.textContent =
+      '.global-search-panel{position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:80px 24px 24px;background:rgba(8,12,20,.12);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(12px);overflow:hidden;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility 0s .3s,background .3s ease}' +
+      '.global-search-panel.is-open{opacity:1;visibility:visible;transition:opacity .3s ease,visibility 0s,background .3s ease}' +
+      '.global-search-dialog{width:min(860px,100%);max-height:min(78vh,860px);overflow:hidden;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(15,23,42,.08);backdrop-filter:blur(48px) saturate(1.3);-webkit-backdrop-filter:blur(40px) saturate(1.3);box-shadow:0 24px 80px rgba(0,0,0,.35);transform:scale(.96) translateY(20px);opacity:0;transition:transform .45s cubic-bezier(.34,1.56,.64,1),opacity .35s ease,background .3s ease,border-color .3s ease,backdrop-filter .3s ease,-webkit-backdrop-filter .3s ease}' +
+      '.global-search-panel.is-open .global-search-dialog{transform:scale(1) translateY(0);opacity:1}' +
+      '.global-search-header{display:flex;align-items:center;gap:12px;padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,.06)}' +
+      '.global-search-input{flex:1;height:52px;padding:0 18px;border:1px solid rgba(255,255,255,.10);border-radius:16px;background:rgba(255,255,255,.03);color:#eef2f7;font:400 16px/1.2 var(--font-body,sans-serif);outline:none;transition:border-color .2s ease,background .2s ease,box-shadow .2s ease}' +
+      '.global-search-input:focus{border-color:rgba(96,165,250,.35);background:rgba(255,255,255,.07);box-shadow:0 0 0 3px rgba(96,165,250,.08)}' +
+      '.global-search-input::placeholder{color:#7a94ad;opacity:.7}' +
+      '.global-search-close{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:none;border-radius:14px;background:transparent;color:#7a94ad;cursor:pointer;transition:color .2s ease,background .2s ease}' +
+      '.global-search-close:hover{color:#eef2f7;background:rgba(255,255,255,.06)}' +
+      '.global-search-close svg{width:20px;height:20px}' +
+      '.global-search-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;color:#7a94ad;font-family:var(--font-mono,monospace);font-size:.72rem;border-bottom:1px solid rgba(255,255,255,.06)}' +
+      '.global-search-results{max-height:calc(78vh - 128px);overflow:auto;padding:8px 10px 14px}' +
+      '.global-search-item{display:block;padding:16px 14px;border-radius:18px;animation:searchItemIn .3s ease both;transition:background .2s ease;cursor:pointer;text-decoration:none}' +
+      '.global-search-item:hover{background:rgba(96,165,250,.08)}' +
+      '@keyframes searchItemIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}' +
+      '.global-search-item-title{font-family:var(--font-display,serif);font-size:1.08rem;letter-spacing:-.02em;margin-bottom:6px;color:#eef2f7}' +
+      '.global-search-item-excerpt{color:#b0c4de;font-size:.92rem;line-height:1.7}' +
+      '.global-search-item-meta{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-family:var(--font-mono,monospace);font-size:.7rem;color:#7a94ad;text-transform:uppercase;letter-spacing:.05em}' +
+      '.global-search-keyword{color:#60a5fa;font-weight:500}' +
+      '.global-search-empty{padding:44px 18px 48px;text-align:center;color:#7a94ad}';
+    document.head.appendChild(style);
+  }
+
+  // Search state
+  var docSearchIndex = [];
+  var docSearchIndexReady = false;
+  var docSearchIndexBuilding = false;
+
+  function buildDocSearchIndex() {
+    if (docSearchIndexReady || docSearchIndexBuilding) return Promise.resolve();
+    docSearchIndexBuilding = true;
+    return apiGet('/docs').then(function(list) {
+      var files = list.files || [];
+      var results = [];
+      function fetchBatch(start) {
+        if (start >= files.length) {
+          docSearchIndex = results;
+          docSearchIndexReady = true;
+          docSearchIndexBuilding = false;
+          return;
+        }
+        var batch = files.slice(start, start + 5);
+        return Promise.all(batch.map(function(f) {
+          return apiGet('/docs/' + encodeURIComponent(f.name)).catch(function() { return null; });
+        })).then(function(contents) {
+          batch.forEach(function(f, idx) {
+            var content = contents[idx];
+            var body = content ? (content.content || '') : '';
+            var excerpt = body.replace(/[#*`>\-]/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500);
+            results.push({
+              kind: '文档',
+              title: f.title || f.name,
+              excerpt: excerpt,
+              meta: f.path || '',
+              tags: '',
+              name: f.name
+            });
+          });
+          return fetchBatch(start + 5);
+        });
+      }
+      return fetchBatch(0);
+    }).catch(function(e) {
+      console.error('Failed to build search index:', e);
+      docSearchIndexBuilding = false;
+    });
+  }
+
+  function highlightSearch(text, terms) {
+    var result = escapeHtml(text || '');
+    terms.forEach(function(term) {
+      var escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      result = result.replace(new RegExp('(' + escaped + ')', 'gi'), '<span class="global-search-keyword">$1</span>');
+    });
+    return result;
+  }
+
+  function renderSearchResults(query) {
+    var resultsEl = document.getElementById('globalSearchResults');
+    var countEl = document.getElementById('globalSearchCount');
+    if (!resultsEl || !countEl) return;
+
+    if (!docSearchIndexReady) {
+      countEl.textContent = 'Loading...';
+      resultsEl.innerHTML = '<div class="global-search-empty">正在构建索引...</div>';
+      return;
+    }
+
+    var terms = String(query || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) {
+      countEl.textContent = docSearchIndex.length + ' entries';
+      resultsEl.innerHTML = '<div class="global-search-empty">输入关键词搜索说明文档...</div>';
+      return;
+    }
+
+    var matches = docSearchIndex.filter(function(item) {
+      var haystack = (item.title + ' ' + item.excerpt + ' ' + item.meta + ' ' + item.tags).toLowerCase();
+      return terms.every(function(term) { return haystack.indexOf(term) !== -1; });
+    });
+
+    countEl.textContent = matches.length + ' results';
+    if (!matches.length) {
+      resultsEl.innerHTML = '<div class="global-search-empty">No results for "' + escapeHtml(query) + '".</div>';
+      return;
+    }
+
+    resultsEl.innerHTML = matches.map(function(item) {
+      return '' +
+        '<div class="global-search-item" onclick="window.__openDocFromSearch(\'' + escapeHtml(item.name).replace(/'/g, "\\'") + '\')">' +
+          '<div class="global-search-item-meta"><span>' + escapeHtml(item.kind) + '</span><span>' + escapeHtml(item.meta) + '</span></div>' +
+          '<div class="global-search-item-title">' + highlightSearch(item.title, terms) + '</div>' +
+          '<div class="global-search-item-excerpt">' + highlightSearch(item.excerpt, terms) + '</div>' +
+        '</div>';
+    }).join('');
+
+    var items = resultsEl.querySelectorAll('.global-search-item');
+    items.forEach(function(item, i) {
+      item.style.animationDelay = (i * 0.04) + 's';
+    });
+  }
+
+  var panel = document.getElementById('globalSearchPanel');
+  var input = document.getElementById('globalSearchInput');
+  var results = document.getElementById('globalSearchResults');
+  var count = document.getElementById('globalSearchCount');
+  var close = document.getElementById('globalSearchClose');
+  var triggerEl = document.getElementById('globalSearchTrigger');
+
+  function openSearch() {
+    if (!panel || !input) return;
+    panel.classList.add('is-open');
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    input.value = '';
+    renderSearchResults('');
+    setTimeout(function() {
+      try { input.focus({ preventScroll: true }); } catch (err) { input.focus(); }
+    }, 50);
+    buildDocSearchIndex().then(function() {
+      renderSearchResults(input.value);
+    });
+  }
+
+  function closeSearch() {
+    if (!panel) return;
+    panel.classList.remove('is-open');
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+    setTimeout(function() {
+      panel.style.backdropFilter = '';
+      panel.style.webkitBackdropFilter = '';
+      panel.style.background = '';
+    }, 350);
+  }
+
+  window.__openDocFromSearch = function(name) {
+    closeSearch();
+    renderDocDetail(name);
+  };
+
+  if (triggerEl) triggerEl.addEventListener('click', openSearch);
+  if (close) close.addEventListener('click', closeSearch);
+  if (panel) {
+    panel.addEventListener('click', function(event) {
+      if (event.target === panel) closeSearch();
+    });
+  }
+  if (input) {
+    input.addEventListener('input', function() {
+      renderSearchResults(input.value);
+    });
+  }
+
+  document.addEventListener('keydown', function(event) {
+    if (!panel) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      if (panel.classList.contains('is-open')) {
+        closeSearch();
+      } else {
+        openSearch();
+      }
+      return;
+    }
+    if (event.key === 'Escape' && panel.classList.contains('is-open')) {
+      closeSearch();
+      return;
+    }
+    if (event.key === 'Tab' && panel.classList.contains('is-open')) {
+      var focusable = panel.querySelectorAll('input, button, .global-search-item');
+      if (focusable.length === 0) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  });
+})();
+
+async function sendChat() {
+  const text = els.chatInput.value.trim();
+  if (!text) return;
+  const provider = els.agentProvider.value;
+  if (!provider) { showToast('请选择一个模型', 'error'); return; }
+
+  appendMessage(text, 'user');
+  addMessageToHistory('user', text);
+  els.chatInput.value = '';
+
+  let payload;
+  if (agentMode === 'daily') {
+    payload = {
+      provider: provider,
+      message: text,
+      include_retrieval: false,
+      include_evidence: false,
       include_answer_draft: false,
       limit: 6,
-      context_window: 2,
+      context_window: 8000,
       related_limit: 3,
-      attachments: state.agentAttachments,
-      provider_override: provider && provider.custom ? buildProviderOverridePayload(provider) : undefined,
-    }),
-  });
-}
-
-async function fetchJson(url, options) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  const text = await response.text();
-  let data = {};
-  if (text) {
-    data = JSON.parse(text);
+      system_prompt: '你是一个通用智能助手，请基于用户问题和上传的附件进行回答。'
+    };
+  } else {
+    const includeRetrieval = $('attach-retrieval').checked && lastRetrieval;
+    const includeEvidence = $('attach-evidence').checked && lastEvidence;
+    const includeDraft = $('attach-draft').checked && lastAnswer;
+    payload = {
+      provider: provider,
+      message: text,
+      include_retrieval: includeRetrieval,
+      include_evidence: includeEvidence,
+      include_answer_draft: includeDraft,
+      limit: parseInt(els.limit.value) || 6,
+      context_window: parseInt(els.context.value) || 8000,
+      related_limit: parseInt(els.related.value) || 3
+    };
   }
-  if (!response.ok) {
-    throw new Error(data.error || `请求失败：${response.status}`);
+
+  if (chatAttachments.length > 0) {
+    payload.attachments = chatAttachments.map(a => ({
+      name: a.name,
+      media_kind: a.media_kind,
+      mime_type: a.mime_type,
+      size_bytes: a.size_bytes,
+      text_content: a.text_content || undefined,
+      data_url: a.data_url || undefined
+    }));
   }
-  return data;
+
+  try {
+    const data = await apiPost('/agent/chat', payload);
+    const reply = data.reply || data.choices?.[0]?.message?.content || data.content || data.text || '无响应';
+    appendMessage(reply, 'assistant');
+    addMessageToHistory('assistant', reply);
+  } catch (e) {
+    appendMessage('请求失败: ' + e.message, 'assistant');
+    addMessageToHistory('assistant', '请求失败: ' + e.message);
+  }
 }
 
-function setPage(pageId) {
-  const isHome = pageId === "home";
-  state.currentView = pageId;
-  document.querySelector(".app-shell")?.classList.toggle("page-home", isHome);
-  document.querySelector(".app-shell")?.classList.toggle("page-detail", !isHome);
-  document.querySelectorAll(".workspace-view").forEach((view) => {
-    const isActive = !isHome && view.id === pageId;
-    view.hidden = !isActive;
-    view.classList.toggle("workspace-view-active", isActive);
-    if (!isActive) {
-      view.classList.remove("workspace-view-active");
+// ========================================================================
+// System
+// ========================================================================
+
+function refreshSystem() {
+  loadDbSummary();
+  checkHealth();
+  showToast('系统概览已刷新');
+}
+
+// ========================================================================
+// Keyboard shortcuts
+// ========================================================================
+
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + Enter in search textarea -> run all
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (document.activeElement === els.question) {
+      e.preventDefault();
+      runAll();
     }
-  });
-  document.querySelectorAll("[data-page-target]").forEach((button) => {
-    const target = button.dataset.pageTarget;
-    const isActive = target === pageId;
-    button.classList.toggle("nav-pill-active", isActive);
-    button.setAttribute("aria-selected", isActive ? "true" : "false");
-  });
-}
-
-function setSubpanel(button) {
-  activatePanelById(button.dataset.panelTarget);
-}
-
-function activatePanelById(panelId) {
-  const panel = document.getElementById(panelId);
-  if (!panel) return;
-
-  const container = panel.closest(".subpanel-wrap");
-  container.querySelectorAll(".subpanel").forEach((item) => {
-    const isActive = item.id === panelId;
-    item.hidden = !isActive;
-    item.classList.toggle("subpanel-active", isActive);
-    if (!isActive) {
-      item.classList.remove("subpanel-active");
+  }
+  // Enter in chat textarea -> send
+  if (e.key === 'Enter' && !e.shiftKey) {
+    if (document.activeElement === els.chatInput) {
+      e.preventDefault();
+      sendChat();
     }
-  });
+  }
+});
 
-  const tabs = panel.closest(".results-main, .results-side").querySelectorAll(".subtab");
-  tabs.forEach((tab) => {
-    tab.classList.toggle("subtab-active", tab.dataset.panelTarget === panelId);
-  });
+// ========================================================================
+// Docs
+// ========================================================================
+
+let docFiles = [];
+let docPage = 1;
+const docPageSize = 8;
+
+async function loadDocs() {
+  try {
+    const data = await apiGet('/docs');
+    docFiles = data.files || [];
+    docPage = 1;
+    renderDocsList();
+  } catch (e) {
+    showToast('加载文档列表失败: ' + e.message, 'error');
+    els.docsList.innerHTML = '<div class="empty-state">无法加载文档列表</div>';
+  }
 }
 
-function activateDefaultPanels() {
-  activatePanelById("query-panel");
-  activatePanelById("answer-panel");
-}
-
-function renderSummary(summary) {
-  renderCounter(nodes["summary-procedures"], summary.procedures || 0);
-  renderCounter(nodes["summary-statements"], summary.statements || 0);
-  renderCounter(nodes["summary-chunks"], summary.chunks || 0);
-  renderCounter(nodes["summary-blocks"], summary.blocks || 0);
-  renderCounter(nodes["summary-calls"], summary.calls_procedure || 0);
-  renderCounter(nodes["summary-topics"], summary.publishes_mc_topic || 0);
-}
-
-function renderMetricSnapshot(summary) {
-  renderCounter(nodes["metric-files"], summary.files || 0);
-  renderCounter(nodes["metric-chunks"], summary.chunks || 0);
-  renderCounter(nodes["metric-calls"], summary.calls_procedure || 0);
-}
-
-function renderQuery(query) {
-  nodes["query-meta"].textContent = `${query.hit_count || 0} 个命中 · ${query.candidate_count || 0} 个候选`;
-  const hits = query.hits || [];
-  if (!hits.length) {
-    renderEmpty(nodes["query-results"], "还没有命中结果。");
+function renderDocsList() {
+  if (!docFiles.length) {
+    els.docsList.innerHTML = '<div class="empty-state">暂无文档</div>';
+    els.docsPagination.innerHTML = '';
     return;
   }
-  nodes["query-results"].innerHTML = hits
-    .slice(0, 8)
-    .map(
-      (hit, index) => `
-        <article class="result-item">
-          <h4>${index + 1}. ${escapeHtml(hit.procedure_name || hit.title || "未命名过程")}</h4>
-          <p class="result-meta">${escapeHtml(hit.file_path || "未知文件")} · ${escapeHtml(hit.retrieval_source || hit.match_source || "unknown")}</p>
-          <div class="result-code">${escapeHtml(hit.matched_text || hit.excerpt || "没有摘要文本")}</div>
-        </article>
-      `,
-    )
-    .join("");
-}
+  const total = docFiles.length;
+  const totalPages = Math.max(1, Math.ceil(total / docPageSize));
+  if (docPage > totalPages) docPage = totalPages;
+  const start = (docPage - 1) * docPageSize;
+  const pageFiles = docFiles.slice(start, start + docPageSize);
 
-function renderEvidence(evidence) {
-  nodes["evidence-meta"].textContent = `${evidence.evidence_count || 0} 个证据块`;
-  const items = evidence.evidence || [];
-  if (!items.length) {
-    renderEmpty(nodes["evidence-results"], "还没有证据块。");
-    return;
-  }
-  nodes["evidence-results"].innerHTML = items
-    .slice(0, 6)
-    .map((item, index) => {
-      const relatedTables = (item.related_tables || []).slice(0, 4).join(" / ");
-      const relatedCalls = (item.related_calls || []).slice(0, 4).join(" / ");
-      return `
-        <article class="result-item">
-          <h4>${index + 1}. ${escapeHtml(item.procedure_name || "未命名过程")}</h4>
-          <p class="result-meta">${escapeHtml(item.file_path || "未知文件")} · 行 ${escapeHtml(String(item.line_start || "?"))}</p>
-          <div class="result-code">${escapeHtml(item.matched_text || item.excerpt || "没有证据摘要")}</div>
-          ${relatedTables ? `<p class="result-meta">相关表：${escapeHtml(relatedTables)}</p>` : ""}
-          ${relatedCalls ? `<p class="result-meta">相关调用：${escapeHtml(relatedCalls)}</p>` : ""}
-        </article>
-      `;
-    })
-    .join("");
-}
+  els.docsList.innerHTML = pageFiles.map((f, i) => `
+    <div class="doc-item" onclick="renderDocDetail('${escapeHtml(f.name)}')" style="animation-delay:${i * 0.05}s">
+      <div class="doc-meta">
+        <span class="doc-category">文档</span>
+        <span class="doc-date">${escapeHtml(f.path)}</span>
+      </div>
+      <h3 class="doc-title">${escapeHtml(f.title)}</h3>
+      <p class="doc-excerpt">${escapeHtml(f.name)}</p>
+    </div>
+  `).join('');
+  requestAnimationFrame(function() { window.SiteUtils.installDockEffect(els.docsList); });
 
-function renderAnswer(answer) {
-  const finalAnswer = answer.final_answer || {};
-  const text = finalAnswer.text || answer.draft_answer?.text || "还没有回答内容。";
-  nodes["answer-meta"].textContent = `${answer.answer_source || finalAnswer.source || "draft"} · ${answer.response_kind || "answer"}`;
-  const locations = finalAnswer.supporting_locations || answer.supporting_locations || [];
-  const uncertainties = finalAnswer.uncertainties || [];
-  nodes["answer-results"].innerHTML = `
-    <article class="answer-card">
-      <h4>回答内容</h4>
-      <p class="answer-text">${escapeHtml(text)}</p>
-      ${
-        locations.length
-          ? `<div class="citation-list">${locations
-              .slice(0, 6)
-              .map((item) => `<span class="citation-pill">${escapeHtml(item.procedure_name || item.file_path || "support")}</span>`)
-              .join("")}</div>`
-          : ""
-      }
-      ${
-        uncertainties.length
-          ? `<div class="result-code">${escapeHtml(uncertainties.join("\n"))}</div>`
-          : ""
-      }
-    </article>
+  // pagination with jump input
+  const hasPrev = docPage > 1;
+  const hasNext = docPage < totalPages;
+  els.docsPagination.innerHTML = `
+    <button class="pagination-btn" ${hasPrev ? '' : 'disabled'} onclick="changeDocPage(-1)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      上一页
+    </button>
+    <div class="pagination-jump">
+      <input type="number" class="pagination-input" id="pageInput" value="${docPage}" min="1" max="${totalPages}" oninput="onPageInput()" onkeydown="if(event.key==='Enter'){changeDocPage('jump');}">
+      <span class="pagination-total">/ ${totalPages}</span>
+    </div>
+    <button class="pagination-btn" id="pageNextBtn" ${hasNext ? '' : 'disabled'} onclick="changeDocPage(1)">
+      <span id="pageNextText">下一页</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+    </button>
   `;
 }
 
-function renderTrace(query, evidence, answer, bundle) {
-  const cards = [];
-  if (query) {
-    const analysis = query.debug?.query_analysis || {};
-    cards.push(traceCard("Query Type", analysis.query_type || "unknown", `${query.hit_count || 0} 个命中`));
-    cards.push(traceCard("Candidate Count", String(query.candidate_count || 0), "观察粗召回规模"));
+function changeDocPage(delta) {
+  const totalPages = Math.max(1, Math.ceil(docFiles.length / docPageSize));
+  var newPage;
+  if (delta === 'jump') {
+    var input = document.getElementById('pageInput');
+    newPage = parseInt(input ? input.value : docPage, 10);
+    if (isNaN(newPage)) newPage = docPage;
+  } else {
+    newPage = docPage + delta;
   }
-  if (evidence) {
-    cards.push(traceCard("Evidence Blocks", String(evidence.evidence_count || 0), "观察证据筛选后的保留量"));
-    const pruned = evidence.debug?.pruning?.dropped_count;
-    if (pruned !== undefined) {
-      cards.push(traceCard("Pruned Blocks", String(pruned), "判断裁剪是否过于激进"));
-    }
+  if (newPage >= 1 && newPage <= totalPages) {
+    docPage = newPage;
+    renderDocsList();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  if (answer) {
-    cards.push(traceCard("Answer Source", answer.answer_source || "draft", answer.final_answer?.tier || "grounded summary"));
+}
+
+function onPageInput() {
+  var input = document.getElementById('pageInput');
+  var btn = document.getElementById('pageNextBtn');
+  var text = document.getElementById('pageNextText');
+  if (!input || !btn || !text) return;
+  var val = parseInt(input.value, 10);
+  var totalPages = Math.max(1, Math.ceil(docFiles.length / docPageSize));
+  if (isNaN(val)) val = docPage;
+  if (val !== docPage) {
+    text.textContent = '跳转';
+    btn.disabled = false;
+    btn.setAttribute('onclick', "changeDocPage('jump')");
+  } else {
+    text.textContent = '下一页';
+    btn.disabled = !(docPage < totalPages);
+    btn.setAttribute('onclick', 'changeDocPage(1)');
   }
-  if (bundle) {
-    cards.push(traceCard("Bundle Kind", bundle.bundle_kind || "debug_bundle", "适合导出和后续复盘"));
-  }
-  if (!cards.length) {
-    renderEmpty(nodes["trace-results"], "运行一次查询后，这里会出现 query type、命中量、evidence pruning 等调试摘要。");
-    return;
-  }
-  nodes["trace-results"].innerHTML = cards.join("");
 }
 
-function renderAgentProviders(payload) {
-  const providers = payload.items || [];
-  const select = nodes["agent-provider-select"];
-  const options = [...providers];
-  if (state.agentCustomProvider) {
-    options.unshift(state.agentCustomProvider);
-  }
-
-  if (!options.length) {
-    select.innerHTML = `<option value="">未配置可用智能体</option>`;
-    select.disabled = true;
-    nodes["agent-send"].disabled = true;
-    nodes["agent-meta"].textContent = "当前还没有配置智能体服务";
-    return;
-  }
-
-  const defaultProvider = state.agentCustomProvider?.name || payload.default_provider || options[0].name;
-  select.innerHTML = options
-    .map((provider) => {
-      const selected = provider.name === defaultProvider ? " selected" : "";
-      const suffix = provider.custom ? "（本地配置）" : "";
-      return `<option value="${escapeHtml(provider.name)}"${selected}>${escapeHtml(provider.label)} · ${escapeHtml(provider.model)}${suffix}</option>`;
-    })
-    .join("");
-  select.disabled = false;
-  nodes["agent-send"].disabled = false;
-  renderAgentMeta();
-}
-
-function renderAgentConversation() {
-  const transcript = nodes["agent-transcript"];
-  if (!state.agentConversation.length) {
-    renderEmpty(transcript, "这里会像聊天页一样显示你和智能体的往返消息。上传的图片和文件会作为附件一起发给当前模型。");
-    return;
-  }
-  transcript.innerHTML = state.agentConversation
-    .map((item, index) => {
-      const roleLabel = item.role === "assistant" ? "智能体" : "你";
-      const extra = item.meta ? escapeHtml(item.meta) : `第 ${index + 1} 条消息`;
-      return `
-        <article class="agent-message ${escapeHtml(item.role)}">
-          <div class="agent-message-header">
-            <strong>${escapeHtml(roleLabel)}</strong>
-            <span>${extra}</span>
-          </div>
-          <p>${escapeHtml(item.content)}</p>
-        </article>
-      `;
-    })
-    .join("");
-  transcript.scrollTop = transcript.scrollHeight;
-}
-
-function renderAgentMeta() {
-  const provider = selectedAgentProvider();
-  if (!provider) {
-    nodes["agent-meta"].textContent = "当前还没有配置智能体服务";
-    return;
-  }
-  nodes["agent-meta"].textContent = `${provider.label} · ${provider.model}`;
-}
-
-function renderAgentAttachments() {
-  const strip = nodes["agent-attachment-strip"];
-  if (!state.agentAttachments.length) {
-    strip.innerHTML = "";
-    return;
-  }
-  strip.innerHTML = state.agentAttachments
-    .map(
-      (item, index) => `
-        <div class="agent-attachment-chip">
-          <div>
-            <strong>${escapeHtml(item.name)}</strong>
-            <span>${escapeHtml(item.media_kind)} · ${escapeHtml(formatBytes(item.size_bytes || 0))}</span>
-          </div>
-          <button class="agent-attachment-remove" data-attachment-index="${index}">移除</button>
-        </div>
-      `,
-    )
-    .join("");
-  strip.querySelectorAll("[data-attachment-index]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.attachmentIndex);
-      state.agentAttachments.splice(index, 1);
-      renderAgentAttachments();
-    });
-  });
-}
-
-function renderRoutes(routes) {
-  if (!routes.length) {
-    renderEmpty(nodes["route-cloud"], "当前没有可展示的接口。");
-    return;
-  }
-  const html = routes.map((route) => `<span class="route-pill">${escapeHtml(route)}</span>`).join("");
-  nodes["route-cloud"].innerHTML = html;
-}
-
-function renderCounter(node, target) {
-  const end = Number(target) || 0;
-  const start = Number(node.dataset.value || 0);
-  node.dataset.value = String(end);
-  const duration = 600;
-  const startedAt = performance.now();
-
-  function frame(now) {
-    const progress = Math.min((now - startedAt) / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const current = Math.round(start + (end - start) * eased);
-    node.textContent = current.toLocaleString("zh-CN");
-    if (progress < 1) {
-      requestAnimationFrame(frame);
-    }
-  }
-
-  requestAnimationFrame(frame);
-}
-
-function renderEmptyStates() {
-  renderEmpty(nodes["query-results"], "输入一个问题之后，这里会展示检索命中。");
-  renderEmpty(nodes["evidence-results"], "切到证据页签后，这里会展示证据块与上下文。");
-  renderEmpty(nodes["answer-results"], "运行 answer 后，这里会展示 grounded 回答。");
-  renderEmpty(nodes["trace-results"], "Bundle、query debug 和 evidence pruning 摘要会显示在这里。");
-  renderEmpty(nodes["route-cloud"], "正在读取 API 路由。");
-  renderEmpty(nodes["agent-transcript"], "正在初始化智能体面板。");
-  nodes["agent-attachment-strip"].innerHTML = "";
-}
-
-function renderEmpty(node, message) {
-  const template = document.getElementById("empty-state-template");
-  const fragment = template.content.cloneNode(true);
-  fragment.querySelector("p").textContent = message;
-  node.innerHTML = "";
-  node.appendChild(fragment);
-}
-
-function setStatus(message, mode) {
-  nodes["status-text"].textContent = message;
-  nodes["status-strip"].classList.toggle("is-loading", mode === "loading");
-  const badge = nodes["status-strip"].querySelector(".status-badge");
-  badge.textContent = mode === "loading" ? "处理中" : mode === "error" ? "异常" : "就绪";
-}
-
-function toggleResultLoading(loading) {
-  document.querySelectorAll(".result-panel").forEach((panel) => {
-    panel.classList.toggle("is-loading", loading);
-  });
-}
-
-function traceCard(title, value, detail) {
-  return `<article class="trace-card"><h4>${escapeHtml(title)}</h4><strong>${escapeHtml(value)}</strong><p>${escapeHtml(detail)}</p></article>`;
-}
-
-function currentDbPath() {
-  return nodes["db-path"].value.trim();
-}
-
-function currentDbPathOrUndefined() {
-  const value = currentDbPath();
-  return value || undefined;
-}
-
-function numberValue(node, fallbackValue) {
-  const parsed = Number(node.value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
-}
-
-function labelForAction(action) {
-  return {
-    all: "整套分析",
-    query: "检索查询",
-    evidence: "证据组装",
-    answer: "回答生成",
-    bundle: "Bundle 打包",
-  }[action] || action;
-}
-
-async function runAgentChat() {
-  const message = nodes["agent-input"].value.trim();
-  if (!message) {
-    setStatus("先输入一个问题，再发送给智能体。", "error");
-    nodes["agent-input"].focus();
-    return;
-  }
-  if (!selectedAgentProvider()) {
-    setStatus("当前没有可用的智能体 provider，请先配置 .env。", "error");
-    setPage("agent-view");
-    return;
-  }
-
-  setPage("agent-view");
-  state.agentConversation.push({ role: "user", content: message, meta: "本次问题" });
-  renderAgentConversation();
-  setStatus("正在把问题和本地代码证据一起发送给智能体…", "loading");
-  nodes["agent-send"].disabled = true;
-
+async function renderDocDetail(name) {
   try {
-    const response = await fetchAgentChat(message);
-    state.agentLastResponse = response;
-    state.agentConversation.push({
-      role: "assistant",
-      content: response.reply || "智能体没有返回文本内容。",
-      meta: `${response.provider?.label || response.provider?.name || "agent"} · ${response.latency_ms || 0}ms`,
-    });
-    nodes["agent-input"].value = "";
-    state.agentAttachments = [];
-    renderAgentConversation();
-    renderAgentAttachments();
-    renderAgentMeta();
-    setStatus("智能体回答已返回。", "ready");
-  } catch (error) {
-    setStatus(error.message, "error");
-  } finally {
-    nodes["agent-send"].disabled = !selectedAgentProvider();
+    const data = await apiGet('/docs/' + encodeURIComponent(name));
+    els.docDetailTitle.textContent = data.title || data.name;
+    els.docDetailEyebrow.textContent = data.name;
+    const html = await renderMarkdown(data.content || '');
+    els.docDetailBody.innerHTML = html;
+    delete els.docDetailBody.__codeBlockBound;
+    window.SiteUtils.bindCodeBlockInteractions(els.docDetailBody);
+    setView('doc-detail');
+  } catch (e) {
+    showToast('加载文档失败: ' + e.message, 'error');
   }
 }
 
-function selectedAgentProvider() {
-  const value = nodes["agent-provider-select"].value;
-  if (state.agentCustomProvider && state.agentCustomProvider.name === value) {
-    return state.agentCustomProvider;
+function backToDocs() {
+  setView('docs');
+}
+
+
+
+// ========================================================================
+// Expose globals for HTML onclick handlers
+// ========================================================================
+window.setView = setView;
+window.toggleSettings = toggleSettings;
+window.onBgModeClick = onBgModeClick;
+window.onBgUpload = onBgUpload;
+window.runAll = runAll;
+window.runQuery = runQuery;
+window.runEvidence = runEvidence;
+window.runAnswer = runAnswer;
+window.runBundle = runBundle;
+window.switchTab = switchTab;
+window.sendChat = sendChat;
+window.clearChat = clearChat;
+window.setAgentMode = setAgentMode;
+window.createNewChat = createNewChat;
+window.loadChat = loadChat;
+window.renameChat = renameChat;
+window.cancelRename = cancelRename;
+window.deleteChat = deleteChat;
+window.triggerFileUpload = triggerFileUpload;
+window.onFileSelected = onFileSelected;
+window.removeAttachment = removeAttachment;
+
+window.refreshSystem = refreshSystem;
+window.renderDocDetail = renderDocDetail;
+window.backToDocs = backToDocs;
+window.changeDocPage = changeDocPage;
+window.onPageInput = onPageInput;
+
+// ========================================================================
+// Init
+// ========================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+  initRefs();
+  setView('search');
+  checkHealth();
+  loadDbSummary();
+  loadProviders();
+  initChatHistory();
+
+  // Nav scroll detection — 照搬博客
+  const navbar = document.getElementById('navbar');
+  if (navbar) {
+    function onScroll() {
+      navbar.classList.toggle('scrolled', window.scrollY > 20);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
   }
-  return state.agentProviders.find((item) => item.name === value) || null;
-}
 
-function openAgentConfigModal() {
-  const provider =
-    state.agentConfigMode === "create"
-      ? { label: "", model: "", base_url: "", api_key: "" }
-      : state.agentCustomProvider || selectedAgentProvider() || { label: "", model: "", base_url: "", api_key: "" };
-  nodes["agent-config-label"].value = provider.label || "";
-  nodes["agent-config-model"].value = provider.model || "";
-  nodes["agent-config-base-url"].value = provider.base_url || "";
-  nodes["agent-config-api-key"].value = provider.api_key || "";
-  nodes["agent-config-modal"].hidden = false;
-}
-
-function closeAgentConfigModal() {
-  nodes["agent-config-modal"].hidden = true;
-}
-
-function toggleAgentSettingsMenu() {
-  nodes["agent-settings-menu"].hidden = !nodes["agent-settings-menu"].hidden;
-}
-
-function closeAgentSettingsMenu() {
-  nodes["agent-settings-menu"].hidden = true;
-}
-
-function saveAgentConfig() {
-  const label = nodes["agent-config-label"].value.trim() || "自定义模型";
-  const model = nodes["agent-config-model"].value.trim();
-  const baseUrl = nodes["agent-config-base-url"].value.trim();
-  const apiKey = nodes["agent-config-api-key"].value.trim();
-  if (!model || !baseUrl) {
-    setStatus("模型名和 Base URL 不能为空。", "error");
-    return;
-  }
-  state.agentCustomProvider = {
-    name: "custom-local",
-    label,
-    model,
-    base_url: baseUrl,
-    api_key: apiKey,
-    adapter: "openai-compatible",
-    custom: true,
-  };
-  localStorage.setItem(AGENT_CUSTOM_PROVIDER_KEY, JSON.stringify(state.agentCustomProvider));
-  renderAgentProviders({
-    default_provider: state.agentCustomProvider.name,
-    items: state.agentProviders,
-  });
-  closeAgentConfigModal();
-  setStatus("自定义模型配置已保存。", "ready");
-}
-
-function resetAgentConfig() {
-  state.agentCustomProvider = null;
-  localStorage.removeItem(AGENT_CUSTOM_PROVIDER_KEY);
-  renderAgentProviders({
-    default_provider: state.agentProviders[0]?.name || null,
-    items: state.agentProviders,
-  });
-  closeAgentConfigModal();
-  setStatus("已恢复为后端默认 provider 列表。", "ready");
-}
-
-function loadAgentCustomProvider() {
-  try {
-    const raw = localStorage.getItem(AGENT_CUSTOM_PROVIDER_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.model || !parsed.base_url) return null;
-    return {
-      name: "custom-local",
-      label: parsed.label || "自定义模型",
-      model: parsed.model,
-      base_url: parsed.base_url,
-      api_key: parsed.api_key || "",
-      adapter: "openai-compatible",
-      custom: true,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function buildProviderOverridePayload(provider) {
-  return {
-    label: provider.label,
-    model: provider.model,
-    base_url: provider.base_url,
-    api_key: provider.api_key || "",
-    adapter: "openai-compatible",
-  };
-}
-
-async function addSelectedFiles(fileList, mediaKind) {
-  const files = Array.from(fileList || []).slice(0, 6);
-  for (const file of files) {
-    state.agentAttachments.push(await toAttachment(file, mediaKind));
-  }
-  renderAgentAttachments();
-}
-
-async function toAttachment(file, mediaKind) {
-  const isImage = mediaKind === "image" || (file.type || "").startsWith("image/");
-  const base = {
-    name: file.name,
-    media_kind: isImage ? "image" : "file",
-    mime_type: file.type || "application/octet-stream",
-    size_bytes: file.size || 0,
-  };
-  if (isImage) {
-    return {
-      ...base,
-      data_url: await readAsDataUrl(file),
-    };
-  }
-  if (isProbablyTextFile(file)) {
-    return {
-      ...base,
-      text_content: (await file.text()).slice(0, 4000),
-    };
-  }
-  return base;
-}
-
-function isProbablyTextFile(file) {
-  const mime = file.type || "";
-  if (mime.startsWith("text/")) return true;
-  return /\.(txt|md|json|csv|tsv|log|xml|yml|yaml|py|js|ts|java|sql|cfg|ini)$/i.test(file.name);
-}
-
-function readAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("读取图片失败"));
-    reader.readAsDataURL(file);
-  });
-}
-
-function formatBytes(size) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+  // Periodic health check
+  setInterval(checkHealth, 15000);
+});

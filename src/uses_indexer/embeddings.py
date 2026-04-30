@@ -84,7 +84,7 @@ class SQLiteEmbeddingCache:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path).expanduser()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.execute(
             """
             CREATE TABLE IF NOT EXISTS embedding_cache (
@@ -321,6 +321,7 @@ class OpenAICompatibleEmbedder:
             self._dimension = len(vector)
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        import http.client
         payload: dict[str, object] = {
             "model": self.config.model,
             "input": texts,
@@ -338,16 +339,31 @@ class OpenAICompatibleEmbedder:
             method="POST",
         )
 
-        try:
-            with request.urlopen(http_request, timeout=self.config.timeout_seconds) as response:
-                raw = response.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise EmbeddingRequestError(f"Embedding request failed with status {exc.code}: {detail}") from exc
-        except error.URLError as exc:
-            raise EmbeddingRequestError(f"Embedding request failed: {exc.reason}") from exc
-        except TimeoutError as exc:
-            raise EmbeddingRequestError(f"Embedding request timed out after {self.config.timeout_seconds} seconds") from exc
+        max_retries = 5
+        retry_delay = 2.0
+
+        for attempt in range(max_retries + 1):
+            try:
+                with request.urlopen(http_request, timeout=self.config.timeout_seconds) as response:
+                    raw = response.read().decode("utf-8")
+                break
+            except error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if exc.code == 429 and attempt < max_retries:
+                    # Rate limit: use longer backoff (5s, 10s, 20s, 40s, 80s)
+                    time.sleep(5.0 * (2 ** attempt))
+                    continue
+                if exc.code in (500, 502, 503, 504) and attempt < max_retries:
+                    time.sleep(retry_delay * (2 ** attempt))
+                    continue
+                raise EmbeddingRequestError(f"Embedding request failed with status {exc.code}: {detail}") from exc
+            except (error.URLError, http.client.IncompleteRead, TimeoutError) as exc:
+                if attempt < max_retries:
+                    time.sleep(retry_delay * (2 ** attempt))
+                    continue
+                raise EmbeddingRequestError(f"Embedding request failed: {exc}") from exc
+        else:
+            raise EmbeddingRequestError("Embedding request failed after all retries")
 
         try:
             parsed = json.loads(raw)

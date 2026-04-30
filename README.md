@@ -20,6 +20,7 @@
 - [docs/NEWCOMER_GUIDE.md](docs/NEWCOMER_GUIDE.md)：第一次接触仓库时先看这里
 - [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)：继续开发时优先看这里
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)：结果不对、建库异常时优先看这里
+- [docs/LOGGING.md](docs/LOGGING.md)：看请求链路、错误、系统、业务和 SQL 日志如何落盘
 - [docs/RETRIEVAL_TUNING.md](docs/RETRIEVAL_TUNING.md)：调检索和重排时优先看这里
 - [docs/SEMANTIC_RULES_EXTENSION.md](docs/SEMANTIC_RULES_EXTENSION.md)：扩 DSL 语义规则时优先看这里
 - [docs/FRONTEND_DESIGN.md](docs/FRONTEND_DESIGN.md)：看第一版前端页面为什么这样设计

@@ -7,5 +7,7 @@ examples/*.db-shm
 *.db
 *.db-wal
 *.db-shm
+log/*
+!log/.gitkeep
 .claude/
 *.egg-info/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,14 +35,90 @@ from .debug_bundle import (
 )
 from .indexer import SQLiteIndexer
 from .llm import LlmConfigError, LlmRequestError
+from .logging_system import (
+    log_business,
+    log_error,
+    log_request,
+    log_system,
+    new_trace_id,
+    sanitize_payload,
+)
 from .qa import CodebaseQA
 
 WEB_DIR = Path(__file__).with_name("web")
 WEB_INDEX_PATH = WEB_DIR / "index.html"
+_PROJECT_ROOT = Path("/Users/songzuoqiang/Documents/agent/condex/codes")
+_DOCS_DIR = _PROJECT_ROOT / "docs"
+_DEFAULT_BG_PATH = _PROJECT_ROOT / "resources/img/橘子洲头.png"
 WEB_ASSET_PATHS = {
     "/assets/styles.css": WEB_DIR / "styles.css",
     "/assets/app.js": WEB_DIR / "app.js",
+    "/assets/content-pages.css": WEB_DIR / "content-pages.css",
+    "/assets/markdown-base.css": WEB_DIR / "markdown-base.css",
+    "/assets/markdown-renderer.js": WEB_DIR / "markdown-renderer.js",
+    "/assets/site-utils.js": WEB_DIR / "site-utils.js",
+    "/assets/rain-effect.js": WEB_DIR / "rain-effect.js",
+    "/assets/fonts/fonts.css": WEB_DIR / "fonts" / "fonts.css",
+    "/assets/bg.png": _DEFAULT_BG_PATH,
 }
+
+
+def _list_docs() -> dict[str, Any]:
+    files: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def _scan_dir(directory: Path, rel_prefix: str = "") -> None:
+        if not directory.exists():
+            return
+        for path in sorted(directory.iterdir()):
+            if path.is_dir():
+                _scan_dir(path, rel_prefix=f"{rel_prefix}{path.name}/")
+            elif path.suffix.lower() == ".md":
+                name = path.stem
+                if name in seen:
+                    continue
+                seen.add(name)
+                title = _extract_doc_title(path)
+                files.append({"name": name, "title": title, "path": f"{rel_prefix}{path.name}"})
+
+    _scan_dir(_DOCS_DIR)
+    for path in sorted(_PROJECT_ROOT.iterdir()):
+        if path.is_file() and path.suffix.lower() == ".md":
+            name = path.stem
+            if name in seen:
+                continue
+            seen.add(name)
+            title = _extract_doc_title(path)
+            files.append({"name": name, "title": title, "path": path.name})
+
+    return {"files": files}
+
+
+def _extract_doc_title(path: Path) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return path.stem
+    for line in text.splitlines()[:10]:
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped[2:].strip()
+    return path.stem
+
+
+def _read_doc(name: str) -> dict[str, Any]:
+    candidates: list[Path] = [
+        _DOCS_DIR / f"{name}.md",
+        _PROJECT_ROOT / f"{name}.md",
+    ]
+    for path in candidates:
+        if path.exists():
+            try:
+                content = path.read_text(encoding="utf-8")
+            except Exception as exc:
+                raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to read doc: {exc}") from exc
+            return {"name": name, "title": _extract_doc_title(path), "content": content}
+    raise ApiError(HTTPStatus.NOT_FOUND, f"Document not found: {name}")
 
 
 class ApiError(Exception):
@@ -69,10 +146,12 @@ class CodebaseApi:
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000) -> None:
         server = ThreadingHTTPServer((host, port), make_handler_class(self))
+        log_system("api_server_start", host=host, port=port, default_db_path=self.default_db_path)
         try:
             print(f"USES Indexer API listening on http://{host}:{port}")
             server.serve_forever()
         finally:
+            log_system("api_server_stop", host=host, port=port, default_db_path=self.default_db_path)
             server.server_close()
 
     def handle_request(
@@ -121,9 +200,27 @@ class CodebaseApi:
                 ],
             }
 
+        if route == "/client-log" and method == "POST":
+            payload = self._parse_json_body(body)
+            level = str(payload.get("level") or "error")
+            event = str(payload.get("event") or "frontend_event")
+            context = dict(payload.get("context") or {}) if isinstance(payload.get("context"), dict) else {}
+            if level.lower() in {"error", "fatal"}:
+                log_error(event=event, message=str(payload.get("message") or event), context={"frontend": context})
+            else:
+                log_business(event=f"frontend_{event}", frontend=context)
+            return HTTPStatus.OK, {"status": "logged"}
+
         if route == "/db-summary" and method == "GET":
             db_path = self._resolve_db_path(query_params.get("db_path", [None])[0])
             return HTTPStatus.OK, self.indexer.summarize_db(db_path)
+
+        if route == "/docs" and method == "GET":
+            return HTTPStatus.OK, _list_docs()
+
+        if route.startswith("/docs/") and method == "GET":
+            doc_name = route[len("/docs/"):]
+            return HTTPStatus.OK, _read_doc(doc_name)
 
         if route == "/query" and method == "POST":
             payload = self._parse_json_body(body)
@@ -510,10 +607,10 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
+        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/client-log", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
-        if route in {"/agent/providers", "/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow"} and method != "GET":
+        if route in {"/agent/providers", "/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow", "/docs"} and method != "GET":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")
@@ -561,6 +658,8 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
             return
 
         def _dispatch(self) -> None:
+            trace_id = new_trace_id()
+            started_at = time.perf_counter()
             static_asset = None
             if self.command == "GET":
                 static_asset = _resolve_web_response(self.path)
@@ -577,20 +676,61 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
                 length = int(self.headers.get("Content-Length", "0"))
                 body = self.rfile.read(length) if length > 0 else b""
 
+            request_payload = _decode_request_body(body)
+            error_payload = None
             try:
                 status_code, payload = api.handle_request(self.command, self.path, body)
             except ApiError as exc:
                 status_code = exc.status_code
                 payload = {"error": exc.message}
+                error_payload = {"type": "ApiError", "message": exc.message}
+                log_error(
+                    event="api_error",
+                    message=exc.message,
+                    trace_id=trace_id,
+                    exc=exc,
+                    context={"method": self.command, "path": self.path, "status_code": int(status_code)},
+                )
             except Exception as exc:  # pragma: no cover
                 status_code = HTTPStatus.INTERNAL_SERVER_ERROR
                 payload = {"error": str(exc)}
+                error_payload = {"type": exc.__class__.__name__, "message": str(exc)}
+                log_error(
+                    event="unhandled_api_error",
+                    message=str(exc),
+                    trace_id=trace_id,
+                    exc=exc,
+                    context={"method": self.command, "path": self.path, "status_code": int(status_code)},
+                )
 
             encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(int(status_code))
+            self.send_header("X-Trace-Id", trace_id)
             self._write_common_headers(content_type="application/json; charset=utf-8", content_length=len(encoded))
             self.end_headers()
             self.wfile.write(encoded)
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            log_request(
+                trace_id=trace_id,
+                method=self.command,
+                path=self.path,
+                status_code=int(status_code),
+                elapsed_ms=elapsed_ms,
+                request_payload=request_payload,
+                response_payload=payload,
+                client_ip=self.client_address[0] if self.client_address else None,
+                user_agent=self.headers.get("User-Agent"),
+                error=error_payload,
+            )
+            _log_business_route(
+                trace_id=trace_id,
+                method=self.command,
+                path=self.path,
+                status_code=int(status_code),
+                elapsed_ms=elapsed_ms,
+                request_payload=request_payload,
+                response_payload=payload,
+            )
 
         def _write_common_headers(self, *, content_type: str, content_length: int) -> None:
             self.send_header("Content-Type", content_type)
@@ -601,6 +741,72 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store, max-age=0")
 
     return ApiHandler
+
+
+def _decode_request_body(body: bytes | None) -> object:
+    if not body:
+        return None
+    try:
+        return json.loads(body.decode("utf-8"))
+    except Exception:
+        return {"raw_body": body.decode("utf-8", errors="replace")}
+
+
+def _log_business_route(
+    *,
+    trace_id: str,
+    method: str,
+    path: str,
+    status_code: int,
+    elapsed_ms: float,
+    request_payload: object,
+    response_payload: object,
+) -> None:
+    route = urlparse(path).path
+    if route in {"/health", "/docs"} or route.startswith("/docs/"):
+        return
+    if route == "/client-log":
+        return
+    request_dict = request_payload if isinstance(request_payload, dict) else {}
+    response_dict = response_payload if isinstance(response_payload, dict) else {}
+    event = {
+        "/db-summary": "db_summary",
+        "/query": "query_codebase",
+        "/evidence": "assemble_evidence",
+        "/ask": "ask_codebase",
+        "/answer": "answer_codebase",
+        "/agent/providers": "list_agent_providers",
+        "/agent/chat": "agent_chat",
+        "/debug-bundle": "debug_bundle",
+        "/compare-debug-bundles": "compare_debug_bundles",
+        "/compare-debug-bundle-panel": "compare_debug_bundle_panel",
+        "/compare-debug-bundle-panels": "compare_debug_bundle_panels",
+    }.get(route, route.strip("/").replace("-", "_") or "api_call")
+    log_business(
+        event,
+        trace_id=trace_id,
+        method=method,
+        route=route,
+        status_code=status_code,
+        elapsed_ms=round(float(elapsed_ms), 3),
+        db_path=request_dict.get("db_path") or request_dict.get("before_db_path") or request_dict.get("after_db_path"),
+        query=request_dict.get("query") or request_dict.get("question") or request_dict.get("message"),
+        options={
+            key: request_dict.get(key)
+            for key in ("limit", "context_window", "related_limit", "provider", "include_retrieval", "include_evidence", "include_answer_draft")
+            if key in request_dict
+        },
+        result=sanitize_payload(
+            {
+                "response_kind": response_dict.get("response_kind"),
+                "hit_count": response_dict.get("hit_count"),
+                "evidence_count": response_dict.get("evidence_count"),
+                "candidate_count": response_dict.get("candidate_count"),
+                "answer_source": response_dict.get("answer_source"),
+                "error": response_dict.get("error"),
+            }
+        ),
+    )
 
 
 def _coerce_int(value: Any, field_name: str) -> int:
@@ -652,9 +858,16 @@ def _resolve_web_response(path: str) -> tuple[int, str, bytes] | None:
     if route == "/favicon.ico":
         return HTTPStatus.NO_CONTENT, "image/x-icon", b""
     asset_path = WEB_ASSET_PATHS.get(route)
-    if asset_path is None:
-        return None
-    return _read_static_file(asset_path)
+    if asset_path is not None:
+        return _read_static_file(asset_path)
+    if route.startswith("/assets/fonts/"):
+        font_name = route[len("/assets/fonts/"):]
+        if ".." in font_name or "/" in font_name:
+            return None
+        font_path = WEB_DIR / "fonts" / font_name
+        if font_path.exists():
+            return _read_static_file(font_path)
+    return None
 
 
 def _read_static_file(path: Path) -> tuple[int, str, bytes]:

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .observability import build_evidence_debug_payload
+from .logging_system import log_business, log_error, log_sql_event
 from .response_schema import apply_response_envelope
 from .rerank import analyze_query
 from .semantic_recovery import format_call_edge_label, format_mc_topic_label, maybe_int
@@ -34,153 +35,163 @@ class EvidenceService:
         context_fetch = self.owner._context_fetch_service
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        candidates, fts_query, vector_status, retrieval_debug = self.owner._retrieval_service.retrieve_candidates(
-            conn,
-            db_path=db_path,
-            query=query,
-            candidate_limit=max(limit * 8, 40),
-            debug=debug,
-        )
-        query_analysis = analyze_query(query)
-        query_type = str(query_analysis.get("query_type") or "")
-        candidates = _sort_candidates_for_evidence(candidates, query_type=query_type)
+        try:
+            candidates, fts_query, vector_status, retrieval_debug = self.owner._retrieval_service.retrieve_candidates(
+                conn,
+                db_path=db_path,
+                query=query,
+                candidate_limit=max(limit * 8, 40),
+                debug=debug,
+            )
+            query_analysis = analyze_query(query)
+            query_type = str(query_analysis.get("query_type") or "")
+            candidates = _sort_candidates_for_evidence(candidates, query_type=query_type)
 
-        evidence_blocks: list[dict[str, object]] = []
-        seen_contexts: set[tuple[int, int, int]] = set()
-        context_indexes: dict[tuple[int, int, int], int] = {}
-        procedure_counts: dict[int, int] = {}
-        pruned_events: list[dict[str, object]] = []
-        procedure_cap = 1 if query_type in {"topic_publish", "metadata_definition"} else 2
+            evidence_blocks: list[dict[str, object]] = []
+            seen_contexts: set[tuple[int, int, int]] = set()
+            context_indexes: dict[tuple[int, int, int], int] = {}
+            procedure_counts: dict[int, int] = {}
+            pruned_events: list[dict[str, object]] = []
+            procedure_cap = 1 if query_type in {"topic_publish", "metadata_definition"} else 2
 
-        for rank, candidate in enumerate(candidates, start=1):
-            procedure_id = int(candidate["procedure_id"])
-            if procedure_counts.get(procedure_id, 0) >= procedure_cap:
-                if debug:
-                    pruned_events.append(
-                        {
-                            "reason": "procedure_evidence_cap",
-                            "procedure_name": str(candidate["procedure_name"]),
-                            "rank": rank,
-                            "query_type": query_type,
-                            "procedure_cap": procedure_cap,
-                        }
+            for rank, candidate in enumerate(candidates, start=1):
+                procedure_id = int(candidate["procedure_id"])
+                if procedure_counts.get(procedure_id, 0) >= procedure_cap:
+                    if debug:
+                        pruned_events.append(
+                            {
+                                "reason": "procedure_evidence_cap",
+                                "procedure_name": str(candidate["procedure_name"]),
+                                "rank": rank,
+                                "query_type": query_type,
+                                "procedure_cap": procedure_cap,
+                            }
+                        )
+                    continue
+
+                if candidate["hit_type"] == "chunk":
+                    context = context_fetch.fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
+                elif candidate["hit_type"] == "block":
+                    context = context_fetch.fetch_block_context(conn, block_id=int(candidate["entity_id"]))
+                else:
+                    context = context_fetch.fetch_context_block(
+                        conn,
+                        procedure_id=procedure_id,
+                        statement_id=maybe_int(candidate.get("statement_id")),
+                        context_window=context_window,
                     )
-                continue
-
-            if candidate["hit_type"] == "chunk":
-                context = context_fetch.fetch_chunk_block(conn, chunk_id=int(candidate["entity_id"]))
-            elif candidate["hit_type"] == "block":
-                context = context_fetch.fetch_block_context(conn, block_id=int(candidate["entity_id"]))
-            else:
-                context = context_fetch.fetch_context_block(
-                    conn,
-                    procedure_id=procedure_id,
-                    statement_id=maybe_int(candidate.get("statement_id")),
-                    context_window=context_window,
+                context_key = (
+                    procedure_id,
+                    int(context["line_start"]),
+                    int(context["line_end"]),
                 )
-            context_key = (
-                procedure_id,
-                int(context["line_start"]),
-                int(context["line_end"]),
-            )
-            if context_key in seen_contexts:
-                existing_index = context_indexes.get(context_key)
-                if existing_index is not None:
-                    existing_block = evidence_blocks[existing_index]
-                    merged_reasons = list(existing_block.get("reasons") or [])
-                    for reason in candidate.get("reasons", []):
-                        if reason not in merged_reasons:
-                            merged_reasons.append(reason)
-                    existing_block["reasons"] = merged_reasons
-                    matched_via = list(existing_block.get("matched_via") or [existing_block["retrieval_source"]])
-                    retrieval_source = str(candidate["retrieval_source"])
-                    if retrieval_source not in matched_via:
-                        matched_via.append(retrieval_source)
-                    existing_block["matched_via"] = matched_via
-                    existing_block["aggregate_score"] = round(
-                        max(
-                            float(existing_block.get("aggregate_score") or 0.0),
-                            float(candidate.get("aggregate_score") or candidate.get("score") or 0.0),
+                if context_key in seen_contexts:
+                    existing_index = context_indexes.get(context_key)
+                    if existing_index is not None:
+                        existing_block = evidence_blocks[existing_index]
+                        merged_reasons = list(existing_block.get("reasons") or [])
+                        for reason in candidate.get("reasons", []):
+                            if reason not in merged_reasons:
+                                merged_reasons.append(reason)
+                        existing_block["reasons"] = merged_reasons
+                        matched_via = list(existing_block.get("matched_via") or [existing_block["retrieval_source"]])
+                        retrieval_source = str(candidate["retrieval_source"])
+                        if retrieval_source not in matched_via:
+                            matched_via.append(retrieval_source)
+                        existing_block["matched_via"] = matched_via
+                        existing_block["aggregate_score"] = round(
+                            max(
+                                float(existing_block.get("aggregate_score") or 0.0),
+                                float(candidate.get("aggregate_score") or candidate.get("score") or 0.0),
+                            ),
+                            3,
+                        )
+                        existing_block["aggregate_hit_count"] = max(
+                            int(existing_block.get("aggregate_hit_count") or 1),
+                            int(candidate.get("aggregate_hit_count") or 1),
+                        )
+                    if debug:
+                        pruned_events.append(
+                            {
+                                "reason": "duplicate_context",
+                                "procedure_name": str(candidate["procedure_name"]),
+                                "line_start": int(context["line_start"]),
+                                "line_end": int(context["line_end"]),
+                                "rank": rank,
+                            }
+                        )
+                    continue
+
+                seen_contexts.add(context_key)
+                context_indexes[context_key] = len(evidence_blocks)
+                procedure_counts[procedure_id] = procedure_counts.get(procedure_id, 0) + 1
+                procedure_profile = dict(candidate.get("procedure_profile") or {})
+                if not procedure_profile:
+                    profile_row = conn.execute(
+                        "SELECT profile_json FROM procedure_features WHERE procedure_id = ? LIMIT 1",
+                        (procedure_id,),
+                    ).fetchone()
+                    if profile_row is not None and profile_row[0]:
+                        procedure_profile = dict(json.loads(str(profile_row[0])) or {})
+
+                evidence_blocks.append(
+                    {
+                        "rank": rank,
+                        "score": round(float(candidate["score"]), 3),
+                        "aggregate_score": round(float(candidate.get("aggregate_score") or candidate["score"]), 3),
+                        "aggregate_hit_count": int(candidate.get("aggregate_hit_count") or 1),
+                        "hit_type": candidate["hit_type"],
+                        "retrieval_source": candidate["retrieval_source"],
+                        "matched_via": list(candidate.get("matched_via", [candidate["retrieval_source"]])),
+                        "match_source": candidate["match_source"],
+                        "procedure_name": candidate["procedure_name"],
+                        "chinese_name": candidate.get("chinese_name"),
+                        "object_id": candidate.get("object_id"),
+                        "file_path": candidate["file_path"],
+                        "matched_text": candidate["matched_text"],
+                        "reasons": list(candidate["reasons"]),
+                        "procedure_profile": procedure_profile,
+                        "graph_focus_type": candidate.get("graph_focus_type"),
+                        "graph_focus_value": candidate.get("graph_focus_value"),
+                        "graph_focus_role": candidate.get("graph_focus_role"),
+                        "chunk_type": context.get("chunk_type"),
+                        "chunk_summary": context.get("summary_text"),
+                        "block_type": context.get("block_type"),
+                        "block_summary": context.get("block_summary"),
+                        "line_start": context["line_start"],
+                        "line_end": context["line_end"],
+                        "excerpt": context["excerpt"],
+                        "context_statements": context["statements"],
+                        "recovered_blocks": context_fetch.fetch_covering_blocks(
+                            conn,
+                            procedure_id=procedure_id,
+                            line_start=int(context["line_start"]),
+                            line_end=int(context["line_end"]),
+                            limit=3,
                         ),
-                        3,
-                    )
-                    existing_block["aggregate_hit_count"] = max(
-                        int(existing_block.get("aggregate_hit_count") or 1),
-                        int(candidate.get("aggregate_hit_count") or 1),
-                    )
-                if debug:
-                    pruned_events.append(
-                        {
-                            "reason": "duplicate_context",
-                            "procedure_name": str(candidate["procedure_name"]),
-                            "line_start": int(context["line_start"]),
-                            "line_end": int(context["line_end"]),
-                            "rank": rank,
-                        }
-                    )
-                continue
+                        "related_context": context_fetch.fetch_related_context(
+                            conn,
+                            procedure_id=procedure_id,
+                            procedure_name=str(candidate["procedure_name"]),
+                            related_limit=related_limit,
+                        ),
+                    }
+                )
 
-            seen_contexts.add(context_key)
-            context_indexes[context_key] = len(evidence_blocks)
-            procedure_counts[procedure_id] = procedure_counts.get(procedure_id, 0) + 1
-            procedure_profile = dict(candidate.get("procedure_profile") or {})
-            if not procedure_profile:
-                profile_row = conn.execute(
-                    "SELECT profile_json FROM procedure_features WHERE procedure_id = ? LIMIT 1",
-                    (procedure_id,),
-                ).fetchone()
-                if profile_row is not None and profile_row[0]:
-                    procedure_profile = dict(json.loads(str(profile_row[0])) or {})
+                if len(evidence_blocks) >= limit:
+                    break
 
-            evidence_blocks.append(
-                {
-                    "rank": rank,
-                    "score": round(float(candidate["score"]), 3),
-                    "aggregate_score": round(float(candidate.get("aggregate_score") or candidate["score"]), 3),
-                    "aggregate_hit_count": int(candidate.get("aggregate_hit_count") or 1),
-                    "hit_type": candidate["hit_type"],
-                    "retrieval_source": candidate["retrieval_source"],
-                    "matched_via": list(candidate.get("matched_via", [candidate["retrieval_source"]])),
-                    "match_source": candidate["match_source"],
-                    "procedure_name": candidate["procedure_name"],
-                    "chinese_name": candidate.get("chinese_name"),
-                    "object_id": candidate.get("object_id"),
-                    "file_path": candidate["file_path"],
-                    "matched_text": candidate["matched_text"],
-                    "reasons": list(candidate["reasons"]),
-                    "procedure_profile": procedure_profile,
-                    "graph_focus_type": candidate.get("graph_focus_type"),
-                    "graph_focus_value": candidate.get("graph_focus_value"),
-                    "graph_focus_role": candidate.get("graph_focus_role"),
-                    "chunk_type": context.get("chunk_type"),
-                    "chunk_summary": context.get("summary_text"),
-                    "block_type": context.get("block_type"),
-                    "block_summary": context.get("block_summary"),
-                    "line_start": context["line_start"],
-                    "line_end": context["line_end"],
-                    "excerpt": context["excerpt"],
-                    "context_statements": context["statements"],
-                    "recovered_blocks": context_fetch.fetch_covering_blocks(
-                        conn,
-                        procedure_id=procedure_id,
-                        line_start=int(context["line_start"]),
-                        line_end=int(context["line_end"]),
-                        limit=3,
-                    ),
-                    "related_context": context_fetch.fetch_related_context(
-                        conn,
-                        procedure_id=procedure_id,
-                        procedure_name=str(candidate["procedure_name"]),
-                        related_limit=related_limit,
-                    ),
-                }
+            llm_context = build_llm_context(query, evidence_blocks)
+        except Exception as exc:
+            log_error(
+                event="assemble_evidence_failed",
+                message=str(exc),
+                exc=exc,
+                context={"db_path": str(db_path), "query": query, "limit": limit},
             )
-
-            if len(evidence_blocks) >= limit:
-                break
-
-        llm_context = build_llm_context(query, evidence_blocks)
-        conn.close()
+            raise
+        finally:
+            conn.close()
 
         payload = {
             "db_path": str(db_path),
@@ -204,6 +215,26 @@ class EvidenceService:
                 evidence_blocks=evidence_blocks,
                 elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
             )
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        log_sql_event(
+            "assemble_evidence",
+            db_path=str(db_path),
+            query=query,
+            limit=limit,
+            context_window=context_window,
+            related_limit=related_limit,
+            candidate_count=len(candidates),
+            evidence_count=len(evidence_blocks),
+            elapsed_ms=round(elapsed_ms, 3),
+        )
+        log_business(
+            "assemble_evidence",
+            db_path=str(db_path),
+            query=query,
+            limit=limit,
+            evidence_count=len(evidence_blocks),
+            elapsed_ms=round(elapsed_ms, 3),
+        )
         return apply_response_envelope(payload, kind="evidence")
 
 

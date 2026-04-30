@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .embeddings import EmbeddingConfigError, EmbeddingInfo
+from .logging_system import log_business, log_error, log_sql_event, log_system
 from .metadata_store import read_metadata, write_metadata_map
 from .observability import build_incremental_trace
 from .models import ParsedUnit
@@ -65,6 +66,7 @@ class IndexBuildService:
         if incremental:
             return self.incremental_build_index(root, db_file, index_type=index_type)
 
+        log_system("index_build_start", source_root=str(root), db_path=str(db_file), index_type=index_type, skip_vectors=skip_vectors)
         if db_file.exists():
             db_file.unlink()
 
@@ -142,6 +144,14 @@ class IndexBuildService:
                 record_phase("populate_vectors_start")
                 vector_stats = write_service.populate_missing_chunk_vectors(conn)
                 record_phase("populate_vectors_done", vector_stats)
+        except Exception as exc:
+            log_error(
+                event="index_build_failed",
+                message=str(exc),
+                exc=exc,
+                context={"source_root": str(root), "db_path": str(db_file), "index_type": index_type},
+            )
+            raise
         finally:
             conn.close()
         self.owner._vector_cache.clear()
@@ -149,7 +159,7 @@ class IndexBuildService:
         record_phase("summarize_db_start")
         db_summary = self.owner.summarize_db(db_file)
         record_phase("summarize_db_done")
-        return self._build_summary_payload(
+        payload = self._build_summary_payload(
             db_file=db_file,
             root=root,
             index_type=index_type,
@@ -166,6 +176,26 @@ class IndexBuildService:
                 "skip_vectors": skip_vectors,
             },
         )
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        log_business(
+            "index_build_done",
+            source_root=str(root),
+            db_path=str(db_file),
+            index_type=index_type,
+            file_count=len(files),
+            elapsed_ms=round(elapsed_ms, 3),
+            skip_vectors=skip_vectors,
+        )
+        log_sql_event(
+            "index_build",
+            db_path=str(db_file),
+            source_root=str(root),
+            index_type=index_type,
+            counters=counters,
+            vector_stats=vector_stats,
+            elapsed_ms=round(elapsed_ms, 3),
+        )
+        return payload
 
     def incremental_build_index(
         self,
@@ -178,6 +208,7 @@ class IndexBuildService:
         root = Path(source_root)
         db_file = Path(db_path)
         write_service = self.owner._index_write_service
+        log_system("index_incremental_start", source_root=str(root), db_path=str(db_file), index_type=index_type)
         if not db_file.exists():
             return self.build_index(root, db_file, index_type=index_type)
 
@@ -307,6 +338,23 @@ class IndexBuildService:
                     "items": [],
                 }
                 payload["noop"] = True
+                elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+                log_business(
+                    "index_incremental_noop",
+                    source_root=str(root),
+                    db_path=str(db_file),
+                    index_type=index_type,
+                    file_count=len(files),
+                    elapsed_ms=round(elapsed_ms, 3),
+                )
+                log_sql_event(
+                    "index_incremental",
+                    db_path=str(db_file),
+                    source_root=str(root),
+                    index_type=index_type,
+                    noop=True,
+                    elapsed_ms=round(elapsed_ms, 3),
+                )
                 return payload
 
             metadata_only_paths = sorted(
@@ -426,7 +474,35 @@ class IndexBuildService:
                 "affected_units": affected_units,
             }
             payload["incremental_scope"] = rebuild_scope
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            log_business(
+                "index_incremental_done",
+                source_root=str(root),
+                db_path=str(db_file),
+                index_type=index_type,
+                added_count=len(added_paths),
+                changed_count=len(changed_paths),
+                removed_count=len(removed_paths),
+                elapsed_ms=round(elapsed_ms, 3),
+            )
+            log_sql_event(
+                "index_incremental",
+                db_path=str(db_file),
+                source_root=str(root),
+                index_type=index_type,
+                changes=payload["incremental_changes"],
+                vector_stats=vector_stats,
+                elapsed_ms=round(elapsed_ms, 3),
+            )
             return payload
+        except Exception as exc:
+            log_error(
+                event="index_incremental_failed",
+                message=str(exc),
+                exc=exc,
+                context={"source_root": str(root), "db_path": str(db_file), "index_type": index_type},
+            )
+            raise
         finally:
             conn.close()
             self.owner._vector_cache.clear()
@@ -522,8 +598,10 @@ class IndexBuildService:
         }
 
     def resume_chunk_vectors(self, source_root: str | Path, db_path: str | Path, index_type: str = "all") -> dict[str, object]:
+        started_at = time.perf_counter()
         root = Path(source_root)
         db_file = Path(db_path)
+        log_system("index_resume_vectors_start", source_root=str(root), db_path=str(db_file), index_type=index_type)
         if not db_file.exists():
             raise FileNotFoundError(f"Cannot resume vectors because database does not exist: {db_file}")
 
@@ -533,12 +611,20 @@ class IndexBuildService:
         try:
             write_service.validate_resume_source(conn, root)
             vector_stats = write_service.populate_missing_chunk_vectors(conn)
+        except Exception as exc:
+            log_error(
+                event="index_resume_vectors_failed",
+                message=str(exc),
+                exc=exc,
+                context={"source_root": str(root), "db_path": str(db_file), "index_type": index_type},
+            )
+            raise
         finally:
             conn.close()
         self.owner._vector_cache.clear()
 
         db_summary = self.owner.summarize_db(db_file)
-        return {
+        payload = {
             "source_root": str(root),
             "db_path": str(db_file),
             "resume_vectors": True,
@@ -553,6 +639,24 @@ class IndexBuildService:
                 "dimension": int(db_summary["embedding"]["dimension"] or 0),
             },
         }
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        log_business(
+            "index_resume_vectors_done",
+            source_root=str(root),
+            db_path=str(db_file),
+            index_type=index_type,
+            vector_stats=vector_stats,
+            elapsed_ms=round(elapsed_ms, 3),
+        )
+        log_sql_event(
+            "index_resume_vectors",
+            db_path=str(db_file),
+            source_root=str(root),
+            index_type=index_type,
+            vector_stats=vector_stats,
+            elapsed_ms=round(elapsed_ms, 3),
+        )
+        return payload
 
     def _collect_files(self, root: Path, *, index_type: str) -> list[Path]:
         def is_metadata_path(path: Path) -> bool:

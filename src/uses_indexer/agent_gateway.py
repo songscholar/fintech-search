@@ -8,6 +8,7 @@ from typing import Any
 from urllib import error, request
 
 from .config import bootstrap_env
+from .logging_system import log_business, log_error
 from .qa import CodebaseQA
 from .indexer import SQLiteIndexer
 
@@ -34,6 +35,7 @@ class AgentProviderConfig:
     max_retries: int = 0
     retry_backoff_seconds: float = 1.0
     description: str = ""
+    user_agent: str | None = None
 
 
 @dataclass(slots=True)
@@ -143,7 +145,7 @@ class AgentGateway:
                 for item in attachment_models
             ]
 
-        messages: list[dict[str, str]] = [
+        messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": system_prompt.strip() if isinstance(system_prompt, str) and system_prompt.strip() else _default_system_prompt(),
@@ -151,16 +153,40 @@ class AgentGateway:
         ]
         if history:
             messages.extend(_sanitize_history(history))
-        messages.append(
-            {
-                "role": "user",
-                "content": _build_user_prompt(message=message, context_bundle=context_bundle, attachments=attachment_models),
-            }
-        )
+        messages.append(_build_user_prompt(message=message, context_bundle=context_bundle, attachments=attachment_models))
 
         started_at = time.time()
-        model_response = _complete_openai_compatible(config, messages)
+        try:
+            model_response = _complete_openai_compatible(config, messages)
+        except Exception as exc:
+            log_error(
+                event="agent_chat_failed",
+                message=str(exc),
+                exc=exc,
+                context={
+                    "provider": config.name,
+                    "adapter": config.adapter,
+                    "model": config.model,
+                    "base_url": config.base_url,
+                    "message": message,
+                },
+            )
+            raise
         latency_ms = int((time.time() - started_at) * 1000)
+        log_business(
+            "agent_chat",
+            provider=config.name,
+            adapter=config.adapter,
+            model=config.model,
+            base_url=config.base_url,
+            message=message,
+            latency_ms=latency_ms,
+            include_retrieval=include_retrieval,
+            include_evidence=include_evidence,
+            include_answer_draft=include_answer_draft,
+            attachment_count=len(attachment_models),
+            usage=model_response.get("usage"),
+        )
 
         return {
             "response_kind": "agent_chat",
@@ -308,6 +334,7 @@ def _provider_from_env(*, prefix: str, name: str, label: str, description: str) 
         max_retries=int(os.getenv(f"{prefix}_MAX_RETRIES", "0")),
         retry_backoff_seconds=float(os.getenv(f"{prefix}_RETRY_BACKOFF", "1.0")),
         description=description,
+        user_agent=(os.getenv(f"{prefix}_USER_AGENT") or "").strip() or None,
     )
 
 
@@ -319,7 +346,7 @@ def _default_system_prompt() -> str:
     )
 
 
-def _sanitize_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
+def _sanitize_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sanitized: list[dict[str, str]] = []
     for item in history[-8:]:
         if not isinstance(item, dict):
@@ -332,22 +359,33 @@ def _sanitize_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
     return sanitized
 
 
-def _build_user_prompt(*, message: str, context_bundle: dict[str, Any], attachments: list[AgentAttachment]) -> str:
+def _build_user_prompt(*, message: str, context_bundle: dict[str, Any], attachments: list[AgentAttachment]) -> dict[str, Any]:
     context_json = json.dumps(context_bundle, ensure_ascii=False, indent=2)
     attachment_text = _format_attachment_prompt(attachments)
     decision_note = _format_grounded_decision_note(context_bundle)
-    return (
-        "用户问题：\n"
-        f"{message.strip()}\n\n"
-        f"{decision_note}"
-        "本地代码库上下文（来自当前 uses-indexer 服务）:\n"
-        f"{context_json}\n\n"
-        f"{attachment_text}"
-        "请基于这些上下文回答。如果上下文还不够，请明确指出还缺什么。"
-    )
+    text_parts = ["用户问题：\n" + message.strip()]
+    if decision_note:
+        text_parts.append(decision_note)
+    if context_bundle.get("options", {}).get("include_retrieval") or context_bundle.get("options", {}).get("include_evidence"):
+        text_parts.append("本地代码库上下文（来自当前 uses-indexer 服务）:\n" + context_json)
+    if attachment_text:
+        text_parts.append(attachment_text)
+    text_parts.append("请基于这些上下文回答。如果上下文还不够，请明确指出还缺什么。")
+    text_content = "\n\n".join(text_parts)
+
+    image_attachments = [a for a in attachments if a.data_url and a.media_kind == "image"]
+    if image_attachments:
+        content: list[dict[str, Any]] = [{"type": "text", "text": text_content}]
+        for img in image_attachments:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": img.data_url},
+            })
+        return {"role": "user", "content": content}
+    return {"role": "user", "content": text_content}
 
 
-def _complete_openai_compatible(config: AgentProviderConfig, messages: list[dict[str, str]]) -> dict[str, Any]:
+def _complete_openai_compatible(config: AgentProviderConfig, messages: list[dict[str, Any]]) -> dict[str, Any]:
     payload = {
         "model": config.model,
         "temperature": config.temperature,
@@ -357,6 +395,8 @@ def _complete_openai_compatible(config: AgentProviderConfig, messages: list[dict
     headers = {"Content-Type": "application/json"}
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
+    if config.user_agent:
+        headers["User-Agent"] = config.user_agent
 
     http_request = request.Request(
         config.base_url,

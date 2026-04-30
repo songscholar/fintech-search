@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .index_utils import json_loads_object
+from .logging_system import log_error, log_sql_event
 from .metadata_store import read_metadata
 from .response_schema import apply_response_envelope
 from .semantic_recovery import SEMANTIC_RULE_REGISTRY, coerce_call_semantics
@@ -19,6 +21,7 @@ class DbSummaryService:
         self.owner = owner
 
     def summarize_db(self, db_path: str | Path) -> dict[str, object]:
+        started_at = time.perf_counter()
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
 
@@ -29,52 +32,68 @@ class DbSummaryService:
             rows = conn.execute(query).fetchall()
             return {str(row[0]): int(row[1]) for row in rows}
 
-        summary = {
-            "db_path": str(db_path),
-            "files": scalar("SELECT COUNT(*) FROM files"),
-            "metadata_files": scalar("SELECT COUNT(*) FROM files WHERE path LIKE '%/metadata/%'"),
-            "procedures": scalar("SELECT COUNT(*) FROM procedures"),
-            "histories": scalar("SELECT COUNT(*) FROM histories"),
-            "params": scalar("SELECT COUNT(*) FROM params"),
-            "statements": scalar("SELECT COUNT(*) FROM statements"),
-            "metadata_entries": scalar("SELECT COUNT(*) FROM statements WHERE kind = 'metadata_item'"),
-            "actions": scalar("SELECT COUNT(*) FROM actions"),
-            "variable_refs": scalar("SELECT COUNT(*) FROM variable_refs"),
-            "edges": scalar("SELECT COUNT(*) FROM edges"),
-            "chunks": scalar("SELECT COUNT(*) FROM chunks"),
-            "chunk_vectors": scalar("SELECT COUNT(*) FROM chunk_vectors"),
-            "blocks": scalar("SELECT COUNT(*) FROM blocks"),
-            "block_edges": scalar("SELECT COUNT(*) FROM block_edges"),
-            "fts_counts": {
-                "procedures_fts": scalar("SELECT COUNT(*) FROM procedures_fts"),
-                "statements_fts": scalar("SELECT COUNT(*) FROM statements_fts"),
-                "actions_fts": scalar("SELECT COUNT(*) FROM actions_fts"),
-                "edges_fts": scalar("SELECT COUNT(*) FROM edges_fts"),
-                "chunks_fts": scalar("SELECT COUNT(*) FROM chunks_fts"),
-                "blocks_fts": scalar("SELECT COUNT(*) FROM blocks_fts"),
+        try:
+            summary = {
+                "db_path": str(db_path),
+                "files": scalar("SELECT COUNT(*) FROM files"),
+                "metadata_files": scalar("SELECT COUNT(*) FROM files WHERE path LIKE '%/metadata/%'"),
+                "procedures": scalar("SELECT COUNT(*) FROM procedures"),
+                "histories": scalar("SELECT COUNT(*) FROM histories"),
+                "params": scalar("SELECT COUNT(*) FROM params"),
+                "statements": scalar("SELECT COUNT(*) FROM statements"),
+                "metadata_entries": scalar("SELECT COUNT(*) FROM statements WHERE kind = 'metadata_item'"),
+                "actions": scalar("SELECT COUNT(*) FROM actions"),
+                "variable_refs": scalar("SELECT COUNT(*) FROM variable_refs"),
+                "edges": scalar("SELECT COUNT(*) FROM edges"),
+                "chunks": scalar("SELECT COUNT(*) FROM chunks"),
+                "chunk_vectors": scalar("SELECT COUNT(*) FROM chunk_vectors"),
+                "blocks": scalar("SELECT COUNT(*) FROM blocks"),
+                "block_edges": scalar("SELECT COUNT(*) FROM block_edges"),
+                "fts_counts": {
+                    "procedures_fts": scalar("SELECT COUNT(*) FROM procedures_fts"),
+                    "statements_fts": scalar("SELECT COUNT(*) FROM statements_fts"),
+                    "actions_fts": scalar("SELECT COUNT(*) FROM actions_fts"),
+                    "edges_fts": scalar("SELECT COUNT(*) FROM edges_fts"),
+                    "chunks_fts": scalar("SELECT COUNT(*) FROM chunks_fts"),
+                    "blocks_fts": scalar("SELECT COUNT(*) FROM blocks_fts"),
+                },
+                "embedding": {
+                    "provider": read_metadata(conn, "embedding_provider"),
+                    "model": read_metadata(conn, "embedding_model"),
+                    "dimension": read_metadata(conn, "embedding_dimension"),
+                },
+                "unit_kind_counts": grouped("SELECT unit_kind, COUNT(*) FROM files GROUP BY unit_kind ORDER BY COUNT(*) DESC"),
+                "file_prefix_counts": grouped("SELECT prefix, COUNT(*) FROM files GROUP BY prefix ORDER BY COUNT(*) DESC"),
+                "statement_kind_counts": grouped("SELECT kind, COUNT(*) FROM statements GROUP BY kind ORDER BY COUNT(*) DESC"),
+                "metadata_entry_tag_counts": grouped(
+                    "SELECT tag, COUNT(*) FROM statements WHERE kind = 'metadata_item' GROUP BY tag ORDER BY COUNT(*) DESC"
+                ),
+                "variable_ref_type_counts": grouped("SELECT access_type, COUNT(*) FROM variable_refs GROUP BY access_type ORDER BY COUNT(*) DESC"),
+                "edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
+                "chunk_type_counts": grouped("SELECT chunk_type, COUNT(*) FROM chunks GROUP BY chunk_type ORDER BY COUNT(*) DESC"),
+                "vector_provider_counts": grouped("SELECT provider, COUNT(*) FROM chunk_vectors GROUP BY provider ORDER BY COUNT(*) DESC"),
+                "block_type_counts": grouped("SELECT block_type, COUNT(*) FROM blocks GROUP BY block_type ORDER BY COUNT(*) DESC"),
+                "block_edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM block_edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
+            }
+            summary.update(self._summarize_call_semantics(conn))
+            summary.update(self._summarize_mc_publish_semantics(conn))
+            summary["semantic_rule_registry"] = SEMANTIC_RULE_REGISTRY
+        except Exception as exc:
+            log_error(event="db_summary_failed", message=str(exc), exc=exc, context={"db_path": str(db_path)})
+            raise
+        finally:
+            conn.close()
+        log_sql_event(
+            "db_summary",
+            db_path=str(db_path),
+            counts={
+                "files": summary.get("files"),
+                "procedures": summary.get("procedures"),
+                "statements": summary.get("statements"),
+                "chunks": summary.get("chunks"),
             },
-            "embedding": {
-                "provider": read_metadata(conn, "embedding_provider"),
-                "model": read_metadata(conn, "embedding_model"),
-                "dimension": read_metadata(conn, "embedding_dimension"),
-            },
-            "unit_kind_counts": grouped("SELECT unit_kind, COUNT(*) FROM files GROUP BY unit_kind ORDER BY COUNT(*) DESC"),
-            "file_prefix_counts": grouped("SELECT prefix, COUNT(*) FROM files GROUP BY prefix ORDER BY COUNT(*) DESC"),
-            "statement_kind_counts": grouped("SELECT kind, COUNT(*) FROM statements GROUP BY kind ORDER BY COUNT(*) DESC"),
-            "metadata_entry_tag_counts": grouped(
-                "SELECT tag, COUNT(*) FROM statements WHERE kind = 'metadata_item' GROUP BY tag ORDER BY COUNT(*) DESC"
-            ),
-            "variable_ref_type_counts": grouped("SELECT access_type, COUNT(*) FROM variable_refs GROUP BY access_type ORDER BY COUNT(*) DESC"),
-            "edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
-            "chunk_type_counts": grouped("SELECT chunk_type, COUNT(*) FROM chunks GROUP BY chunk_type ORDER BY COUNT(*) DESC"),
-            "vector_provider_counts": grouped("SELECT provider, COUNT(*) FROM chunk_vectors GROUP BY provider ORDER BY COUNT(*) DESC"),
-            "block_type_counts": grouped("SELECT block_type, COUNT(*) FROM blocks GROUP BY block_type ORDER BY COUNT(*) DESC"),
-            "block_edge_type_counts": grouped("SELECT edge_type, COUNT(*) FROM block_edges GROUP BY edge_type ORDER BY COUNT(*) DESC"),
-        }
-        summary.update(self._summarize_call_semantics(conn))
-        summary.update(self._summarize_mc_publish_semantics(conn))
-        summary["semantic_rule_registry"] = SEMANTIC_RULE_REGISTRY
-        conn.close()
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000.0, 3),
+        )
         return apply_response_envelope(summary, kind="db_summary")
 
     def _summarize_call_semantics(self, conn: sqlite3.Connection) -> dict[str, object]:

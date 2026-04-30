@@ -5290,3 +5290,38 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 - `pytest tests/test_api.py::test_http_server_serves_json tests/test_indexer.py::test_query_index_prefers_object_id_for_business_logic_question tests/test_qa.py::test_ask_uses_best_object_id_hit_as_primary_for_location_question tests/test_qa.py::test_ask_builds_prompt_and_draft_answer -q`
   - 结果：`4 passed`
+
+## 1.2.62 - 全局日志系统改造
+
+### 背景
+
+补齐生产化日志能力：API 链路、前后端错误、系统启动停止、业务操作、数据库操作摘要需要统一落盘到项目根目录 `log/`。
+
+### 本轮改动
+
+1. 新增 `logging_system.py`
+   - 分类写入 `log/requests`、`log/errors`、`log/system`、`log/business`、`log/sql`
+   - JSON Lines 格式，按日期拆分
+   - 自动 `trace_id`、脱敏、截断，日志失败不影响主流程
+
+2. API 链路接入
+   - 每次 JSON API 请求记录入参、出参摘要、状态码、耗时、客户端信息
+   - 响应头返回 `X-Trace-Id`
+   - `ApiError` 和未捕获异常写入错误日志
+   - API 服务启动/停止写入系统日志
+
+3. 前端错误接入
+   - 新增 `POST /client-log`
+   - 前端监听 `window.error` 和 `unhandledrejection` 并上报
+
+4. 核心业务接入
+   - 检索、证据组装、DB summary、建库、增量建库、向量补齐、LLM、Agent 记录业务/SQL/错误摘要
+
+5. 文档与目录
+   - 新增 `docs/LOGGING.md`
+   - README 增加日志文档入口
+   - `.gitignore` 忽略运行期日志，仅保留 `log/.gitkeep`
+
+### 验证
+
+- `PYTHONPATH=src python3 -m py_compile src/uses_indexer/*.py`

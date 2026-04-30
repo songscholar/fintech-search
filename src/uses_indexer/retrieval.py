@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from .constants import VECTOR_SIMILARITY_THRESHOLD
 from .embeddings import EmbeddingRequestError, dot_similarity
 from .index_utils import build_fts_query, merge_candidate
+from .logging_system import log_business, log_error, log_sql_event
 from .metadata_store import read_metadata
 from .observability import build_retrieval_debug_payload
 from .response_schema import apply_response_envelope
@@ -38,16 +39,27 @@ class RetrievalService:
         *,
         debug: bool = False,
     ) -> dict[str, object]:
+        started_at = time.perf_counter()
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        candidates, fts_query, vector_status, retrieval_debug = self.retrieve_candidates(
-            conn,
-            db_path=db_path,
-            query=query,
-            candidate_limit=max(limit * 6, 30),
-            debug=debug,
-        )
-        conn.close()
+        try:
+            candidates, fts_query, vector_status, retrieval_debug = self.retrieve_candidates(
+                conn,
+                db_path=db_path,
+                query=query,
+                candidate_limit=max(limit * 6, 30),
+                debug=debug,
+            )
+        except Exception as exc:
+            log_error(
+                event="query_index_failed",
+                message=str(exc),
+                exc=exc,
+                context={"db_path": str(db_path), "query": query, "limit": limit},
+            )
+            raise
+        finally:
+            conn.close()
 
         hits = [
             _public_hit(candidate, rank=index)
@@ -66,6 +78,27 @@ class RetrievalService:
         }
         if debug:
             payload["debug"] = retrieval_debug
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        log_sql_event(
+            "query_index",
+            db_path=str(db_path),
+            query=query,
+            limit=limit,
+            fts_query=fts_query,
+            vector_status=vector_status,
+            candidate_count=len(candidates),
+            hit_count=len(hits),
+            elapsed_ms=round(elapsed_ms, 3),
+        )
+        log_business(
+            "query_index",
+            db_path=str(db_path),
+            query=query,
+            limit=limit,
+            hit_count=len(hits),
+            candidate_count=len(candidates),
+            elapsed_ms=round(elapsed_ms, 3),
+        )
         return apply_response_envelope(payload, kind="query")
 
     def retrieve_candidates(

@@ -8,6 +8,7 @@ from typing import Any
 from urllib import error, request
 
 from .config import bootstrap_env
+from .logging_system import log_business, log_error
 
 
 class LlmConfigError(Exception):
@@ -29,6 +30,7 @@ class OpenAICompatibleConfig:
     max_retries: int = 0
     retry_backoff_seconds: float = 1.0
     provider: str = "openai-compatible"
+    user_agent: str | None = None
 
 
 class OpenAICompatibleLlm:
@@ -47,6 +49,7 @@ class OpenAICompatibleLlm:
         timeout_seconds = float(os.getenv("USES_INDEXER_LLM_TIMEOUT", "60"))
         max_retries = int(os.getenv("USES_INDEXER_LLM_MAX_RETRIES", "0"))
         retry_backoff_seconds = float(os.getenv("USES_INDEXER_LLM_RETRY_BACKOFF", "1.0"))
+        user_agent = os.getenv("USES_INDEXER_LLM_USER_AGENT")
 
         if not api_key or not model:
             return cls(None)
@@ -64,6 +67,7 @@ class OpenAICompatibleLlm:
                 max_retries=max_retries,
                 retry_backoff_seconds=retry_backoff_seconds,
                 provider=provider,
+                user_agent=user_agent,
             )
         )
 
@@ -75,6 +79,7 @@ class OpenAICompatibleLlm:
             raise LlmConfigError(
                 "LLM is not configured. Set USES_INDEXER_LLM_API_KEY and USES_INDEXER_LLM_MODEL."
             )
+        started_at = time.perf_counter()
 
         payload = {
             "model": self.config.model,
@@ -86,22 +91,57 @@ class OpenAICompatibleLlm:
             ],
         }
 
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+        }
+        if self.config.user_agent:
+            headers["User-Agent"] = self.config.user_agent
+
         http_request = request.Request(
             self.config.base_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.config.api_key}",
-            },
+            headers=headers,
             method="POST",
         )
 
-        raw = self._perform_request(http_request)
+        try:
+            raw = self._perform_request(http_request)
+        except Exception as exc:
+            log_error(
+                event="llm_request_failed",
+                message=str(exc),
+                exc=exc,
+                context={
+                    "provider": self.config.provider,
+                    "model": self.config.model,
+                    "base_url": self.config.base_url,
+                },
+            )
+            raise
 
         parsed = json.loads(raw)
         content = _extract_content(parsed)
         if not content:
-            raise LlmRequestError("LLM response did not contain assistant content")
+            exc = LlmRequestError("LLM response did not contain assistant content")
+            log_error(
+                event="llm_empty_response",
+                message=str(exc),
+                exc=exc,
+                context={"provider": self.config.provider, "model": self.config.model, "base_url": self.config.base_url},
+            )
+            raise exc
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        log_business(
+            "llm_complete",
+            provider=self.config.provider,
+            model=self.config.model,
+            base_url=self.config.base_url,
+            latency_ms=latency_ms,
+            prompt_chars=len(system_prompt) + len(user_prompt),
+            response_chars=len(content),
+            usage=parsed.get("usage"),
+        )
 
         return {
             "provider": self.config.provider,
@@ -151,8 +191,13 @@ def _extract_content(payload: dict[str, Any]) -> str:
         return ""
 
     content = message.get("content")
-    if isinstance(content, str):
+    if isinstance(content, str) and content.strip():
         return content.strip()
+
+    # 部分模型（如 Kimi Coding Plan）返回 reasoning_content 而非 content
+    reasoning = message.get("reasoning_content")
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()
 
     if isinstance(content, list):
         text_parts = []

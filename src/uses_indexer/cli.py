@@ -40,6 +40,33 @@ from .parser import UftDslParser, is_supported_path
 from .qa import CodebaseQA
 from .table_indexer import TableIndexer
 
+# 默认输出目录：项目根目录下的 examples/
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "examples"
+
+# 未指定 --output 时默认写入文件的命令
+_DEFAULT_FILE_COMMANDS = {
+    "query-index",
+    "eval-retrieval",
+    "compare-eval",
+    "answer-codebase",
+    "ask-codebase",
+    "assemble-evidence",
+    "debug-bundle",
+    "db-summary",
+    "build-index",
+    "build-table-index",
+    "compare-debug-bundles",
+    "compare-debug-bundle-panel",
+    "compare-debug-bundle-panels",
+    "compare-debug-bundle-panel-baseline",
+    "compare-debug-bundle-panel-latest-baseline",
+    "compare-debug-bundle-panel-release-workflows",
+    "run-debug-bundle-panel-release-workflow",
+    "save-debug-bundle-panel-baseline",
+    "promote-debug-bundle-panel-baseline",
+    "evaluate-debug-bundle-panel-promotion-gate",
+}
+
 def main() -> int:
     bootstrap_env()
     parser = argparse.ArgumentParser(description="Parse USES UFT DSL files.")
@@ -535,10 +562,18 @@ def main() -> int:
         data = indexer.summarize_db(args.db)
 
     rendered = json.dumps(data, ensure_ascii=False, indent=2)
-    if args.output:
-        output_path = Path(args.output)
+    output_path_str = args.output
+    if not output_path_str and args.command in _DEFAULT_FILE_COMMANDS:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"{args.command.replace('-', '_')}_{timestamp}.json"
+        output_path_str = str(DEFAULT_OUTPUT_DIR / default_name)
+
+    if output_path_str:
+        output_path = Path(output_path_str)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(rendered, encoding="utf-8")
+        print(f"[uses-indexer] Output saved to: {output_path}")
     else:
         print(rendered)
 
