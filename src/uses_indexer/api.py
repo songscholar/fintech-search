@@ -65,7 +65,7 @@ WEB_ASSET_PATHS = {
 }
 
 
-def _list_docs() -> dict[str, Any]:
+def _list_docs(subdir: str | None = None) -> dict[str, Any]:
     files: list[dict[str, str]] = []
     seen: set[str] = set()
 
@@ -83,15 +83,18 @@ def _list_docs() -> dict[str, Any]:
                 title = _extract_doc_title(path)
                 files.append({"name": name, "title": title, "path": f"{rel_prefix}{path.name}"})
 
-    _scan_dir(_DOCS_DIR)
-    for path in sorted(_PROJECT_ROOT.iterdir()):
-        if path.is_file() and path.suffix.lower() == ".md":
-            name = path.stem
-            if name in seen:
-                continue
-            seen.add(name)
-            title = _extract_doc_title(path)
-            files.append({"name": name, "title": title, "path": path.name})
+    if subdir:
+        _scan_dir(_DOCS_DIR / subdir)
+    else:
+        _scan_dir(_DOCS_DIR)
+        for path in sorted(_PROJECT_ROOT.iterdir()):
+            if path.is_file() and path.suffix.lower() == ".md":
+                name = path.stem
+                if name in seen:
+                    continue
+                seen.add(name)
+                title = _extract_doc_title(path)
+                files.append({"name": name, "title": title, "path": path.name})
 
     return {"files": files}
 
@@ -113,6 +116,10 @@ def _read_doc(name: str) -> dict[str, Any]:
         _DOCS_DIR / f"{name}.md",
         _PROJECT_ROOT / f"{name}.md",
     ]
+    # Recursively search in docs subdirectories
+    if _DOCS_DIR.exists():
+        for path in _DOCS_DIR.rglob(f"{name}.md"):
+            candidates.append(path)
     for path in candidates:
         if path.exists():
             try:
@@ -139,21 +146,39 @@ class CodebaseApi:
         answerer: CodebaseAnswerer | None = None,
         agent_gateway: AgentGateway | None = None,
         default_db_path: str | Path | None = None,
+        default_metadata_db_path: str | Path | None = None,
+        default_table_db_path: str | Path | None = None,
     ) -> None:
         self.indexer = indexer or SQLiteIndexer()
         self.qa = qa or CodebaseQA(self.indexer)
         self.answerer = answerer or CodebaseAnswerer(self.qa)
         self.agent_gateway = agent_gateway or AgentGateway.from_env(indexer=self.indexer, qa=self.qa)
         self.default_db_path = str(default_db_path) if default_db_path else None
+        self.default_metadata_db_path = str(default_metadata_db_path) if default_metadata_db_path else None
+        self.default_table_db_path = str(default_table_db_path) if default_table_db_path else None
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000) -> None:
         server = ThreadingHTTPServer((host, port), make_handler_class(self))
-        log_system("api_server_start", host=host, port=port, default_db_path=self.default_db_path)
+        log_system(
+            "api_server_start",
+            host=host,
+            port=port,
+            default_db_path=self.default_db_path,
+            default_metadata_db_path=self.default_metadata_db_path,
+            default_table_db_path=self.default_table_db_path,
+        )
         try:
             print(f"USES Indexer API listening on http://{host}:{port}")
             server.serve_forever()
         finally:
-            log_system("api_server_stop", host=host, port=port, default_db_path=self.default_db_path)
+            log_system(
+                "api_server_stop",
+                host=host,
+                port=port,
+                default_db_path=self.default_db_path,
+                default_metadata_db_path=self.default_metadata_db_path,
+                default_table_db_path=self.default_table_db_path,
+            )
             server.server_close()
 
     def handle_request(
@@ -171,6 +196,8 @@ class CodebaseApi:
                 "status": "ok",
                 "service": "uses-indexer-api",
                 "default_db_path": self.default_db_path,
+                "default_metadata_db_path": self.default_metadata_db_path,
+                "default_table_db_path": self.default_table_db_path,
                 "routes": [
                     "GET /",
                     "GET /ui",
@@ -182,6 +209,7 @@ class CodebaseApi:
                     "POST /answer",
                     "GET /agent/providers",
                     "POST /agent/chat",
+                    "POST /agent/analyze",
                     "POST /debug-bundle",
                     "POST /compare-debug-bundles",
                     "POST /compare-debug-bundle-panel",
@@ -218,7 +246,8 @@ class CodebaseApi:
             return HTTPStatus.OK, self.indexer.summarize_db(db_path)
 
         if route == "/docs" and method == "GET":
-            return HTTPStatus.OK, _list_docs()
+            doc_dir = query_params.get("dir", [None])[0]
+            return HTTPStatus.OK, _list_docs(subdir=doc_dir)
 
         if route.startswith("/docs/") and method == "GET":
             doc_name = route[len("/docs/"):]
@@ -229,7 +258,12 @@ class CodebaseApi:
             db_path = self._resolve_db_path(payload.get("db_path"))
             query = self._require_string(payload, "query")
             limit = _coerce_int(payload.get("limit", 20), "limit")
-            return HTTPStatus.OK, self.indexer.query_index(db_path, query, limit=limit, debug=bool(payload.get("debug", False)))
+            expand_downstream = bool(payload.get("expand_downstream", True))
+            return HTTPStatus.OK, self.indexer.query_index(
+                db_path, query, limit=limit,
+                debug=bool(payload.get("debug", False)),
+                expand_downstream=expand_downstream,
+            )
 
         if route == "/evidence" and method == "POST":
             payload = self._parse_json_body(body)
@@ -288,9 +322,42 @@ class CodebaseApi:
         if route == "/agent/providers" and method == "GET":
             return HTTPStatus.OK, self.agent_gateway.list_providers()
 
+        if route == "/agent/analyze" and method == "POST":
+            payload = self._parse_json_body(body)
+            db_path = self._resolve_db_path(payload.get("db_path"))
+            question = self._require_string(payload, "question")
+            provider = payload.get("provider")
+            if provider is not None and not isinstance(provider, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "provider must be a string")
+            provider_override = payload.get("provider_override")
+            if provider_override is not None and not isinstance(provider_override, dict):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "provider_override must be an object")
+            try:
+                result = self.agent_gateway.analyze(
+                    db_path=db_path,
+                    question=question,
+                    provider_name=provider,
+                    provider_override=provider_override if isinstance(provider_override, dict) else None,
+                )
+            except AgentConfigError as exc:
+                raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+            except AgentRequestError as exc:
+                raise ApiError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+            return HTTPStatus.OK, result
+
         if route == "/agent/chat" and method == "POST":
             payload = self._parse_json_body(body)
             db_path = self._resolve_db_path(payload.get("db_path"))
+            metadata_db_path = self._resolve_optional_db_path(
+                payload.get("metadata_db_path"),
+                self.default_metadata_db_path,
+                "metadata_db_path",
+            )
+            table_db_path = self._resolve_optional_db_path(
+                payload.get("table_db_path"),
+                self.default_table_db_path,
+                "table_db_path",
+            )
             message = self._require_string(payload, "message")
             provider = payload.get("provider")
             if provider is not None and not isinstance(provider, str):
@@ -310,12 +377,16 @@ class CodebaseApi:
             try:
                 result = self.agent_gateway.chat(
                     db_path=db_path,
+                    metadata_db_path=metadata_db_path,
+                    table_db_path=table_db_path,
                     message=message,
                     provider_name=provider,
                     history=history if isinstance(history, list) else None,
                     include_retrieval=bool(payload.get("include_retrieval", True)),
                     include_evidence=bool(payload.get("include_evidence", True)),
                     include_answer_draft=bool(payload.get("include_answer_draft", False)),
+                    auto_retrieve=bool(payload.get("auto_retrieve", False)),
+                    max_search_rounds=_coerce_int(payload.get("max_search_rounds", 4), "max_search_rounds"),
                     limit=_coerce_int(payload.get("limit", 6), "limit"),
                     context_window=_coerce_int(payload.get("context_window", 2), "context_window"),
                     related_limit=_coerce_int(payload.get("related_limit", 3), "related_limit"),
@@ -609,7 +680,7 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/client-log", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
+        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/agent/analyze", "/client-log", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
         if route in {"/agent/providers", "/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow", "/docs"} and method != "GET":
@@ -622,6 +693,19 @@ class CodebaseApi:
         if not db_path:
             raise ApiError(HTTPStatus.BAD_REQUEST, "db_path is required")
         return db_path
+
+    def _resolve_optional_db_path(
+        self,
+        explicit_db_path: object,
+        default_db_path: str | None,
+        key: str,
+    ) -> str | None:
+        if explicit_db_path is not None and not isinstance(explicit_db_path, str):
+            raise ApiError(HTTPStatus.BAD_REQUEST, f"{key} must be a string")
+        db_path = explicit_db_path or default_db_path
+        if isinstance(db_path, str) and db_path.strip():
+            return db_path.strip()
+        return None
 
     def _parse_json_body(self, body: bytes | None) -> dict[str, Any]:
         if not body:

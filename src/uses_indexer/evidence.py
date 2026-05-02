@@ -10,6 +10,7 @@ from .observability import build_evidence_debug_payload
 from .logging_system import log_business, log_error, log_sql_event
 from .response_schema import apply_response_envelope
 from .rerank import analyze_query
+from .retrieval import _expand_downstream_for_hit
 from .semantic_recovery import format_call_edge_label, format_mc_topic_label, maybe_int
 
 
@@ -134,6 +135,19 @@ class EvidenceService:
                     if profile_row is not None and profile_row[0]:
                         procedure_profile = dict(json.loads(str(profile_row[0])) or {})
 
+                # 展开下游调用链（与 query_index 保持一致）
+                downstream_evidence: list[dict[str, Any]] = []
+                if candidate.get("hit_type") == "procedure" and candidate.get("procedure_name"):
+                    downstream_evidence = _expand_downstream_for_hit(
+                        conn,
+                        context_fetch,
+                        procedure_id,
+                        str(candidate["procedure_name"]),
+                        limit=limit,
+                        max_downstream=9,
+                        max_depth=3,
+                    )
+
                 evidence_blocks.append(
                     {
                         "rank": rank,
@@ -162,6 +176,7 @@ class EvidenceService:
                         "line_end": context["line_end"],
                         "excerpt": context["excerpt"],
                         "context_statements": context["statements"],
+                        "downstream_evidence": downstream_evidence,
                         "recovered_blocks": context_fetch.fetch_covering_blocks(
                             conn,
                             procedure_id=procedure_id,

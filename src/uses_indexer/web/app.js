@@ -1469,6 +1469,11 @@ function clearChat() {
   });
 })();
 
+function looksLikeFunctionQuery(text) {
+  // 匹配 5-6 位纯数字（功能号）或包含"功能号"关键词
+  return /\b\d{5,6}\b/.test(text) || /功能号/.test(text);
+}
+
 async function sendChat() {
   const text = els.chatInput.value.trim();
   if (!text) return;
@@ -1478,6 +1483,34 @@ async function sendChat() {
   appendMessage(text, 'user');
   addMessageToHistory('user', text);
   els.chatInput.value = '';
+
+  // 业务问答模式下，如果问题包含功能号，走深度分析流水线
+  if (agentMode === 'business' && looksLikeFunctionQuery(text)) {
+    try {
+      const data = await apiPost('/agent/analyze', {
+        provider: provider,
+        question: text
+      });
+      const report = data.report || '无分析报告';
+      // 用 Markdown 渲染器渲染结构化报告
+      const html = await renderMarkdown(report);
+      const div = document.createElement('div');
+      div.className = 'chat-message assistant';
+      const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      div.innerHTML = html + '<div class="msg-time">' + time + '</div>';
+      els.chatTranscript.appendChild(div);
+      els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+      addMessageToHistory('assistant', report);
+      // 绑定代码块交互
+      if (window.SiteUtils && window.SiteUtils.bindCodeBlockInteractions) {
+        window.SiteUtils.bindCodeBlockInteractions(div);
+      }
+    } catch (e) {
+      appendMessage('深度分析失败: ' + e.message, 'assistant');
+      addMessageToHistory('assistant', '深度分析失败: ' + e.message);
+    }
+    return;
+  }
 
   let payload;
   if (agentMode === 'daily') {

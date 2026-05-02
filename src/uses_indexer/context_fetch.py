@@ -15,6 +15,70 @@ if TYPE_CHECKING:
 class ContextFetchService:
     def __init__(self, owner: "SQLiteIndexer") -> None:
         self.owner = owner
+        self._call_graph: dict[str, dict[str, set[str]]] | None = None
+
+    def preload_call_graph(self, conn: sqlite3.Connection) -> None:
+        """一次性加载全部 calls_procedure edges 到内存邻接表，避免逐 procedure SQL 查询。"""
+        if self._call_graph is not None:
+            return
+        outgoing: dict[str, set[str]] = {}
+        incoming: dict[str, set[str]] = {}
+        for row in conn.execute(
+            "SELECT source_name, target_name FROM edges WHERE edge_type = 'calls_procedure'"
+        ):
+            source = str(row[0])
+            target = str(row[1])
+            outgoing.setdefault(source, set()).add(target)
+            incoming.setdefault(target, set()).add(source)
+        self._call_graph = {"outgoing": outgoing, "incoming": incoming}
+
+    def _procedure_call_neighbors_fast(
+        self,
+        procedure_name: str,
+        max_depth: int = 10,
+    ) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+        """基于内存邻接表的 BFS，零 SQL 开销。"""
+        outgoing_map: dict[str, set[str]] = self._call_graph["outgoing"]
+        incoming_map: dict[str, set[str]] = self._call_graph["incoming"]
+
+        outgoing_hops: dict[int, set[str]] = {1: set()}
+        incoming_hops: dict[int, set[str]] = {1: set()}
+
+        outgoing_hops[1] = outgoing_map.get(procedure_name, set()).copy()
+        incoming_hops[1] = incoming_map.get(procedure_name, set()).copy()
+
+        visited: set[str] = {procedure_name}
+        visited.update(outgoing_hops[1])
+        visited.update(incoming_hops[1])
+        current_outgoing = outgoing_hops[1].copy()
+        current_incoming = incoming_hops[1].copy()
+
+        for depth in range(2, max_depth + 1):
+            next_outgoing: set[str] = set()
+            next_incoming: set[str] = set()
+
+            for neighbor_name in current_outgoing:
+                if neighbor_name in visited:
+                    continue
+                next_outgoing.update(outgoing_map.get(neighbor_name, set()) - visited)
+
+            for neighbor_name in current_incoming:
+                if neighbor_name in visited:
+                    continue
+                next_incoming.update(incoming_map.get(neighbor_name, set()) - visited)
+
+            visited.update(next_outgoing)
+            visited.update(next_incoming)
+            if next_outgoing:
+                outgoing_hops[depth] = next_outgoing
+            if next_incoming:
+                incoming_hops[depth] = next_incoming
+            current_outgoing = next_outgoing
+            current_incoming = next_incoming
+            if not current_outgoing and not current_incoming:
+                break
+
+        return outgoing_hops, incoming_hops
 
     def procedure_call_neighbors(
         self,
@@ -23,6 +87,9 @@ class ContextFetchService:
         procedure_name: str,
         max_depth: int = 10,
     ) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+        if self._call_graph is not None:
+            return self._procedure_call_neighbors_fast(procedure_name, max_depth)
+
         outgoing_hops: dict[int, set[str]] = {1: set()}
         incoming_hops: dict[int, set[str]] = {1: set()}
 

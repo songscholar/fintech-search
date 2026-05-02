@@ -798,3 +798,182 @@
   - `tests/test_indexer.py::test_query_index_prefers_object_id_for_business_logic_question`
   - `tests/test_qa.py::test_ask_uses_best_object_id_hit_as_primary_for_location_question`
   - `tests/test_qa.py::test_ask_builds_prompt_and_draft_answer`
+
+### 阶段 36：智能助手 LangChain 三索引显式启动
+
+- HTTP API `serve-api` 新增三索引启动参数：
+  - `--db`：代码索引库
+  - `--metadata-db`：metadata 元数据索引库
+  - `--table-db`：表结构索引库
+- `/agent/chat` 新增并透传：
+  - `metadata_db_path`
+  - `table_db_path`
+- LangChain 智能助手工具编排现在优先使用显式传入的 metadata/table 索引路径；未指定时继续按默认文件名自动发现。
+- 推荐启动命令：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer serve-api \
+  --db examples/business_code_index.db \
+  --metadata-db examples/business_metadata_index.db \
+  --table-db examples/business_table_index.db \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+- 验证：
+  - `PYTHONPATH=src python3 -m py_compile src/uses_indexer/langchain_agent.py src/uses_indexer/agent_gateway.py src/uses_indexer/api.py src/uses_indexer/cli.py`
+  - `USES_INDEXER_ENV_FILE=/nonexistent PYTHONPATH=. pytest -q tests/test_api.py`
+
+### 阶段 37：智能助手模型 403 兜底
+
+- 修复业务问答请求因意图识别模型返回 403 而直接 502 的问题。
+- `auto_retrieve` 开启时：
+  - 意图识别 LLM 失败后，改用本地规则判断是否需要检索。
+  - 若判断为业务/代码库问题，仍继续进入 LangChain 检索链路。
+  - 若 LangChain 依赖缺失或后续调用模型失败，返回本地索引检索摘要，不再中断请求。
+- 兜底响应会在 `context_bundle.fallback` 和 `raw_response.fallback` 中标记模型不可用原因，前端可正常展示。
+- 修复 `功能号333002` 这类中文紧贴数字的本地兜底检索解析，优先使用 `333002` 作为第一轮查询词。
+- 为纯数字功能号增加 `object_id_exact` 快速路径，直接查 `procedures.object_id`，避免大库完整召回导致请求耗时过长。
+- 新增测试覆盖：
+  - 意图识别 LLM 失败后仍进入检索链路。
+  - LangChain 运行依赖缺失后返回本地检索摘要。
+  - LangChain 模型调用失败后返回本地检索摘要。
+  - 中文紧贴数字功能号优先拆出纯数字检索词。
+  - `object_id` 快速路径能直接命中对应过程。
+- 验证：
+  - `PYTHONPATH=src python3 -m py_compile src/uses_indexer/agent_gateway.py src/uses_indexer/langchain_agent.py src/uses_indexer/api.py`
+  - `USES_INDEXER_ENV_FILE=/nonexistent PYTHONPATH=. pytest -q tests/test_api.py`
+
+### 阶段 38：LangChain 1.x Agent API 兼容
+
+- 修复当前环境 `langchain 1.2.16` 不再导出旧版 `AgentExecutor/create_tool_calling_agent` 的问题。
+- LangChain 智能助手改用 1.x 的 `create_agent` 编排工具调用。
+- 保留工具列表：
+  - `search_code_index`
+  - `search_metadata_index`
+  - `search_table_index`
+- `raw_response` 改为记录最近消息摘要，`tool_trace` 继续记录实际工具调用结果。
+- 验证：
+  - `PYTHONPATH=src python3 - <<'PY' ... from langchain.agents import create_agent ...`
+  - `USES_INDEXER_ENV_FILE=/nonexistent PYTHONPATH=. pytest -q tests/test_api.py`
+
+### 阶段 39：Kimi Coding 调用链修复
+
+- 根因修正：`.env` 已配置 `USES_INDEXER_AGENT_OPENAI_USER_AGENT=claude-code/0.1.0`，但 LangChain `ChatOpenAI` 链路没有透传 `User-Agent`，导致 Kimi coding endpoint 判断请求不像 Coding Agent。
+- 修复：
+  - LangChain `ChatOpenAI` 增加 `default_headers={"User-Agent": config.user_agent}`。
+  - 撤销对 `kimi-for-coding` 的预跳过逻辑，恢复真实模型调用。
+  - 意图识别 LLM 若误判明显的功能号/代码问题为无需检索，本地规则会覆盖为需要检索。
+  - LangChain code tool 也增加 `object_id_exact` 快速路径，即使模型传入整句也会先抽出功能号直查 `procedures.object_id`。
+- 新增测试：
+  - Kimi provider 会继续进入意图识别和 LangChain 调用，并携带 User-Agent。
+  - LangChain `ChatOpenAI` 确认带上 provider user-agent。
+  - LLM 意图误判时，本地规则覆盖为需要检索。
+  - LangChain code tool 对功能号问题走 `object_id_exact`。
+- 验证：
+  - `USES_INDEXER_ENV_FILE=/nonexistent PYTHONPATH=. pytest -q tests/test_api.py`，17 passed
+  - 真实请求 `功能号333002包含哪些业务流程？` 已跑通：
+    - Kimi 返回正常，不再 403。
+    - LangChain 调用 `search_code_index`。
+    - 工具命中 `object_id_exact`。
+    - 返回 `LS_SESEXT_NORMALORDER_ENTER / LS_证券周边_普通委托`。
+
+### 阶段 40：恢复证据链问答而非规避检索
+
+- 问题：为避免 LangGraph 工具循环，曾将功能号问题过早截断为 `object_id_exact` 简版结果，导致和 `assemble-evidence` 原流程差距过大。
+- 修复：
+  - 业务问答不再把 `object_id_exact` 当最终答案上下文。
+  - 对功能号 exact 命中，构造目标过程证据包：
+    - 主入口过程上下文代码片段
+    - related call edges
+    - incoming callers
+    - related tables/actions
+    - related procedure summaries
+    - recovered blocks
+  - 将目标过程证据包交给 Kimi 做一次总结，避免 LangGraph 循环，同时保留证据链。
+- 验证：
+  - `USES_INDEXER_ENV_FILE=/nonexistent PYTHONPATH=. pytest -q tests/test_api.py`，18 passed
+  - 真实请求 `帮我回答一下333002功能包含了哪些业务流程` 返回：
+    - 主入口：`LS_SESEXT_NORMALORDER_ENTER`
+    - 步骤：`LF_SESBACKACCT_ACCOUNT_CHECK`、`LF_SESEXT_NORMALORDER_ENTER`
+    - 参数、相关表、调用关系、不确定点
+    - 不再出现 recursion limit
+
+### 阶段 41：/agent/analyze 深度分析与 LangChain 简化
+
+#### 问题背景
+
+- 之前 `run_deep_analysis` 自己拼 SQL、组装证据、写六章模板 Prompt，结果 333104 输出参数空、调用链仅一层、无表信息。
+- `_slim_*` / `_merge_*` 中间加工反而丢失 `downstream_evidence` 中的丰富上下文。
+- 意图识别模型 403 后，LangChain 工具循环复杂度高，维护困难。
+- `/answer` 60 秒超时导致长 Prompt 请求被中断。
+- 前端智能助手对功能号问题没有专用路由，只能走通用 `/agent/chat`。
+
+#### 改造内容
+
+1. **废弃自组证据链路**
+   - 删除 `langchain_agent.py` 中的：
+     - `_build_evidence_for_agent`
+     - `_format_evidence_for_llm`
+     - `_slim_evidence_hits`
+     - `_merge_evidence_blocks`
+     - `_enrich_hit_with_profile_and_edges`
+     - `_query_object_id_fast`
+   - 改为直接调用 `indexer.query_index(db_path, question, limit=2000, expand_downstream=True)`。
+
+2. **直接传递原始检索结果给 LLM**
+   - 取 hits[:3] 的完整原始 JSON（含 `procedure_profile`、`downstream_evidence`、`matched_text`、`reasons`）。
+   - Prompt 不再使用僵化六章模板，而是自由指令："请基于以上原始检索结果，整理成一份业务逻辑分析报告"。
+   - LLM 自行从 `downstream_evidence` 的 9 个下游节点中还原 4 层调用链、12 个输出字段、3 个读表。
+
+3. **`evidence.py` 补充 `downstream_evidence`**
+   - `assemble_evidence` 对 `hit_type == "procedure"` 调用 `_expand_downstream_for_hit`。
+   - 参数：`limit=limit, max_downstream=9, max_depth=3`。
+   - 使 `/evidence` API 输出与 `/query` 对齐。
+
+4. **`reasoning_content` fallback**
+   - `agent_gateway.py` 和 `llm.py` 的 `_extract_content()` 增加：
+     ```python
+     reasoning = message.get("reasoning_content")
+     if isinstance(reasoning, str) and reasoning.strip():
+         return reasoning.strip()
+     ```
+   - 兼容 kimi-for-coding 返回空 `content` 但带 `reasoning_content` 的场景。
+
+5. **超时提升到 180 秒**
+   - `.env` 增加 `USES_INDEXER_AGENT_OPENAI_TIMEOUT=180` 和 `USES_INDEXER_LLM_TIMEOUT=180`。
+   - `llm.py` 的 `OpenAICompatibleConfig.timeout_seconds` 默认 60.0，通过环境变量覆盖。
+   - 解决 `/answer` 处理 2 万字符 Prompt 时 60 秒超时中断的问题。
+
+6. **兼容 1+oid 映射**
+   - `run_deep_analysis` 的 `_extract_numeric_terms` 兼容 "1"+oid（如 `333014` → `1333014`）。
+   - 解决 `query_index` 对 `"333014"` 的 FTS 分词权重稀释导致 rank 9 以后的问题。
+
+7. **前端自动路由**
+   - `web/app.js` 的 `sendChat()` 增加 `_looksLikeFunctionNumber(text)`：
+     - 匹配 `\b\d{5,6}\b`
+     - 或包含"功能号"关键词
+   - 命中后调用 `/agent/analyze`，取 `data.report` 渲染。
+
+8. **文档重组**
+   - 原 `docs/` 根目录文件分类移至 `docs/system_files/` 和 `docs/business_files/`。
+   - 新增 `docs/API.md`。
+
+#### 验证结果
+
+- **333104**：
+  - 改造前：输出参数空、调用链仅一层、无表信息。
+  - 改造后：4 层完整链路、下游 12 个输出字段、3 个读表、配置开关控制逻辑。
+- **333002**：
+  - LLM 基于原始 `matched_text` 还原出完整委托属性重置规则矩阵（3416/3574/3674 开关、各类证券类别映射）。
+- **333014**：
+  - `333014` 正确映射到 `1333014`，命中 `LF_ESTTRADECTRL_PREOPENING_TRADE_HANDLE`。
+- **语法检查**：
+  - `PYTHONPATH=src python3 -m py_compile src/uses_indexer/langchain_agent.py src/uses_indexer/agent_gateway.py src/uses_indexer/evidence.py src/uses_indexer/llm.py src/uses_indexer/api.py src/uses_indexer/web/app.js`
+
+#### 设计教训
+
+- 不要过度工程化：放着 `query_index` 不用，自己拼 SQL + 组装证据，结果更差。
+- 不要自己精简/过滤 `query_index` 结果：`_slim_*` 反而丢失信息。
+- Prompt 不要僵化模板：六章模板导致"证据未覆盖"堆砌。
+- 代码检索（`/query`）与智能助手（`/agent/analyze`）互补而非替代：检索提供毫秒级一手证据，助手提供 LLM 深度解读。

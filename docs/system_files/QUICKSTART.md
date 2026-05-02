@@ -519,3 +519,26 @@ python3 -m uses_indexer build-index /path/to/code --db test.db
 - [INDEX_SCHEMA.md](INDEX_SCHEMA.md) - 索引结构
 - [EVALUATION.md](EVALUATION.md) - 评测说明
 - [DEPLOYMENT.md](DEPLOYMENT.md) - 部署指南
+
+---
+
+## 13. 启动智能助手后端
+
+智能助手页面建议使用三索引显式启动方式：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer serve-api \
+  --db examples/business_code_index.db \
+  --metadata-db examples/business_metadata_index.db \
+  --table-db examples/business_table_index.db \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:8000/ui
+```
+
+业务问答模式下，前端会调用 `/agent/chat` 并启用 `auto_retrieve`。后端先用 LLM 做意图识别；如果判断是代码库业务问题，会进入 LangChain 工具编排，按需调用代码索引、metadata 索引和表结构索引，再由模型整合结果返回。如果判断是普通闲聊或非项目问题，会跳过本地检索，直接走普通聊天逻辑。

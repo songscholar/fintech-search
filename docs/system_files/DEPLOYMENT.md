@@ -281,6 +281,25 @@ python3 ./plugins/uses-codebase-plugin/scripts/run_mcp_server.py \
 3. 启动 `serve-api`
 4. 用 `curl /health` 和 `curl /answer` 验证
 
+推荐使用三索引显式启动方式，保证智能助手可以同时检索代码索引、metadata 元数据索引和表结构索引：
+
+```bash
+PYTHONPATH=src python3 -m uses_indexer serve-api \
+  --db examples/business_code_index.db \
+  --metadata-db examples/business_metadata_index.db \
+  --table-db examples/business_table_index.db \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+其中：
+
+- `--db`：默认代码索引库。
+- `--metadata-db`：默认 metadata 元数据索引库，供智能助手工具检索字段、常量、错误号、主题、菜单等线索。
+- `--table-db`：默认表结构索引库，供智能助手工具检索表、字段、索引和表空间信息。
+
+如果不传 `--metadata-db` 或 `--table-db`，LangChain 智能助手会继续按 `examples/business_metadata_index.db` 和 `examples/business_table_index.db` 自动发现；生产部署建议显式指定，避免目录或文件名变化导致召回缺失。
+
 ### 做 Codex 工具化接入
 
 1. `pip install -e .`

@@ -8,10 +8,16 @@ from threading import Thread
 
 import pytest
 
-from uses_indexer.agent_gateway import AgentGateway
+from uses_indexer.agent_gateway import AgentGateway, AgentProviderConfig, _build_query_plan, _normalize_retrieval_intent, _query_object_id_fast
 from uses_indexer.api import ApiError, CodebaseApi, make_handler_class
 from uses_indexer.answering import CodebaseAnswerer
 from uses_indexer.indexer import SQLiteIndexer
+from uses_indexer.langchain_agent import (
+    LangChainAgentError,
+    _build_chat_openai,
+    _build_evidence_context,
+    _query_code_like_index,
+)
 from uses_indexer.qa import CodebaseQA
 
 
@@ -82,6 +88,8 @@ class StubAgentGateway:
             "latency_ms": 12,
             "context_bundle": {
                 "db_path": kwargs.get("db_path"),
+                "metadata_db_path": kwargs.get("metadata_db_path"),
+                "table_db_path": kwargs.get("table_db_path"),
                 "question": kwargs.get("message"),
             },
             "raw_response": {"choices": []},
@@ -423,6 +431,25 @@ def test_api_handle_request_routes(tmp_path: Path) -> None:
     assert deleted["deleted"] is True
 
 
+def test_agent_chat_uses_default_metadata_and_table_indexes(tmp_path: Path) -> None:
+    api, _ = _build_api(tmp_path)
+    metadata_db = tmp_path / "metadata.db"
+    table_db = tmp_path / "table.db"
+    api.default_metadata_db_path = str(metadata_db)
+    api.default_table_db_path = str(table_db)
+
+    status, result = api.handle_request(
+        "POST",
+        "/agent/chat",
+        json.dumps({"message": "功能号 333002 包含哪些业务流程"}).encode("utf-8"),
+    )
+
+    assert status == 200
+    context = dict(result["context_bundle"])
+    assert context["metadata_db_path"] == str(metadata_db)
+    assert context["table_db_path"] == str(table_db)
+
+
 def test_agent_gateway_context_bundle_exposes_grounded_decision(tmp_path: Path) -> None:
     api, db_path = _build_api(tmp_path)
     gateway = AgentGateway(indexer=api.indexer, qa=api.qa, providers={})
@@ -444,6 +471,401 @@ def test_agent_gateway_context_bundle_exposes_grounded_decision(tmp_path: Path) 
     assert isinstance(draft["decision"], dict)
     assert draft["decision"]["evidence_alignment"] in {"aligned", "divergent", "partial"}
     assert "primary_candidate" in draft
+
+
+def test_agent_gateway_auto_search_context_runs_without_manual_retrieval(tmp_path: Path) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(indexer=api.indexer, qa=api.qa, providers={})
+
+    bundle = gateway._build_context(
+        db_path=str(db_path),
+        message="功能号 333002 包含哪些业务流程",
+        include_retrieval=False,
+        include_evidence=False,
+        include_answer_draft=False,
+        auto_retrieve=True,
+        max_search_rounds=2,
+        limit=3,
+        context_window=1,
+        related_limit=1,
+    )
+
+    auto_search = dict(bundle["auto_search"])
+    assert auto_search["search_decision"]["needs_search"] is True
+    assert auto_search["search_decision"]["rounds_used"] >= 1
+    assert auto_search["query_plan"]
+    assert "selected_code_and_metadata_context" in auto_search
+
+
+def test_agent_gateway_auto_search_prioritizes_embedded_feature_number() -> None:
+    plan = _build_query_plan("功能号333002包含哪些业务流程？", max_rounds=3)
+
+    assert plan[0] == "333002"
+    assert "功能号 333002" in plan
+
+
+def test_agent_gateway_object_id_fast_path(tmp_path: Path) -> None:
+    api, db_path = _build_api(tmp_path)
+
+    hits = _query_object_id_fast(str(db_path), "1", limit=3)
+
+    assert hits
+    assert hits[0]["object_id"] == "1"
+    assert hits[0]["procedure_name"] == "AF_SAMPLE"
+
+
+def test_agent_gateway_auto_search_stops_after_exact_object_id_hit(tmp_path: Path) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(indexer=api.indexer, qa=api.qa, providers={})
+
+    auto_search = gateway._build_auto_search_context(
+        db_path=str(db_path),
+        message="功能号1包含哪些业务流程",
+        limit=2,
+        context_window=1,
+        related_limit=1,
+        max_search_rounds=3,
+    )
+
+    assert auto_search["search_decision"]["rounds_used"] == 1
+    assert auto_search["search_decision"]["stop_reason"] == "sufficient_context"
+    assert auto_search["rounds"][0]["indexes"][0]["fast_path"] == "object_id_exact"
+
+
+def test_agent_gateway_chat_uses_langchain_when_auto_retrieve(tmp_path: Path, monkeypatch) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(
+        indexer=api.indexer,
+        qa=api.qa,
+        providers={
+            "openai-compatible": AgentProviderConfig(
+                name="openai-compatible",
+                label="通用智能体",
+                adapter="openai-compatible",
+                base_url="http://agent.local/v1/chat/completions",
+                model="stub-model",
+                api_key="stub-key",
+            )
+        },
+        default_provider="openai-compatible",
+    )
+    called = {}
+
+    def fake_langchain_agent(**kwargs):
+        called.update(kwargs)
+        return {
+            "content": "langchain answer",
+            "usage": None,
+            "raw_response": {"intermediate_steps": []},
+            "context_bundle": {"agent": "langchain_tool_calling_agent"},
+        }
+
+    monkeypatch.setattr(
+        "uses_indexer.agent_gateway.classify_retrieval_intent",
+        lambda **kwargs: {"needs_retrieval": True, "reason": "business question", "suggested_tools": ["code"]},
+    )
+    monkeypatch.setattr("uses_indexer.agent_gateway.run_langchain_code_agent", fake_langchain_agent)
+    result = gateway.chat(
+        db_path=str(db_path),
+        metadata_db_path=str(tmp_path / "metadata.db"),
+        table_db_path=str(tmp_path / "table.db"),
+        message="功能号 333002 包含哪些业务流程",
+        provider_name="openai-compatible",
+        auto_retrieve=True,
+        max_search_rounds=2,
+    )
+
+    assert result["reply"] == "langchain answer"
+    assert result["context_bundle"]["agent"] == "langchain_tool_calling_agent"
+    assert called["max_iterations"] == 2
+    assert called["metadata_db_path"] == str(tmp_path / "metadata.db")
+    assert called["table_db_path"] == str(tmp_path / "table.db")
+
+
+def test_agent_gateway_auto_retrieve_skips_tools_for_general_chat(tmp_path: Path, monkeypatch) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(
+        indexer=api.indexer,
+        qa=api.qa,
+        providers={
+            "openai-compatible": AgentProviderConfig(
+                name="openai-compatible",
+                label="通用智能体",
+                adapter="openai-compatible",
+                base_url="http://agent.local/v1/chat/completions",
+                model="stub-model",
+                api_key="stub-key",
+            )
+        },
+        default_provider="openai-compatible",
+    )
+    langchain_called = {"value": False}
+
+    monkeypatch.setattr(
+        "uses_indexer.agent_gateway.classify_retrieval_intent",
+        lambda **kwargs: {"needs_retrieval": False, "reason": "general chat", "suggested_tools": []},
+    )
+
+    def fake_langchain_agent(**kwargs):
+        langchain_called["value"] = True
+        raise AssertionError("langchain tools should not run for general chat")
+
+    def fake_complete(config, messages):
+        assert "通用智能助手" in messages[0]["content"]
+        return {"content": "general answer", "usage": None, "raw_response": {"choices": []}}
+
+    monkeypatch.setattr("uses_indexer.agent_gateway.run_langchain_code_agent", fake_langchain_agent)
+    monkeypatch.setattr("uses_indexer.agent_gateway._complete_openai_compatible", fake_complete)
+
+    result = gateway.chat(
+        db_path=str(db_path),
+        message="你好，帮我写一句问候语",
+        provider_name="openai-compatible",
+        auto_retrieve=True,
+    )
+
+    assert result["reply"] == "general answer"
+    assert result["context_bundle"]["intent"]["needs_retrieval"] is False
+    assert langchain_called["value"] is False
+
+
+def test_agent_gateway_auto_retrieve_falls_back_when_intent_llm_fails(tmp_path: Path, monkeypatch) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(
+        indexer=api.indexer,
+        qa=api.qa,
+        providers={
+            "openai-compatible": AgentProviderConfig(
+                name="openai-compatible",
+                label="通用智能体",
+                adapter="openai-compatible",
+                base_url="http://agent.local/v1/chat/completions",
+                model="stub-model",
+                api_key="stub-key",
+            )
+        },
+        default_provider="openai-compatible",
+    )
+    called = {}
+
+    def fake_intent(**kwargs):
+        raise RuntimeError("403 access_terminated_error")
+
+    def fake_langchain_agent(**kwargs):
+        called.update(kwargs)
+        return {
+            "content": "fallback intent still reached langchain",
+            "usage": None,
+            "raw_response": {"intermediate_steps": []},
+            "context_bundle": {"agent": "langchain_tool_calling_agent"},
+        }
+
+    monkeypatch.setattr("uses_indexer.agent_gateway.classify_retrieval_intent", fake_intent)
+    monkeypatch.setattr("uses_indexer.agent_gateway.run_langchain_code_agent", fake_langchain_agent)
+
+    result = gateway.chat(
+        db_path=str(db_path),
+        message="功能号 333002 包含哪些业务流程",
+        provider_name="openai-compatible",
+        auto_retrieve=True,
+    )
+
+    assert result["reply"] == "fallback intent still reached langchain"
+    assert result["context_bundle"]["intent"]["source"] == "local_rule_fallback"
+    assert result["context_bundle"]["intent"]["needs_retrieval"] is True
+    assert called["question"] == "功能号 333002 包含哪些业务流程"
+
+
+def test_agent_gateway_local_rule_overrides_false_llm_intent() -> None:
+    intent = _normalize_retrieval_intent(
+        "功能号333002包含哪些业务流程？",
+        {"needs_retrieval": False, "reason": "", "suggested_tools": [], "raw": ""},
+    )
+
+    assert intent["needs_retrieval"] is True
+    assert intent["source"] == "llm_with_local_rule_override"
+    assert "code" in intent["suggested_tools"]
+
+
+def test_agent_gateway_auto_retrieve_returns_local_summary_when_langchain_llm_fails(tmp_path: Path, monkeypatch) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(
+        indexer=api.indexer,
+        qa=api.qa,
+        providers={
+            "openai-compatible": AgentProviderConfig(
+                name="openai-compatible",
+                label="通用智能体",
+                adapter="openai-compatible",
+                base_url="http://agent.local/v1/chat/completions",
+                model="stub-model",
+                api_key="stub-key",
+            )
+        },
+        default_provider="openai-compatible",
+    )
+
+    monkeypatch.setattr(
+        "uses_indexer.agent_gateway.classify_retrieval_intent",
+        lambda **kwargs: {"needs_retrieval": True, "reason": "business question", "suggested_tools": ["code"]},
+    )
+
+    def fake_langchain_agent(**kwargs):
+        raise RuntimeError("403 access_terminated_error")
+
+    monkeypatch.setattr("uses_indexer.agent_gateway.run_langchain_code_agent", fake_langchain_agent)
+
+    result = gateway.chat(
+        db_path=str(db_path),
+        message="证券代码获取的逻辑在哪里",
+        provider_name="openai-compatible",
+        auto_retrieve=True,
+    )
+
+    assert result["response_kind"] == "agent_chat"
+    assert "当前模型暂不可用" in result["reply"]
+    assert "access_terminated_error" in result["reply"]
+    assert result["context_bundle"]["fallback"]["reason"] == "provider_unavailable"
+    assert result["raw_response"]["fallback"] is True
+
+
+def test_agent_gateway_auto_retrieve_returns_local_summary_when_langchain_missing(tmp_path: Path, monkeypatch) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(
+        indexer=api.indexer,
+        qa=api.qa,
+        providers={
+            "openai-compatible": AgentProviderConfig(
+                name="openai-compatible",
+                label="通用智能体",
+                adapter="openai-compatible",
+                base_url="http://agent.local/v1/chat/completions",
+                model="stub-model",
+                api_key="stub-key",
+            )
+        },
+        default_provider="openai-compatible",
+    )
+
+    monkeypatch.setattr(
+        "uses_indexer.agent_gateway.classify_retrieval_intent",
+        lambda **kwargs: {"needs_retrieval": True, "reason": "business question", "suggested_tools": ["code"]},
+    )
+
+    def fake_langchain_agent(**kwargs):
+        raise LangChainAgentError("LangChain is required")
+
+    monkeypatch.setattr("uses_indexer.agent_gateway.run_langchain_code_agent", fake_langchain_agent)
+
+    result = gateway.chat(
+        db_path=str(db_path),
+        message="证券代码获取的逻辑在哪里",
+        provider_name="openai-compatible",
+        auto_retrieve=True,
+    )
+
+    assert "当前模型暂不可用" in result["reply"]
+    assert "LangChain is required" in result["reply"]
+    assert result["raw_response"]["fallback"] is True
+
+
+def test_agent_gateway_tries_kimi_coding_provider_with_user_agent(tmp_path: Path, monkeypatch) -> None:
+    api, db_path = _build_api(tmp_path)
+    gateway = AgentGateway(
+        indexer=api.indexer,
+        qa=api.qa,
+        providers={
+            "openai-compatible": AgentProviderConfig(
+                name="openai-compatible",
+                label="通用智能体",
+                adapter="openai-compatible",
+                base_url="https://api.kimi.com/coding/v1/chat/completions",
+                model="kimi-for-coding",
+                api_key="stub-key",
+                user_agent="claude-code/0.1.0",
+            )
+        },
+        default_provider="openai-compatible",
+    )
+    called = {}
+
+    def fake_intent(**kwargs):
+        assert kwargs["config"].user_agent == "claude-code/0.1.0"
+        return {"needs_retrieval": True, "reason": "business question", "suggested_tools": ["code"]}
+
+    def fake_langchain(**kwargs):
+        called.update(kwargs)
+        assert kwargs["config"].user_agent == "claude-code/0.1.0"
+        return {
+            "content": "kimi answered",
+            "usage": None,
+            "raw_response": {"messages": []},
+            "context_bundle": {"agent": "langchain_tool_calling_agent"},
+        }
+
+    monkeypatch.setattr("uses_indexer.agent_gateway.classify_retrieval_intent", fake_intent)
+    monkeypatch.setattr("uses_indexer.agent_gateway.run_langchain_code_agent", fake_langchain)
+
+    result = gateway.chat(
+        db_path=str(db_path),
+        message="功能号1包含哪些业务流程",
+        provider_name="openai-compatible",
+        auto_retrieve=True,
+        max_search_rounds=1,
+    )
+
+    assert result["response_kind"] == "agent_chat"
+    assert result["reply"] == "kimi answered"
+    assert called["config"].user_agent == "claude-code/0.1.0"
+
+
+def test_langchain_chat_openai_uses_provider_user_agent() -> None:
+    llm = _build_chat_openai(
+        AgentProviderConfig(
+            name="openai-compatible",
+            label="通用智能体",
+            adapter="openai-compatible",
+            base_url="https://api.kimi.com/coding/v1/chat/completions",
+            model="kimi-for-coding",
+            api_key="stub-key",
+            user_agent="claude-code/0.1.0",
+        )
+    )
+
+    assert llm.default_headers["User-Agent"] == "claude-code/0.1.0"
+    assert llm.extra_body["thinking"] == {"type": "disabled"}
+
+
+def test_langchain_code_tool_uses_object_id_fast_path(tmp_path: Path) -> None:
+    api, db_path = _build_api(tmp_path)
+
+    result = _query_code_like_index(
+        indexer=api.indexer,
+        db_path=str(db_path),
+        query="功能号1包含哪些业务流程",
+        limit=3,
+        index_name="code",
+    )
+
+    assert result["payload"]["fast_path"] == "object_id_exact"
+    assert result["payload"]["hits"][0]["object_id"] == "1"
+
+
+def test_langchain_builds_assemble_evidence_context(tmp_path: Path) -> None:
+    api, db_path = _build_api(tmp_path)
+
+    result = _build_evidence_context(
+        indexer=api.indexer,
+        db_path=str(db_path),
+        question="帮我回答一下功能1包含了哪些业务流程",
+        limit=3,
+    )
+
+    assert result is not None
+    assert result["trace"]["tool"] == "targeted_object_id_context"
+    assert result["trace"]["object_id"] == "1"
+    assert int(result["summary"]["evidence_count"]) >= 1
+    assert "AF_SAMPLE" in result["llm_context"]
 
 
 def test_http_server_serves_json(tmp_path: Path) -> None:

@@ -71,8 +71,8 @@ class SQLiteIndexer:
     def summarize_db(self, db_path: str | Path) -> dict[str, object]:
         return self._db_summary_service.summarize_db(db_path)
 
-    def query_index(self, db_path: str | Path, query: str, limit: int = 20, *, debug: bool = False) -> dict[str, object]:
-        return self._retrieval_service.query_index(db_path, query, limit=limit, debug=debug)
+    def query_index(self, db_path: str | Path, query: str, limit: int = 20, *, debug: bool = False, expand_downstream: bool = False) -> dict[str, object]:
+        return self._retrieval_service.query_index(db_path, query, limit=limit, debug=debug, expand_downstream=expand_downstream)
 
     def assemble_evidence(
         self,

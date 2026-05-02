@@ -6,7 +6,7 @@ import sqlite3
 import time
 from heapq import nlargest
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .constants import VECTOR_SIMILARITY_THRESHOLD
 from .embeddings import EmbeddingRequestError, dot_similarity
@@ -38,10 +38,12 @@ class RetrievalService:
         limit: int = 20,
         *,
         debug: bool = False,
+        expand_downstream: bool = False,
     ) -> dict[str, object]:
         started_at = time.perf_counter()
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        retrieval_debug = None
         try:
             candidates, fts_query, vector_status, retrieval_debug = self.retrieve_candidates(
                 conn,
@@ -50,6 +52,37 @@ class RetrievalService:
                 candidate_limit=max(limit * 6, 30),
                 debug=debug,
             )
+
+            hits = [
+                _public_hit(candidate, rank=index)
+                for index, candidate in enumerate(candidates[:limit], start=1)
+            ]
+
+            if expand_downstream:
+                context_fetch = self.owner._context_fetch_service
+                expanded_hits = 0
+                max_expand_hits = 3
+                for i, candidate in enumerate(candidates[:limit]):
+                    if expanded_hits >= max_expand_hits:
+                        break
+                    if candidate.get("hit_type") != "procedure":
+                        continue
+                    procedure_id = candidate.get("procedure_id")
+                    procedure_name = candidate.get("procedure_name")
+                    if not procedure_id or not procedure_name:
+                        continue
+                    ds = _expand_downstream_for_hit(
+                        conn,
+                        context_fetch,
+                        int(procedure_id),
+                        str(procedure_name),
+                        limit=limit,
+                        max_downstream=9,
+                        max_depth=3,
+                    )
+                    hits[i]["downstream_evidence"] = ds
+                    hits[i]["downstream_count"] = len(ds)
+                    expanded_hits += 1
         except Exception as exc:
             log_error(
                 event="query_index_failed",
@@ -60,11 +93,6 @@ class RetrievalService:
             raise
         finally:
             conn.close()
-
-        hits = [
-            _public_hit(candidate, rank=index)
-            for index, candidate in enumerate(candidates[:limit], start=1)
-        ]
 
         payload = {
             "db_path": str(db_path),
@@ -112,6 +140,7 @@ class RetrievalService:
     ) -> tuple[list[dict[str, object]], str | None, dict[str, object], dict[str, object] | None]:
         started_at = time.perf_counter()
         context_fetch = self.owner._context_fetch_service
+        context_fetch.preload_call_graph(conn)
         fts_query = build_fts_query(query)
         query_analysis = analyze_query(query)
         candidates: dict[tuple[object, ...], dict[str, object]] = {}
@@ -2723,3 +2752,97 @@ def _public_hit(candidate: dict[str, object], *, rank: int) -> dict[str, object]
         "graph_focus_role": candidate.get("graph_focus_role"),
         "representative_context": bool(candidate.get("representative_context")),
     }
+
+
+def _expand_downstream_for_hit(
+    conn: sqlite3.Connection,
+    context_fetch: Any,
+    procedure_id: int,
+    procedure_name: str,
+    limit: int,
+    max_downstream: int = 12,
+    max_depth: int = 3,
+    _seen: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """递归展开下游调用链，与 Agent 接口保持一致参数。"""
+    if _seen is None:
+        _seen = set()
+    if procedure_name in _seen:
+        return []
+    _seen.add(procedure_name)
+
+    if max_depth <= 0:
+        return []
+
+    try:
+        aliases = context_fetch.procedure_aliases(
+            conn, procedure_id=procedure_id, procedure_name=procedure_name
+        )
+        edges = context_fetch.fetch_related_call_edges(
+            conn,
+            procedure_id=procedure_id,
+            procedure_name=procedure_name,
+            aliases=aliases,
+            direction="outgoing",
+            limit=max(8, limit),
+        )
+    except Exception:
+        return []
+
+    downstream: list[dict[str, Any]] = []
+    for edge in edges:
+        target = str(edge.get("procedure_name") or "")
+        if not target or target in _seen:
+            continue
+        proc_row = conn.execute(
+            """
+            SELECT p.id AS procedure_id, p.name AS procedure_name,
+                   p.chinese_name AS chinese_name, p.object_id AS object_id,
+                   f.path AS file_path
+            FROM procedures p
+            JOIN files f ON f.id = p.file_id
+            WHERE p.name = ?
+            LIMIT 1
+            """,
+            (target,),
+        ).fetchone()
+        if proc_row is None:
+            continue
+        try:
+            ctx = context_fetch.fetch_context_block(
+                conn,
+                procedure_id=int(proc_row["procedure_id"]),
+                statement_id=None,
+                context_window=max(16, limit * 3),
+            )
+        except Exception:
+            continue
+        downstream.append({
+            "rank": len(downstream) + 1,
+            "procedure_name": str(proc_row["procedure_name"]),
+            "chinese_name": proc_row["chinese_name"],
+            "object_id": proc_row["object_id"],
+            "file_path": proc_row["file_path"],
+            "line_start": ctx["line_start"],
+            "line_end": ctx["line_end"],
+            "retrieval_source": "downstream_call",
+            "matched_text": str(edge.get("call_type") or "call"),
+            "excerpt": ctx["excerpt"],
+            "call_semantics": dict(edge),
+        })
+        # 递归展开下一层
+        if max_depth > 1 and len(downstream) < max_downstream:
+            nested = _expand_downstream_for_hit(
+                conn,
+                context_fetch,
+                int(proc_row["procedure_id"]),
+                str(proc_row["procedure_name"]),
+                limit,
+                max_downstream=max_downstream - len(downstream),
+                max_depth=max_depth - 1,
+                _seen=_seen,
+            )
+            downstream.extend(nested)
+        if len(downstream) >= max_downstream:
+            break
+    return downstream

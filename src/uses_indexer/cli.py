@@ -31,6 +31,7 @@ from .debug_bundle import (
     summarize_debug_bundle_regression_panel_baseline_trend,
     write_debug_bundle_archive,
 )
+from .embeddings import LocalHashedEmbedder
 from .evaluation import EvaluationThresholds, RetrievalEvaluator, compare_eval_reports, evaluate_thresholds
 from .index_catalog import DEFAULT_DB_CANDIDATES, discover_default_db
 from .integration import CodexIntegrationInstaller
@@ -121,6 +122,7 @@ def main() -> int:
     query_index_parser.add_argument("--query", required=True, help="Keyword to search for.")
     query_index_parser.add_argument("--limit", type=int, default=20, help="Maximum number of hits.")
     query_index_parser.add_argument("--debug", action="store_true", help="Include retrieval debug traces and rerank breakdown.")
+    query_index_parser.add_argument("--expand-downstream", action="store_true", help="Recursively expand downstream call chains (depth=3, max=9) for each procedure hit.")
     query_index_parser.add_argument("--output", help="Optional JSON output path.")
 
     eval_parser = subparsers.add_parser("eval-retrieval", help="Evaluate retrieval quality against JSON cases.")
@@ -301,6 +303,8 @@ def main() -> int:
 
     serve_parser = subparsers.add_parser("serve-api", help="Run a local HTTP API around the index and QA package.")
     serve_parser.add_argument("--db", required=True, help="Default SQLite database path.")
+    serve_parser.add_argument("--metadata-db", help="Default metadata index database path for the HTTP API agent.")
+    serve_parser.add_argument("--table-db", help="Default table structure index database path for the HTTP API agent.")
     serve_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the local HTTP server.")
     serve_parser.add_argument("--port", type=int, default=8000, help="Port to bind the local HTTP server.")
 
@@ -340,13 +344,20 @@ def main() -> int:
 
     args = parser.parse_args()
     parser_impl = UftDslParser()
-    indexer = SQLiteIndexer(parser_impl)
+    indexer = SQLiteIndexer(parser_impl, embedder=LocalHashedEmbedder())
     table_indexer = TableIndexer()
     qa = CodebaseQA(indexer)
     answerer = CodebaseAnswerer(qa)
     evaluator = RetrievalEvaluator(indexer)
     installer = CodexIntegrationInstaller()
-    api = CodebaseApi(indexer=indexer, qa=qa, answerer=answerer, default_db_path=getattr(args, "db", None))
+    api = CodebaseApi(
+        indexer=indexer,
+        qa=qa,
+        answerer=answerer,
+        default_db_path=getattr(args, "db", None),
+        default_metadata_db_path=getattr(args, "metadata_db", None),
+        default_table_db_path=getattr(args, "table_db", None),
+    )
     default_mcp_db = getattr(args, "db", None) or _discover_default_db(Path.cwd())
     mcp_server = CodebaseMcpServer(
         indexer=indexer, 
@@ -385,7 +396,7 @@ def main() -> int:
             progress=args.progress,
         )
     elif args.command == "query-index":
-        data = indexer.query_index(args.db, args.query, limit=args.limit, debug=args.debug)
+        data = indexer.query_index(args.db, args.query, limit=args.limit, debug=args.debug, expand_downstream=getattr(args, "expand_downstream", False))
     elif args.command == "build-table-index":
         data = table_indexer.build_index(
             source_root=args.path,
