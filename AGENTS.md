@@ -110,22 +110,31 @@
 │   └── test_table_indexer.py
 │
 ├── docs/                       # 详细文档（中文）
-│   ├── ARCHITECTURE.md         # 架构总览、模块职责、设计取舍
-│   ├── DEVELOPER_GUIDE.md      # 开发者指南、模块边界、推荐开发路径
-│   ├── NEWCOMER_GUIDE.md       # 新手指南、默认索引、常用命令
-│   ├── USAGE.md                # 日常提问方式、结果解读
-│   ├── DEPLOYMENT.md           # 本地部署、HTTP/MCP/Codex 接入
-│   ├── EVALUATION.md           # 评测框架、A/B 对比、debug bundle 面板
-│   ├── INDEX_SCHEMA.md         # SQLite 表结构详细说明
-│   ├── INDEX_BOUNDARIES.md     # 代码索引 / 元数据索引 / 全量索引边界
-│   ├── CALL_SEMANTICS.md       # LS/LF/AF 调用语义规则
-│   ├── TROUBLESHOOTING.md      # 常见问题排障
-│   ├── RETRIEVAL_TUNING.md     # 检索与重排调优指南
-│   ├── SEMANTIC_RULES_EXTENSION.md # 扩展 DSL 语义规则
-│   ├── FRONTEND_DESIGN.md      # 前端页面设计说明
-│   ├── FRONTEND_TECHNICAL.md   # 前端与 API 对接方式
-│   ├── TRACE_SCHEMA.md         # 结构化调试输出格式
-│   └── WORKLOG.md              # 实施过程记录
+│   ├── API.md                  # HTTP API 接口说明
+│   ├── business_files/         # 业务文档
+│   └── system_files/           # 系统说明文档
+│       ├── ARCHITECTURE.md     # 架构总览、模块职责、设计取舍
+│       ├── CALL_SEMANTICS.md   # LS/LF/AF 调用语义规则
+│       ├── CHANGELOG.md        # 更新日志
+│       ├── DEPLOYMENT.md       # 本地部署、HTTP/MCP/Codex 接入
+│       ├── DEVELOPER_GUIDE.md  # 开发者指南、模块边界、推荐开发路径
+│       ├── DEVELOPMENT_NOTES.md# 开发笔记
+│       ├── EVALUATION.md       # 评测框架、A/B 对比、debug bundle 面板
+│       ├── FRONTEND_DESIGN.md  # 前端页面设计说明
+│       ├── FRONTEND_TECHNICAL.md # 前端与 API 对接方式
+│       ├── INDEX_BOUNDARIES.md # 代码索引 / 元数据索引 / 全量索引边界
+│       ├── INDEX_SCHEMA.md     # SQLite 表结构详细说明
+│       ├── METADATA_INDEXING.md # 元数据索引说明
+│       ├── NEWCOMER_GUIDE.md   # 新手指南、默认索引、常用命令
+│       ├── OVERVIEW.md         # 项目概览
+│       ├── QUICKSTART.md       # 快速开始
+│       ├── RETRIEVAL_TUNING.md # 检索与重排调优指南
+│       ├── SEMANTIC_RULES_EXTENSION.md # 扩展 DSL 语义规则
+│       ├── TECH_SELECTION.md   # 技术选型
+│       ├── TRACE_SCHEMA.md     # 结构化调试输出格式
+│       ├── TROUBLESHOOTING.md  # 常见问题排障
+│       ├── USAGE.md            # 日常提问方式、结果解读
+│       └── WORKLOG.md          # 实施过程记录
 │
 ├── eval/                       # 评测用例
 │   ├── uses_codes_cases.json
@@ -293,6 +302,56 @@ python3 -m py_compile src/uses_indexer/*.py
 
 ---
 
+## 开发工作流规范
+
+### 1. 修改必须同步记录
+
+**任何代码或配置的实质性修改完成后，必须同步记录到日志。** 不记录等于没完成。
+
+| 日志文件 | 记录内容 | 面向读者 |
+|---------|---------|---------|
+| `docs/system_files/CHANGELOG.md` | 改了什么（功能 / 修复 / 改进列表） | 外部用户、协作者 |
+| `docs/system_files/WORKLOG.md` | 怎么改的（阶段背景、决策过程、验证结果、设计教训） | 未来维护者、接棒 agent |
+
+记录时机：
+- 新增功能、修复 bug、性能优化、接口变更 → 同步追加 CHANGELOG
+- 涉及方案选型、踩坑、验证过程、回退决策 → 同步追加 WORKLOG
+- 单轮会话内的多次迭代，可在会话末尾一次性整理写入，不要完全遗漏
+
+### 2. 文档变更必须同步更新
+
+如果修改涉及以下文档类型，必须同步更新对应文件：
+
+| 文档类型 | 存放位置 | 说明 |
+|---------|---------|------|
+| 系统说明文档 | `docs/system_files/` | 架构、部署、开发指南、评测、调优等 |
+| 业务文档 | `docs/business_files/` | 业务规则、业务逻辑说明、业务术语表等 |
+| 知识文档 | `docs/business_files/` 或 `docs/system_files/` | 沉淀的 domain knowledge、排查手册 |
+| API/接口文档 | `docs/API.md` | HTTP API 端点、请求/响应格式、调用示例 |
+
+**约束**：禁止只改代码不改文档。如果文档需要大篇幅重写，至少先追加一条"待完善"标记，说明当前状态。
+
+### 3. 提交前必须本地 commit
+
+每轮有意义的改动完成后，**必须先 `git add` + `git commit` 提交到本地**，再执行推送或其他操作。
+
+- 不要在工作区留下大量未提交的零散改动
+- 提交信息应清晰描述改动的目的和范围
+- 如果工作区同时存在本次改动和历史遗留未提交文件，优先只提交本次相关改动；清理历史遗留变动应单独一轮处理
+- 提交前检查：`.env` 是否含敏感信息、临时产物是否被误加入
+
+### 4. 禁止提交的敏感信息
+
+- `.env` 文件（含 API Key、密码等）——即使已在 git 跟踪中，新增敏感值时也应避免提交
+- 运行期产物：CLI 输出 `.json`、诊断脚本、临时 `.db`、`.fuse_hidden*` 等
+- 个人报告：如 `333002_business_logic_report.md` 这类单题分析产物
+
+正确做法：
+- 敏感配置通过 `.env.example` 模板同步，真实值留在本地 `.env`
+- 临时产物写入 `examples/` 但不加入 git；如需保存，按日期建立子目录如 `examples/2026-05-01/`
+
+---
+
 ## 输出规范
 
 ### 1. CLI 默认输出目录
@@ -415,4 +474,4 @@ Agent Gateway 设计：前端不直接连外部模型，而是走后端代理，
 
 - 当前版本：`0.2.0`
 - 版本定义在 `pyproject.toml`
-- 变更历史见 `docs/CHANGELOG.md`（如存在）或 `docs/WORKLOG.md`
+- 变更历史见 `docs/system_files/CHANGELOG.md` 或 `docs/system_files/WORKLOG.md`
