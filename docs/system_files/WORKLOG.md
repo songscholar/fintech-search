@@ -1120,3 +1120,48 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 - **不做 force-directed 布局**：力导向图在节点数少时反而抖动，分层树更稳定、语义更清晰
 - **不做 D3/Cytoscape 依赖**：保持零外部依赖，原生 SVG 足以覆盖当前场景
 - **暂不渲染 multi_hop 关系**：避免图过于复杂；单跳调用链已覆盖 90% 分析场景
+
+
+### 阶段 44：downstream_evidence 补充下游节点 procedure_profile
+
+#### 问题
+
+- `_expand_downstream_for_hit` 为每个下游节点只拉了过程名、中文名、object_id、文件路径和代码摘录 `excerpt`。
+- 没有查询 `procedure_features.profile_json`，导致下游 9 个节点的 `primary_inputs`、`primary_outputs`、`core_read_tables`、`core_write_tables` 全部为空。
+- LLM 只能靠读代码 excerpt 来"猜"参数和表名，猜不到就跳过，导致业务分析报告中缺失输入输出参数和表访问细节。
+
+#### 修复
+
+- 在 `retrieval.py` 的 `_expand_downstream_for_hit` 中，查询到 `proc_row` 后增加 `procedure_features.profile_json` 查询：
+  ```python
+  pf = conn.execute(
+      "SELECT profile_json FROM procedure_features WHERE procedure_id = ? LIMIT 1",
+      (int(proc_row["procedure_id"]),),
+  ).fetchone()
+  if pf and pf["profile_json"]:
+      profile = json.loads(pf["profile_json"])
+      profile_dict = {
+          "primary_inputs": profile.get("primary_inputs", []),
+          "primary_outputs": profile.get("primary_outputs", []),
+          "core_calls": profile.get("core_calls", []),
+          "core_callers": profile.get("core_callers", []),
+          "core_read_tables": profile.get("core_read_tables", []),
+          "core_write_tables": profile.get("core_write_tables", []),
+          "core_variable_reads": profile.get("core_variable_reads", [])[:15],
+          "core_variable_writes": profile.get("core_variable_writes", [])[:15],
+          "call_role": profile.get("call_role"),
+          "call_fan_in": profile.get("call_fan_in"),
+          "call_fan_out": profile.get("call_fan_out"),
+      }
+  ```
+- 将 `profile_dict` 写入 downstream 节点的 `"procedure_profile"` 字段，与主 hit 的字段名保持一致。
+
+#### 验证
+
+- `/query` 接口查询 333104，downstream_evidence 中 9 个节点现在均有 profile：
+  - `AF_ACCTSEPUB_SYSANDUSER_STATUS_CHECK`：in=6, out=6
+  - `AF_SYSARGPUB_FUNCTION_GET`：in=1, out=6, read=['upbs_hs_function']
+  - `AF_SYSARGPUB_EXCHARG_GET_PLUS`：in=2, out=6, read=['usps_exch_arg']
+  - `AF_SYSARGPUB_SYSCONFIG_GET`：in=3, out=5, read=['upbs_sysconfig']
+  - `LF_SESBID_STOCK_REQ`：in=6, out=6, read=['uses_fund_account', 'uses_stock_real']
+- 之前全部为空，现在结构化数据完整可用。

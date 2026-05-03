@@ -36,6 +36,11 @@
   - `api.py` 的 `_execute_analyze_tool` 在返回 report 前增加前缀指令，要求 LLM 直接完整呈现业务分析报告，不要进行额外摘要或压缩。
   - 解决 `/agent/run` 走 Agent Loop 时，报告被第二轮 LLM 压缩导致输入输出参数、表访问等细节丢失的问题。
 
+- **`downstream_evidence` 补充下游节点 `procedure_profile`**
+  - `retrieval.py` 的 `_expand_downstream_for_hit` 现在会为每个下游节点查询 `procedure_features.profile_json`。
+  - 下游节点现在包含 `primary_inputs`、`primary_outputs`、`core_read_tables`、`core_write_tables`、`call_role` 等结构化字段。
+  - 解决之前下游节点 profile 全空、LLM 只能靠代码 excerpt 猜测参数和表名的问题。
+
 - **文档目录重组**
   - 原 `docs/` 根目录文件分类移至 `docs/system_files/` 和 `docs/business_files/`。
   - 新增 `docs/API.md`，汇总当前 HTTP API 端点、请求/响应格式和调用示例。

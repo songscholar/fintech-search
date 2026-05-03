@@ -2808,6 +2808,32 @@ def _expand_downstream_for_hit(
         ).fetchone()
         if proc_row is None:
             continue
+
+        # 拉取下游节点的 procedure_profile
+        profile_dict: dict[str, Any] | None = None
+        try:
+            pf = conn.execute(
+                "SELECT profile_json FROM procedure_features WHERE procedure_id = ? LIMIT 1",
+                (int(proc_row["procedure_id"]),),
+            ).fetchone()
+            if pf and pf["profile_json"]:
+                profile = json.loads(pf["profile_json"])
+                profile_dict = {
+                    "primary_inputs": profile.get("primary_inputs", []),
+                    "primary_outputs": profile.get("primary_outputs", []),
+                    "core_calls": profile.get("core_calls", []),
+                    "core_callers": profile.get("core_callers", []),
+                    "core_read_tables": profile.get("core_read_tables", []),
+                    "core_write_tables": profile.get("core_write_tables", []),
+                    "core_variable_reads": profile.get("core_variable_reads", [])[:15],
+                    "core_variable_writes": profile.get("core_variable_writes", [])[:15],
+                    "call_role": profile.get("call_role"),
+                    "call_fan_in": profile.get("call_fan_in"),
+                    "call_fan_out": profile.get("call_fan_out"),
+                }
+        except Exception:
+            pass
+
         try:
             ctx = context_fetch.fetch_context_block(
                 conn,
@@ -2829,6 +2855,7 @@ def _expand_downstream_for_hit(
             "matched_text": str(edge.get("call_type") or "call"),
             "excerpt": ctx["excerpt"],
             "call_semantics": dict(edge),
+            "procedure_profile": profile_dict or {},
         })
         # 递归展开下一层
         if max_depth > 1 and len(downstream) < max_downstream:
