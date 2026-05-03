@@ -402,40 +402,6 @@ def run_langchain_code_agent(
     }
 
 
-def _build_param_report(raw_hits: list[dict[str, Any]]) -> str:
-    """后端直接生成 Markdown 格式的完整参数清单，避免 LLM 压缩。"""
-    sections: list[str] = []
-    seen_oids: set[str] = set()
-    for h in raw_hits:
-        fp = h.get("full_params", {})
-        if not fp:
-            continue
-        oid = str(h.get("object_id") or "")
-        if oid in seen_oids:
-            continue
-        seen_oids.add(oid)
-        name = h.get("procedure_name") or "N/A"
-        cn = h.get("chinese_name") or ""
-        lines = [f"## {name} (功能号: {oid or 'N/A'})"]
-        if cn:
-            lines.append(f"**中文名：** {cn}")
-        for cat, label in (
-            ("input", "输入参数"),
-            ("output", "输出参数"),
-            ("internal", "内部参数"),
-            ("inout", "输入输出参数"),
-        ):
-            items = fp.get(cat)
-            if items:
-                lines.append(f"**{label}（共 {len(items)} 个）：**")
-                for item in items:
-                    lines.append(f"- `{item}`")
-            elif cat in ("input", "output"):
-                lines.append(f"**{label}：** 无")
-        sections.append("\n".join(lines))
-    return "\n\n".join(sections) if sections else "*该功能暂无参数记录*"
-
-
 def _fetch_full_params(db_path: str, object_id: str) -> dict[str, list[str]]:
     """通过 object_id 从 params 表拉取完整参数列表，按 category 分组，返回紧凑格式。
 
@@ -499,7 +465,8 @@ def run_deep_analysis(
                 break
 
     # 3. 精简原始 hit，只保留 LLM 分析所需的字段，控制 Prompt 长度
-    def _slim_hit(hit: dict[str, Any]) -> dict[str, Any]:
+    # 只为用户查询的当前功能注入完整参数，下游调用链不注入参数
+    def _slim_hit(hit: dict[str, Any], *, is_target: bool = False) -> dict[str, Any]:
         oid = str(hit.get("object_id") or "")
         slim: dict[str, Any] = {
             "procedure_name": hit.get("procedure_name"),
@@ -508,8 +475,10 @@ def run_deep_analysis(
             "file_path": hit.get("file_path"),
             "matched_text": hit.get("matched_text"),
             "procedure_profile": hit.get("procedure_profile"),
-            "full_params": _fetch_full_params(db_path, oid) if oid else {},
         }
+        # 只有当前查询的目标功能才注入完整参数
+        if is_target and oid:
+            slim["full_params"] = _fetch_full_params(db_path, oid)
         ds = hit.get("downstream_evidence", [])
         slim["downstream_evidence"] = [
             {
@@ -518,38 +487,38 @@ def run_deep_analysis(
                 "object_id": d.get("object_id"),
                 "procedure_profile": d.get("procedure_profile"),
                 "excerpt": (d.get("excerpt") or "")[:600],
-                "full_params": _fetch_full_params(db_path, str(d.get("object_id") or "")) if d.get("object_id") else {},
             }
             for d in ds[:6]
         ]
         return slim
 
-    raw_hits = [_slim_hit(h) for h in hits[:3]]
+    # 判断哪些是用户直接查询的目标功能
+    target_oids = set(object_ids) if object_ids else set()
+    raw_hits = [_slim_hit(h, is_target=str(h.get("object_id")) in target_oids) for h in hits[:3]]
     hits_json = json.dumps(raw_hits, ensure_ascii=False, indent=2)
 
-    param_report = ""
     if not direct_hit:
         full_prompt = (
             f"用户问题：{question}\n\n"
             "请直接回复用户：抱歉，在知识库中没有找到与该问题直接相关的知识，请检查您提问的内容是否正确。"
         )
     else:
-        # 后端直接生成参数清单（LLM 不可压缩）
-        param_report = _build_param_report(raw_hits)
-
         full_prompt = (
             f"用户问题：{question}\n\n"
             f"以下是通过 query_index 检索到的原始结果（共 {len(hits)} 条命中，展示前 {len(raw_hits)} 条）：\n\n"
             f"```json\n{hits_json}\n```\n\n"
-            "请基于以上原始检索结果，生成业务逻辑分析内容。\n\n"
-            "注意：参数清单已由后端系统单独生成，你不需要在回答中列出参数。"
-            "你只需要生成以下分析内容，用 Markdown 格式输出：\n"
-            "1. 每个功能的核心业务逻辑说明\n"
-            "2. 调用链分析（主入口调用了哪些下游过程，各过程的作用）\n"
-            "3. 数据表访问分析（读取/写入哪些表）\n"
-            "4. 关键业务分支和判断条件\n"
-            "5. 不确定的内容标注为'证据未覆盖'\n"
-            "禁止编造证据中没有的信息。"
+            "请基于以上原始检索结果，整理成一份业务逻辑分析报告。\n\n"
+            "特别要求（严格遵守）：\n"
+            "1. 只列出用户查询的当前功能的完整输入参数和输出参数。"
+            "JSON 中的 full_params 字段提供了该功能的完整参数列表，"
+            "input 中的每一个参数名都必须出现在报告中，一个都不能少；"
+            "output 列表同理。禁止自行判断哪些是'关键参数'或省略任何字段。\n"
+            "2. 下游调用链中的过程只列出过程名和功能号即可，不要列出它们的参数。\n"
+            "3. 如果当前功能的 output 为空，明确写'输出参数：无'；"
+            "如果 input 为空，明确写'输入参数：无'。\n"
+            "4. 禁止将参数列表概括为'等'或'其他参数'，必须逐一列出。\n"
+            "5. 报告格式：按过程分节，每节包含功能号、中文名、输入参数（逐一列出）、"
+            "输出参数（逐一列出）、核心调用、读取/写入表、业务逻辑说明。"
         )
 
     # 4. 调用 LLM（临时增加 max_tokens，确保长 Prompt 下 report 不被截断）
@@ -572,16 +541,9 @@ def run_deep_analysis(
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
-    # 拼接后端参数清单 + LLM 业务分析
-    llm_content = llm_response.get("content", "")
-    if direct_hit and param_report:
-        full_report = f"# 参数清单\n\n{param_report}\n\n---\n\n# 业务逻辑分析\n\n{llm_content}"
-    else:
-        full_report = llm_content
-
     return {
         "response_kind": "agent_deep_analyze",
         "question": question,
-        "report": full_report,
+        "report": llm_response.get("content", ""),
         "elapsed_ms": elapsed_ms,
     }
