@@ -405,14 +405,18 @@ def run_langchain_code_agent(
 def _build_param_report(raw_hits: list[dict[str, Any]]) -> str:
     """后端直接生成 Markdown 格式的完整参数清单，避免 LLM 压缩。"""
     sections: list[str] = []
+    seen_oids: set[str] = set()
     for h in raw_hits:
         fp = h.get("full_params", {})
         if not fp:
             continue
+        oid = str(h.get("object_id") or "")
+        if oid in seen_oids:
+            continue
+        seen_oids.add(oid)
         name = h.get("procedure_name") or "N/A"
         cn = h.get("chinese_name") or ""
-        oid = h.get("object_id") or "N/A"
-        lines = [f"## {name} (功能号: {oid})"]
+        lines = [f"## {name} (功能号: {oid or 'N/A'})"]
         if cn:
             lines.append(f"**中文名：** {cn}")
         for cat, label in (
@@ -523,6 +527,7 @@ def run_deep_analysis(
     raw_hits = [_slim_hit(h) for h in hits[:3]]
     hits_json = json.dumps(raw_hits, ensure_ascii=False, indent=2)
 
+    param_report = ""
     if not direct_hit:
         full_prompt = (
             f"用户问题：{question}\n\n"
