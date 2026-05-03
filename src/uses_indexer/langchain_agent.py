@@ -402,6 +402,36 @@ def run_langchain_code_agent(
     }
 
 
+def _build_param_report(raw_hits: list[dict[str, Any]]) -> str:
+    """后端直接生成 Markdown 格式的完整参数清单，避免 LLM 压缩。"""
+    sections: list[str] = []
+    for h in raw_hits:
+        fp = h.get("full_params", {})
+        if not fp:
+            continue
+        name = h.get("procedure_name") or "N/A"
+        cn = h.get("chinese_name") or ""
+        oid = h.get("object_id") or "N/A"
+        lines = [f"## {name} (功能号: {oid})"]
+        if cn:
+            lines.append(f"**中文名：** {cn}")
+        for cat, label in (
+            ("input", "输入参数"),
+            ("output", "输出参数"),
+            ("internal", "内部参数"),
+            ("inout", "输入输出参数"),
+        ):
+            items = fp.get(cat)
+            if items:
+                lines.append(f"**{label}（共 {len(items)} 个）：**")
+                for item in items:
+                    lines.append(f"- `{item}`")
+            elif cat in ("input", "output"):
+                lines.append(f"**{label}：** 无")
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections) if sections else "*该功能暂无参数记录*"
+
+
 def _fetch_full_params(db_path: str, object_id: str) -> dict[str, list[str]]:
     """通过 object_id 从 params 表拉取完整参数列表，按 category 分组，返回紧凑格式。
 
@@ -499,37 +529,22 @@ def run_deep_analysis(
             "请直接回复用户：抱歉，在知识库中没有找到与该问题直接相关的知识，请检查您提问的内容是否正确。"
         )
     else:
-        # 将参数列表以文本形式展开，降低 LLM 遗漏概率
-        param_sections: list[str] = []
-        for idx, h in enumerate(raw_hits, 1):
-            fp = h.get("full_params", {})
-            if not fp:
-                continue
-            lines = [f"### 命中 #{idx} {h.get('procedure_name') or ''} (功能号: {h.get('object_id') or 'N/A'})"]
-            for cat in ("input", "output", "internal", "inout"):
-                items = fp.get(cat)
-                if items:
-                    lines.append(f"  {cat}: {', '.join(items)}")
-            param_sections.append("\n".join(lines))
-
-        params_text = "\n\n".join(param_sections)
+        # 后端直接生成参数清单（LLM 不可压缩）
+        param_report = _build_param_report(raw_hits)
 
         full_prompt = (
             f"用户问题：{question}\n\n"
             f"以下是通过 query_index 检索到的原始结果（共 {len(hits)} 条命中，展示前 {len(raw_hits)} 条）：\n\n"
             f"```json\n{hits_json}\n```\n\n"
-            "参数清单（从 params 表提取的完整列表，严禁省略）：\n\n"
-            f"{params_text}\n\n"
-            "请基于以上原始检索结果，整理成一份业务逻辑分析报告。\n\n"
-            "特别要求（严格遵守）：\n"
-            "1. 参数清单是业务分析的核心内容。必须完整列出每个功能的全部输入参数和输出参数，"
-            "绝对禁止自行判断哪些是'关键参数'或省略任何字段。\n"
-            "2. 使用上面'参数清单'中的数据：input 列表中的每一个参数名都必须出现在报告中，一个都不能少；"
-            "output 列表同理。禁止将参数列表概括为'等'或'其他参数'。\n"
-            "3. 如果 output 为空，明确写'输出参数：无'；如果 input 为空，明确写'输入参数：无'。\n"
-            "4. 下游调用链中的每个过程也必须列出完整的输入/输出参数。\n"
-            "5. 报告格式建议：按过程分节，每节包含功能号、中文名、输入参数（逐一列出）、输出参数（逐一列出）、"
-            "核心调用、读取/写入表、业务逻辑说明。"
+            "请基于以上原始检索结果，生成业务逻辑分析内容。\n\n"
+            "注意：参数清单已由后端系统单独生成，你不需要在回答中列出参数。"
+            "你只需要生成以下分析内容，用 Markdown 格式输出：\n"
+            "1. 每个功能的核心业务逻辑说明\n"
+            "2. 调用链分析（主入口调用了哪些下游过程，各过程的作用）\n"
+            "3. 数据表访问分析（读取/写入哪些表）\n"
+            "4. 关键业务分支和判断条件\n"
+            "5. 不确定的内容标注为'证据未覆盖'\n"
+            "禁止编造证据中没有的信息。"
         )
 
     # 4. 调用 LLM（临时增加 max_tokens，确保长 Prompt 下 report 不被截断）
@@ -552,9 +567,16 @@ def run_deep_analysis(
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
+    # 拼接后端参数清单 + LLM 业务分析
+    llm_content = llm_response.get("content", "")
+    if direct_hit and param_report:
+        full_report = f"# 参数清单\n\n{param_report}\n\n---\n\n# 业务逻辑分析\n\n{llm_content}"
+    else:
+        full_report = llm_content
+
     return {
         "response_kind": "agent_deep_analyze",
         "question": question,
-        "report": llm_response.get("content", ""),
+        "report": full_report,
         "elapsed_ms": elapsed_ms,
     }

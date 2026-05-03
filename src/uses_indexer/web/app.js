@@ -1761,20 +1761,31 @@ function updateComposerState() {
     if (sendBtn) sendBtn.disabled = false;
     if (cancelBtn) cancelBtn.classList.add('hidden');
     if (els.chatInput) {
+      // Prevent browser from auto-restoring focus to chatInput when disabled
+      // becomes false by moving focus to a temporary trap element first.
+      var trap = document.createElement('div');
+      trap.tabIndex = -1;
+      trap.style.position = 'fixed';
+      trap.style.opacity = '0';
+      trap.style.pointerEvents = 'none';
+      document.body.appendChild(trap);
+      trap.focus();
+
       els.chatInput.disabled = false;
-      // Force blur to eliminate the caret after the agent run finishes.
-      // Browsers may auto-restore focus when disabled becomes false.
-      // Use setTimeout instead of requestAnimationFrame for better reliability
-      // across different browsers and timing conditions.
+
+      // Remove trap and ensure chatInput is not focused.
       setTimeout(function() {
-        if (els.chatInput) els.chatInput.blur();
+        trap.remove();
+        if (els.chatInput && document.activeElement === els.chatInput) {
+          els.chatInput.blur();
+        }
       }, 50);
-      // Double-check after a longer delay in case the browser restores focus again.
+      // Second check as insurance.
       setTimeout(function() {
         if (els.chatInput && document.activeElement === els.chatInput) {
           els.chatInput.blur();
         }
-      }, 200);
+      }, 250);
     }
   }
 }

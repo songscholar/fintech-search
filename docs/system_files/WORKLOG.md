@@ -1275,3 +1275,37 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 - `web/app.js` 的 `updateComposerState`：
   - 第一次 `setTimeout(..., 50)`：在恢复 `disabled=false` 后延迟 blur。
   - 第二次 `setTimeout(..., 200)`：再次检查 `document.activeElement === els.chatInput`，如果浏览器恢复了焦点则再次 blur。
+
+
+### 阶段 49：后端直接生成参数清单 + 焦点陷阱修复光标
+
+#### 问题 1：LLM 持续压缩参数列表
+
+- 之前通过 Prompt 强指令要求 LLM 列出所有参数，但 LLM 仍会自行压缩（只显示 10 个）。
+- 根因：LLM 的训练倾向是"简洁回答"，长列表容易被压缩为"等"或省略。
+
+#### 修复 1：后端直接生成参数清单，与 LLM 分析拼接
+
+- `langchain_agent.py` 新增 `_build_param_report(raw_hits)`：
+  - 后端代码直接遍历 `full_params`，生成 Markdown 格式的参数清单。
+  - 按过程分节，每节包含功能号、中文名、输入参数（逐一列出，带反引号）、输出参数（逐一列出）。
+  - 参数清单完全由后端控制，LLM 无法压缩或省略。
+- `run_deep_analysis` 修改：
+  - Prompt 明确告知 LLM"参数清单已由后端系统单独生成，你不需要在回答中列出参数"。
+  - LLM 只负责生成业务逻辑分析（调用链、表访问、分支条件等）。
+  - 最终报告 = `# 参数清单` + `_build_param_report` 输出 + `---` + `# 业务逻辑分析` + LLM 输出。
+
+#### 问题 2：光标问题反复出现
+
+- `setTimeout` 双保险方案在某些情况下仍然无效。
+- 根因：浏览器在 `disabled=false` 时会自动将焦点恢复到之前 disabled 的元素。
+
+#### 修复 2：临时焦点陷阱元素
+
+- `web/app.js` 的 `updateComposerState`：
+  - 在设置 `disabled=false` 之前，创建一个临时的 `div` 元素（`tabIndex=-1`，透明、不可点击）。
+  - 调用 `trap.focus()` 将焦点强制移出 `chatInput`。
+  - 然后设置 `chatInput.disabled = false`。
+  - 50ms 后移除临时元素，并检查 `document.activeElement` 是否仍为 `chatInput`，如果是则再次 `blur()`。
+  - 250ms 后二次检查作为保险。
+- 原理：浏览器在 `disabled=false` 时不会自动恢复焦点到 `chatInput`，因为焦点已经明确在另一个元素上。
