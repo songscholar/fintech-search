@@ -402,6 +402,33 @@ def run_langchain_code_agent(
     }
 
 
+def _fetch_full_params(db_path: str, object_id: str) -> dict[str, list[str]]:
+    """通过 object_id 从 params 表拉取完整参数列表，按 category 分组，返回紧凑格式。
+
+    返回示例：{"input": ["a", "b"], "output": ["c"], "internal": ["d"]}
+    """
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT file_id FROM procedures WHERE object_id = ? LIMIT 1", (object_id,)
+            ).fetchone()
+            if not row:
+                return {}
+            file_id = row["file_id"]
+            params = conn.execute(
+                "SELECT param_id, category FROM params WHERE file_id = ? ORDER BY seq",
+                (file_id,),
+            ).fetchall()
+            result: dict[str, list[str]] = {}
+            for p in params:
+                cat = p["category"] or "unknown"
+                result.setdefault(cat, []).append(p["param_id"])
+            return result
+    except Exception:
+        return {}
+
+
 def run_deep_analysis(
     *,
     config,
@@ -439,6 +466,7 @@ def run_deep_analysis(
 
     # 3. 精简原始 hit，只保留 LLM 分析所需的字段，控制 Prompt 长度
     def _slim_hit(hit: dict[str, Any]) -> dict[str, Any]:
+        oid = str(hit.get("object_id") or "")
         slim: dict[str, Any] = {
             "procedure_name": hit.get("procedure_name"),
             "chinese_name": hit.get("chinese_name"),
@@ -446,6 +474,7 @@ def run_deep_analysis(
             "file_path": hit.get("file_path"),
             "matched_text": hit.get("matched_text"),
             "procedure_profile": hit.get("procedure_profile"),
+            "full_params": _fetch_full_params(db_path, oid) if oid else {},
         }
         ds = hit.get("downstream_evidence", [])
         slim["downstream_evidence"] = [
@@ -455,6 +484,7 @@ def run_deep_analysis(
                 "object_id": d.get("object_id"),
                 "procedure_profile": d.get("procedure_profile"),
                 "excerpt": (d.get("excerpt") or "")[:600],
+                "full_params": _fetch_full_params(db_path, str(d.get("object_id") or "")) if d.get("object_id") else {},
             }
             for d in ds[:6]
         ]
@@ -473,7 +503,13 @@ def run_deep_analysis(
             f"用户问题：{question}\n\n"
             f"以下是通过 query_index 检索到的原始结果（共 {len(hits)} 条命中，展示前 {len(raw_hits)} 条）：\n\n"
             f"```json\n{hits_json}\n```\n\n"
-            "请基于以上原始检索结果，整理成一份业务逻辑分析报告。"
+            "请基于以上原始检索结果，整理成一份业务逻辑分析报告。\n\n"
+            "特别要求：\n"
+            "1. 对于每个功能/过程，必须列出完整的输入参数（input）和输出参数（output）列表，"
+            "不要自行判断哪些是'关键'参数，所有参数都要列出。\n"
+            "2. 参数来源使用 JSON 中的 full_params 字段，而不是 procedure_profile 中的 primary_inputs/primary_outputs。\n"
+            "3. 如果某类参数（如 output）为空，请明确标注'无输出参数'。\n"
+            "4. 下游调用链中的过程也要列出其完整参数。"
         )
 
     # 4. 调用 LLM（临时增加 max_tokens，确保长 Prompt 下 report 不被截断）

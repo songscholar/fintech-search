@@ -1217,3 +1217,31 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 - `web/app.js` 的 `updateComposerState`：在 `isAgentRunning = false` 分支中，恢复 `disabled=false` 后，通过 `requestAnimationFrame` 延迟调用 `blur()`。
 - 确保在浏览器重绘周期后执行 blur，覆盖浏览器自动恢复焦点的行为。
 - 移除 `sendAgentRun` 中重复的 `blur()` 调用。
+
+
+### 阶段 47：完整入参/出参输出修复
+
+#### 问题
+
+- 用户查询功能号（如 333104）时，报告中只展示了 6 个输入参数，而实际有 22 个。
+- `procedure_profile.primary_inputs/primary_outputs` 是建库时启发式提取的，经常不完整（333104 的 `primary_outputs` 为空）。
+- LLM 无法自行判断哪些是"关键参数"，导致重要参数被遗漏。
+
+#### 修复
+
+- `langchain_agent.py` 新增 `_fetch_full_params(db_path, object_id)`：
+  - 通过 `procedures.object_id -> procedures.file_id -> params.file_id` 关联，从 `params` 表拉取完整参数。
+  - 按 `category`（input/output/internal）分组，返回紧凑格式 `{"input": ["a", "b"], "output": ["c"]}`。
+- `run_deep_analysis` 的 `_slim_hit()`：
+  - 为主 hit 注入 `full_params`。
+  - 为 downstream_evidence 的每个节点也注入 `full_params`。
+- Prompt 增加明确要求：
+  - 必须列出完整的输入/输出参数列表，不要自行判断"关键"参数。
+  - 参数来源使用 `full_params` 字段，而非 `procedure_profile.primary_inputs/primary_outputs`。
+  - 某类参数为空时明确标注"无输出参数"。
+  - 下游调用链中的过程也要列出完整参数。
+
+#### 效果
+
+- 333104 现在输出 22 个 input 参数 + 1 个 internal 参数。
+- Prompt JSON 长度约 42K 字符（紧凑格式），在 LLM 上下文限制内。
