@@ -499,17 +499,37 @@ def run_deep_analysis(
             "请直接回复用户：抱歉，在知识库中没有找到与该问题直接相关的知识，请检查您提问的内容是否正确。"
         )
     else:
+        # 将参数列表以文本形式展开，降低 LLM 遗漏概率
+        param_sections: list[str] = []
+        for idx, h in enumerate(raw_hits, 1):
+            fp = h.get("full_params", {})
+            if not fp:
+                continue
+            lines = [f"### 命中 #{idx} {h.get('procedure_name') or ''} (功能号: {h.get('object_id') or 'N/A'})"]
+            for cat in ("input", "output", "internal", "inout"):
+                items = fp.get(cat)
+                if items:
+                    lines.append(f"  {cat}: {', '.join(items)}")
+            param_sections.append("\n".join(lines))
+
+        params_text = "\n\n".join(param_sections)
+
         full_prompt = (
             f"用户问题：{question}\n\n"
             f"以下是通过 query_index 检索到的原始结果（共 {len(hits)} 条命中，展示前 {len(raw_hits)} 条）：\n\n"
             f"```json\n{hits_json}\n```\n\n"
+            "参数清单（从 params 表提取的完整列表，严禁省略）：\n\n"
+            f"{params_text}\n\n"
             "请基于以上原始检索结果，整理成一份业务逻辑分析报告。\n\n"
-            "特别要求：\n"
-            "1. 对于每个功能/过程，必须列出完整的输入参数（input）和输出参数（output）列表，"
-            "不要自行判断哪些是'关键'参数，所有参数都要列出。\n"
-            "2. 参数来源使用 JSON 中的 full_params 字段，而不是 procedure_profile 中的 primary_inputs/primary_outputs。\n"
-            "3. 如果某类参数（如 output）为空，请明确标注'无输出参数'。\n"
-            "4. 下游调用链中的过程也要列出其完整参数。"
+            "特别要求（严格遵守）：\n"
+            "1. 参数清单是业务分析的核心内容。必须完整列出每个功能的全部输入参数和输出参数，"
+            "绝对禁止自行判断哪些是'关键参数'或省略任何字段。\n"
+            "2. 使用上面'参数清单'中的数据：input 列表中的每一个参数名都必须出现在报告中，一个都不能少；"
+            "output 列表同理。禁止将参数列表概括为'等'或'其他参数'。\n"
+            "3. 如果 output 为空，明确写'输出参数：无'；如果 input 为空，明确写'输入参数：无'。\n"
+            "4. 下游调用链中的每个过程也必须列出完整的输入/输出参数。\n"
+            "5. 报告格式建议：按过程分节，每节包含功能号、中文名、输入参数（逐一列出）、输出参数（逐一列出）、"
+            "核心调用、读取/写入表、业务逻辑说明。"
         )
 
     # 4. 调用 LLM（临时增加 max_tokens，确保长 Prompt 下 report 不被截断）

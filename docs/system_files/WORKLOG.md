@@ -1245,3 +1245,33 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 
 - 333104 现在输出 22 个 input 参数 + 1 个 internal 参数。
 - Prompt JSON 长度约 42K 字符（紧凑格式），在 LLM 上下文限制内。
+
+
+### 阶段 48：完整入参/出参二次修复 + 光标问题再修复
+
+#### 问题 1：333004 仍只显示 10 个入参
+
+- 根因：LLM 在生成报告时仍然自行压缩参数列表，即使 Prompt 已明确要求列出所有参数。
+- `_fetch_full_params` 本身能正确返回全部 20 个 input 参数，问题出在 LLM 的生成行为。
+
+#### 修复 1：独立参数清单 + 更强指令
+
+- `run_deep_analysis` 在 Prompt 中新增独立的"参数清单"文本区块：
+  - 将 `full_params` 中的参数按 `input/output/internal/inout` 展开为 `### 命中 #N ...\n  input: a, b, c` 的纯文本格式。
+  - 参数清单放在 JSON 块之后，以独立区块呈现，降低 LLM 遗漏概率。
+- Prompt 指令强化：
+  - "参数清单是业务分析的核心内容，绝对禁止自行判断哪些是'关键参数'或省略任何字段"
+  - "input 列表中的每一个参数名都必须出现在报告中，一个都不能少"
+  - "禁止将参数列表概括为'等'或'其他参数'"
+  - 明确报告格式建议：按过程分节，每节包含功能号、中文名、输入参数（逐一列出）、输出参数（逐一列出）...
+
+#### 问题 2：回答完成后光标再次出现
+
+- 之前的 `requestAnimationFrame` 方案在某些情况下不够可靠。
+- 浏览器在 `disabled=false` 后可能自动恢复焦点，导致光标重新出现。
+
+#### 修复 2：setTimeout 双保险
+
+- `web/app.js` 的 `updateComposerState`：
+  - 第一次 `setTimeout(..., 50)`：在恢复 `disabled=false` 后延迟 blur。
+  - 第二次 `setTimeout(..., 200)`：再次检查 `document.activeElement === els.chatInput`，如果浏览器恢复了焦点则再次 blur。

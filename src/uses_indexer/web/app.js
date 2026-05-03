@@ -1764,9 +1764,17 @@ function updateComposerState() {
       els.chatInput.disabled = false;
       // Force blur to eliminate the caret after the agent run finishes.
       // Browsers may auto-restore focus when disabled becomes false.
-      requestAnimationFrame(function() {
+      // Use setTimeout instead of requestAnimationFrame for better reliability
+      // across different browsers and timing conditions.
+      setTimeout(function() {
         if (els.chatInput) els.chatInput.blur();
-      });
+      }, 50);
+      // Double-check after a longer delay in case the browser restores focus again.
+      setTimeout(function() {
+        if (els.chatInput && document.activeElement === els.chatInput) {
+          els.chatInput.blur();
+        }
+      }, 200);
     }
   }
 }
