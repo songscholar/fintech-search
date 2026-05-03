@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import mimetypes
 import time
@@ -10,6 +11,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .agent_gateway import AgentConfigError, AgentGateway, AgentRequestError
+from .agent_loop import ConfirmationManager
+from .builtin_tools import create_builtin_file_source
+from .mcp_client_manager import McpClientManager, McpServerConfig
+from .skill_manager import SkillManager
+from .tool_registry import ToolRegistry, ToolSource
 from .answering import CodebaseAnswerer
 from .debug_bundle import (
     DebugBundlePanelThresholds,
@@ -43,6 +49,7 @@ from .logging_system import (
     new_trace_id,
     sanitize_payload,
 )
+from .mcp_server import CodebaseMcpServer
 from .qa import CodebaseQA
 
 WEB_DIR = Path(__file__).with_name("web")
@@ -59,6 +66,7 @@ WEB_ASSET_PATHS = {
     "/assets/marked.esm.js": WEB_DIR / "marked.esm.js",
     "/assets/highlight.min.js": WEB_DIR / "highlight.min.js",
     "/assets/site-utils.js": WEB_DIR / "site-utils.js",
+    "/assets/agent-commands.js": WEB_DIR / "agent-commands.js",
     "/assets/rain-effect.js": WEB_DIR / "rain-effect.js",
     "/assets/fonts/fonts.css": WEB_DIR / "fonts" / "fonts.css",
     "/assets/bg.png": _DEFAULT_BG_PATH,
@@ -137,6 +145,10 @@ class ApiError(Exception):
         self.message = message
 
 
+def _parse_route(path: str) -> str:
+    return urlparse(path).path
+
+
 class CodebaseApi:
     def __init__(
         self,
@@ -156,9 +168,202 @@ class CodebaseApi:
         self.default_db_path = str(default_db_path) if default_db_path else None
         self.default_metadata_db_path = str(default_metadata_db_path) if default_metadata_db_path else None
         self.default_table_db_path = str(default_table_db_path) if default_table_db_path else None
+        self._skills_dir = _PROJECT_ROOT / "skills"
+        self._commands_cache: list[dict[str, Any]] | None = None
+        self.confirmation_manager = ConfirmationManager()
+        self.mcp_server = CodebaseMcpServer(
+            indexer=self.indexer,
+            qa=self.qa,
+            answerer=self.answerer,
+            default_db_path=self.default_db_path,
+            default_metadata_db_path=self.default_metadata_db_path,
+            default_table_db_path=self.default_table_db_path,
+        )
+        # Dynamic tool registry
+        self.tool_registry = ToolRegistry()
+        self.tool_registry.register_source(create_builtin_file_source())
+        self._register_uses_mcp_source()
+        self._register_analyze_source()
+
+        # MCP client manager for external servers
+        self.mcp_client_manager = McpClientManager(self.tool_registry)
+        self._mcp_initialized = False
+
+        # Skill manager for local + remote skills
+        self.skill_manager = SkillManager()
+
+    def _register_uses_mcp_source(self) -> None:
+        """Wrap the internal CodebaseMcpServer as a ToolSource in the registry."""
+        mcp_defs = self.mcp_server._tool_definitions()
+        # Convert MCP definitions (inputSchema) to ToolSource format (parameters)
+        normalized = []
+        for d in mcp_defs:
+            normalized.append({
+                "name": d.get("name", ""),
+                "description": d.get("description", ""),
+                "parameters": d.get("inputSchema", {"type": "object", "properties": {}}),
+            })
+        source = ToolSource(
+            name="uses",
+            prefix="uses__",
+            definitions=normalized,
+            execute=self._execute_uses_tool,
+        )
+        self.tool_registry.register_source(source)
+
+    async def _execute_uses_tool(self, name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
+        """Execute a tool on the internal CodebaseMcpServer."""
+        rpc_message = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+        try:
+            response = self.mcp_server.handle_message(rpc_message)
+        except Exception as exc:
+            return f"MCP tool error: {exc}", True
+        if response is None:
+            return "工具无响应", True
+        result_part = response.get("result")
+        if isinstance(result_part, dict):
+            is_error = bool(result_part.get("isError", False))
+            content = result_part.get("content", [])
+            if isinstance(content, list) and content:
+                text = content[0].get("text", "")
+                if text:
+                    return text, is_error
+            structured = result_part.get("structuredContent")
+            if structured:
+                import json as _json
+                return _json.dumps(structured, ensure_ascii=False, indent=2), is_error
+            return str(result_part), is_error
+        return str(response), False
+
+    def _register_analyze_source(self) -> None:
+        """Register the business analysis pipeline as a ToolSource."""
+        definitions = [
+            {
+                "name": "business_query",
+                "description": (
+                    "业务知识深度分析。当用户询问业务逻辑、功能号、代码流程、表结构、调用链等业务相关问题时，"
+                    "必须使用此工具获取答案。它会自动完成检索、证据组装和回答生成的完整流水线。"
+                    "参数：question（必填，用户的业务问题），db_path（可选，数据库路径）。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "用户的业务问题",
+                        },
+                        "db_path": {
+                            "type": "string",
+                            "description": "可选的数据库路径，默认使用服务端配置的索引库",
+                        },
+                    },
+                    "required": ["question"],
+                    "additionalProperties": False,
+                },
+            },
+        ]
+        source = ToolSource(
+            name="analyze",
+            prefix="analyze__",
+            definitions=definitions,
+            execute=self._execute_analyze_tool,
+        )
+        self.tool_registry.register_source(source)
+
+    async def _execute_analyze_tool(self, name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
+        """Execute the business analysis pipeline."""
+        if name != "business_query":
+            return f"Unknown analyze tool: {name}", True
+        question = arguments.get("question", "")
+        if not question:
+            return "缺少 question 参数", True
+        db_path = self._resolve_db_path(arguments.get("db_path"))
+        try:
+            result = self.agent_gateway.analyze(
+                db_path=db_path,
+                question=question,
+            )
+        except AgentConfigError as exc:
+            return f"分析配置错误: {exc}", True
+        except AgentRequestError as exc:
+            return f"分析请求失败: {exc}", True
+        except Exception as exc:
+            return f"分析异常: {exc}", True
+        # Format the result
+        if isinstance(result, dict):
+            report = result.get("report", "")
+            if report:
+                wrapped = (
+                    "【以下报告已由代码库深度检索引擎自动生成，请直接将该报告完整呈现给用户，"
+                    "不要进行额外摘要、压缩或重新组织，保留所有细节。】\n\n"
+                    f"{report}"
+                )
+                return wrapped, False
+            answer = result.get("answer", "")
+            if answer:
+                return answer, False
+            return json.dumps(result, ensure_ascii=False, indent=2), False
+        return str(result), False
+
+    def _build_command_list(self) -> list[dict[str, Any]]:
+        if self._commands_cache is not None:
+            return self._commands_cache
+        commands: list[dict[str, Any]] = [
+            {"name": "/clear", "label": "清空会话", "description": "清空当前对话历史", "type": "local", "category": "general", "requiresArg": False},
+            {"name": "/providers", "label": "查看模型", "description": "列出可用的 LLM 模型提供商", "type": "local", "category": "general", "requiresArg": False},
+            {"name": "/help", "label": "帮助", "description": "显示所有可用命令和技能", "type": "local", "category": "general", "requiresArg": False},
+        ]
+        if self._skills_dir.is_dir():
+            for skill_dir in sorted(self._skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                if not skill_md.is_file():
+                    continue
+                frontmatter = _parse_skill_frontmatter(skill_md.read_text(encoding="utf-8"))
+                skill_name = frontmatter.get("name") or skill_dir.name
+                description = frontmatter.get("description", "")
+                label = frontmatter.get("label") or description.split(".")[0].split("，")[0] or skill_name
+                commands.append({
+                    "name": f"/{skill_name}",
+                    "label": label,
+                    "description": frontmatter.get("description", ""),
+                    "type": "prompt",
+                    "category": frontmatter.get("category", "skills"),
+                    "requiresArg": bool(frontmatter.get("requiresArg", True)),
+                    "skillFile": str(skill_md.relative_to(_PROJECT_ROOT)),
+                })
+        self._commands_cache = commands
+        return commands
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000) -> None:
         server = ThreadingHTTPServer((host, port), make_handler_class(self))
+
+        # Auto-connect MCP servers from .mcp.json
+        if not self._mcp_initialized:
+            self._mcp_initialized = True
+            try:
+                connected = asyncio.run(
+                    self.mcp_client_manager.connect_from_config()
+                )
+                if connected:
+                    log_system(
+                        "mcp_auto_connect",
+                        context={"servers": connected},
+                    )
+                    print(f"Connected MCP servers: {', '.join(connected)}")
+            except Exception as exc:
+                log_error(
+                    event="mcp_auto_connect_failed",
+                    message=str(exc),
+                    exc=exc,
+                )
+
         log_system(
             "api_server_start",
             host=host,
@@ -171,6 +376,11 @@ class CodebaseApi:
             print(f"USES Indexer API listening on http://{host}:{port}")
             server.serve_forever()
         finally:
+            # Shutdown MCP connections
+            try:
+                asyncio.run(self.mcp_client_manager.shutdown_all())
+            except Exception:
+                pass
             log_system(
                 "api_server_stop",
                 host=host,
@@ -203,13 +413,28 @@ class CodebaseApi:
                     "GET /ui",
                     "GET /health",
                     "GET /db-summary",
+                    "GET /browse",
+                    "GET /file",
                     "POST /query",
                     "POST /evidence",
                     "POST /ask",
                     "POST /answer",
                     "GET /agent/providers",
+                    "GET /agent/commands",
+                    "GET /agent/tools",
+                    "POST /agent/tool-call",
                     "POST /agent/chat",
                     "POST /agent/analyze",
+                    "POST /agent/run",
+                    "POST /agent/tool-confirm",
+                    "GET /agent/mcp/servers",
+                    "POST /agent/mcp/connect",
+                    "POST /agent/mcp/disconnect",
+                    "POST /agent/mcp/reconnect",
+                    "GET /agent/skills",
+                    "GET /agent/skills/search",
+                    "POST /agent/skills/install",
+                    "POST /agent/skills/uninstall",
                     "POST /debug-bundle",
                     "POST /compare-debug-bundles",
                     "POST /compare-debug-bundle-panel",
@@ -252,6 +477,18 @@ class CodebaseApi:
         if route.startswith("/docs/") and method == "GET":
             doc_name = route[len("/docs/"):]
             return HTTPStatus.OK, _read_doc(doc_name)
+
+        if route == "/browse" and method == "GET":
+            base = query_params.get("base", [None])[0]
+            sub = query_params.get("path", [""])[0]
+            target = _resolve_browse_path(base, sub)
+            return HTTPStatus.OK, _browse_directory(target)
+
+        if route == "/file" and method == "GET":
+            base = query_params.get("base", [None])[0]
+            sub = query_params.get("path", [""])[0]
+            target = _resolve_browse_path(base, sub)
+            return HTTPStatus.OK, _read_source_file(target)
 
         if route == "/query" and method == "POST":
             payload = self._parse_json_body(body)
@@ -317,6 +554,135 @@ class CodebaseApi:
                 raise ApiError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
             except LlmRequestError as exc:
                 raise ApiError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+            return HTTPStatus.OK, result
+
+        if route == "/agent/commands" and method == "GET":
+            return HTTPStatus.OK, {"commands": self._build_command_list()}
+
+        if route == "/agent/tools" and method == "GET":
+            tools = self.tool_registry.get_all_tools_info()
+            return HTTPStatus.OK, {"tools": tools}
+
+        if route == "/agent/tool-call" and method == "POST":
+            payload = self._parse_json_body(body)
+            tool_name = self._require_string(payload, "tool_name")
+            arguments = payload.get("arguments", {})
+            if not isinstance(arguments, dict):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "arguments must be an object")
+            started_at = time.perf_counter()
+            try:
+                result_text, is_error = asyncio.get_event_loop().run_until_complete(
+                    self.tool_registry.execute_tool(tool_name, arguments)
+                )
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                try:
+                    result_text, is_error = loop.run_until_complete(
+                        self.tool_registry.execute_tool(tool_name, arguments)
+                    )
+                finally:
+                    loop.close()
+            except Exception as exc:
+                raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"Tool execution error: {exc}") from exc
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
+            return HTTPStatus.OK, {
+                "tool_name": tool_name,
+                "result": result_text,
+                "is_error": is_error,
+                "latency_ms": latency_ms,
+            }
+
+        if route == "/agent/tool-confirm" and method == "POST":
+            payload = self._parse_json_body(body)
+            call_id = self._require_string(payload, "call_id")
+            decision = self._require_string(payload, "decision")
+            if decision not in ("allow", "allow_always", "deny"):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "decision must be 'allow', 'allow_always', or 'deny'")
+            found = self.confirmation_manager.resolve_confirmation(call_id, decision)
+            if decision == "allow_always":
+                tool_name = str(payload.get("tool_name", ""))
+                if tool_name:
+                    self.confirmation_manager.set_auto_rules({tool_name: "allow"})
+            return HTTPStatus.OK, {"ok": True, "found": found}
+
+        # MCP server management endpoints
+        if route == "/agent/mcp/servers" and method == "GET":
+            return HTTPStatus.OK, {"servers": self.mcp_client_manager.list_servers()}
+
+        if route == "/agent/mcp/connect" and method == "POST":
+            payload = self._parse_json_body(body)
+            name = self._require_string(payload, "name")
+            transport = self._require_string(payload, "transport")
+            if transport not in ("stdio", "sse"):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "transport must be 'stdio' or 'sse'")
+            config = McpServerConfig(
+                name=name,
+                transport=transport,
+                command=payload.get("command"),
+                args=payload.get("args"),
+                env=payload.get("env"),
+                url=payload.get("url"),
+                headers=payload.get("headers"),
+                enabled=payload.get("enabled", True),
+                auto_restart=payload.get("auto_restart", True),
+            )
+            try:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(self.mcp_client_manager.connect_server(config))
+            except RuntimeError:
+                asyncio.run(self.mcp_client_manager.connect_server(config))
+            return HTTPStatus.OK, {"ok": True, "server": name}
+
+        if route == "/agent/mcp/disconnect" and method == "POST":
+            payload = self._parse_json_body(body)
+            name = self._require_string(payload, "name")
+            try:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(self.mcp_client_manager.disconnect_server(name))
+            except RuntimeError:
+                asyncio.run(self.mcp_client_manager.disconnect_server(name))
+            return HTTPStatus.OK, {"ok": True, "server": name}
+
+        if route == "/agent/mcp/reconnect" and method == "POST":
+            payload = self._parse_json_body(body)
+            name = self._require_string(payload, "name")
+            try:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(self.mcp_client_manager.reconnect_server(name))
+            except RuntimeError:
+                asyncio.run(self.mcp_client_manager.reconnect_server(name))
+            return HTTPStatus.OK, {"ok": True, "server": name}
+
+        # Skills management endpoints
+        if route == "/agent/skills" and method == "GET":
+            return HTTPStatus.OK, {"skills": self.skill_manager.list_skills()}
+
+        if route == "/agent/skills/search" and method == "GET":
+            query_str = urlparse(path).query
+            query = str(parse_qs(query_str).get("q", [""])[0])
+            if not query:
+                return HTTPStatus.OK, {"results": []}
+            try:
+                loop = asyncio.get_event_loop()
+                results = loop.run_until_complete(self.skill_manager.search_remote(query))
+            except RuntimeError:
+                results = asyncio.run(self.skill_manager.search_remote(query))
+            return HTTPStatus.OK, {"results": results}
+
+        if route == "/agent/skills/install" and method == "POST":
+            payload = self._parse_json_body(body)
+            skill_id = self._require_string(payload, "skill_id")
+            try:
+                loop = asyncio.get_event_loop()
+                result = loop.run_until_complete(self.skill_manager.install_skill(skill_id))
+            except RuntimeError:
+                result = asyncio.run(self.skill_manager.install_skill(skill_id))
+            return HTTPStatus.OK, result
+
+        if route == "/agent/skills/uninstall" and method == "POST":
+            payload = self._parse_json_body(body)
+            skill_id = self._require_string(payload, "skill_id")
+            result = self.skill_manager.uninstall_skill(skill_id)
             return HTTPStatus.OK, result
 
         if route == "/agent/providers" and method == "GET":
@@ -680,10 +1046,10 @@ class CodebaseApi:
                 baseline_dir=baseline_dir,
             )
 
-        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/agent/analyze", "/client-log", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
+        if route in {"/query", "/evidence", "/ask", "/answer", "/agent/chat", "/agent/analyze", "/agent/run", "/agent/tool-confirm", "/agent/mcp/connect", "/agent/mcp/disconnect", "/agent/mcp/reconnect", "/agent/skills/install", "/agent/skills/uninstall", "/client-log", "/debug-bundle", "/compare-debug-bundles", "/compare-debug-bundle-panel", "/compare-debug-bundle-panels", "/save-debug-bundle-panel-baseline", "/promote-debug-bundle-panel-baseline", "/evaluate-debug-bundle-panel-promotion-gate", "/run-debug-bundle-panel-release-workflow", "/compare-debug-bundle-panel-release-workflows", "/compare-debug-bundle-panel-baseline", "/compare-debug-bundle-panel-latest-baseline", "/delete-debug-bundle-panel-baseline"} and method != "POST":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports POST")
 
-        if route in {"/agent/providers", "/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow", "/docs"} and method != "GET":
+        if route in {"/agent/providers", "/agent/commands", "/agent/tools", "/agent/mcp/servers", "/agent/skills", "/agent/skills/search", "/browse", "/file", "/list-debug-bundle-panel-baselines", "/show-debug-bundle-panel-baseline", "/show-debug-bundle-panel-baseline-trend", "/list-debug-bundle-panel-release-workflows", "/show-debug-bundle-panel-release-workflow", "/docs"} and method != "GET":
             raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, f"{route} only supports GET")
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"Unknown route: {route}")
@@ -762,6 +1128,11 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
                 length = int(self.headers.get("Content-Length", "0"))
                 body = self.rfile.read(length) if length > 0 else b""
 
+            # SSE endpoint for agent loop — streams events directly
+            if self.command == "POST" and _parse_route(self.path) == "/agent/run":
+                self._dispatch_agent_run(body, trace_id)
+                return
+
             request_payload = _decode_request_body(body)
             error_payload = None
             try:
@@ -825,6 +1196,101 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
             self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Cache-Control", "no-store, max-age=0")
+
+        def _dispatch_agent_run(self, body: bytes, trace_id: str) -> None:
+            """SSE endpoint: POST /agent/run — streams agent loop events."""
+            from .agent_loop import AgentLoopConfig, AgentLoopRunner
+
+            started_at = time.perf_counter()
+            try:
+                payload = json.loads(body.decode("utf-8")) if body else {}
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                self.send_response(HTTPStatus.BAD_REQUEST)
+                self._write_common_headers(content_type="application/json; charset=utf-8", content_length=0)
+                self.end_headers()
+                return
+
+            message = payload.get("message", "")
+            if not isinstance(message, str) or not message.strip():
+                self.send_response(HTTPStatus.BAD_REQUEST)
+                self._write_common_headers(content_type="application/json; charset=utf-8", content_length=0)
+                self.end_headers()
+                return
+
+            provider_name = payload.get("provider")
+            history = payload.get("history")
+            context_mode = payload.get("context_mode", "codebase")
+            system_prompt = payload.get("system_prompt")
+            max_iterations = int(payload.get("max_iterations", 10))
+            if not isinstance(history, list):
+                history = None
+
+            # Resolve provider config
+            try:
+                config = api.agent_gateway._resolve_provider(provider_name, None)
+            except AgentConfigError as exc:
+                self.send_response(HTTPStatus.BAD_REQUEST)
+                encoded = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                self._write_common_headers(content_type="application/json; charset=utf-8", content_length=len(encoded))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+
+            loop_config = AgentLoopConfig(max_iterations=max(1, min(max_iterations, 20)))
+            runner = AgentLoopRunner(
+                gateway_config=config,
+                tool_registry=api.tool_registry,
+                config=loop_config,
+                confirmation_manager=api.confirmation_manager,
+            )
+
+            # Write SSE headers
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("X-Trace-Id", trace_id)
+            self.end_headers()
+
+            total_events = 0
+            try:
+                for event in runner.run(
+                    user_message=message.strip(),
+                    history=history,
+                    context_mode=context_mode,
+                    system_prompt_override=system_prompt,
+                ):
+                    event_json = json.dumps(event, ensure_ascii=False)
+                    event_type = event.get("type", "message")
+                    sse_line = f"event: {event_type}\ndata: {event_json}\n\n"
+                    self.wfile.write(sse_line.encode("utf-8"))
+                    self.wfile.flush()
+                    total_events += 1
+            except Exception as exc:
+                log_error(
+                    event="agent_run_stream_error",
+                    message=str(exc),
+                    exc=exc,
+                    trace_id=trace_id,
+                    context={"provider": config.name, "message": message[:200]},
+                )
+                error_event = json.dumps({"type": "error", "message": f"Agent 运行错误: {exc}"}, ensure_ascii=False)
+                self.wfile.write(f"event: error\ndata: {error_event}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            log_business(
+                "agent_run",
+                provider=config.name,
+                model=config.model,
+                base_url=config.base_url,
+                message=message[:200],
+                elapsed_ms=elapsed_ms,
+                total_events=total_events,
+                context_mode=context_mode,
+                trace_id=trace_id,
+            )
 
     return ApiHandler
 
@@ -936,6 +1402,21 @@ def _coerce_named_int_mapping(value: Any, field_name: str) -> dict[str, int] | N
     return result
 
 
+def _parse_skill_frontmatter(content: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    if not content.startswith("---"):
+        return fields
+    end = content.find("---", 3)
+    if end < 0:
+        return fields
+    for line in content[3:end].strip().splitlines():
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        fields[key.strip()] = value.strip().strip('"').strip("'")
+    return fields
+
+
 def _resolve_web_response(path: str) -> tuple[int, str, bytes] | None:
     parsed = urlparse(path)
     route = parsed.path
@@ -953,6 +1434,13 @@ def _resolve_web_response(path: str) -> tuple[int, str, bytes] | None:
         font_path = WEB_DIR / "fonts" / font_name
         if font_path.exists():
             return _read_static_file(font_path)
+    if route.startswith("/assets/"):
+        rel = route[len("/assets/"):]
+        if ".." in rel:
+            return None
+        asset_path = WEB_DIR / rel
+        if asset_path.exists() and asset_path.is_file():
+            return _read_static_file(asset_path)
     return None
 
 
@@ -966,3 +1454,47 @@ def _read_static_file(path: Path) -> tuple[int, str, bytes]:
     if content_type.startswith("text/") or content_type in {"application/javascript", "application/json"}:
         content_type = f"{content_type}; charset=utf-8"
     return HTTPStatus.OK, content_type, payload
+
+
+def _resolve_browse_path(base: str | None, sub: str) -> Path:
+    if base:
+        root = Path(base).expanduser().resolve()
+    else:
+        root = Path("/Users/songzuoqiang/Documents/agent/code")
+    if ".." in sub:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Invalid path")
+    target = (root / sub).resolve()
+    # Security: ensure target is under root
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ApiError(HTTPStatus.FORBIDDEN, "Path traversal detected") from exc
+    return target
+
+
+def _browse_directory(target: Path) -> dict[str, object]:
+    if not target.exists():
+        raise ApiError(HTTPStatus.NOT_FOUND, f"Path not found: {target}")
+    if target.is_file():
+        return {"type": "file", "path": str(target), "name": target.name}
+    entries: list[dict[str, str]] = []
+    for p in sorted(target.iterdir()):
+        if p.name.startswith("."):
+            continue
+        entries.append({
+            "name": p.name,
+            "path": str(p),
+            "rel": str(p.relative_to(target.parent if p.parent == target else target)),
+            "kind": "dir" if p.is_dir() else "file",
+        })
+    return {"type": "directory", "path": str(target), "name": target.name, "entries": entries}
+
+
+def _read_source_file(target: Path) -> dict[str, object]:
+    if not target.exists() or not target.is_file():
+        raise ApiError(HTTPStatus.NOT_FOUND, f"File not found: {target}")
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        content = target.read_bytes().decode("utf-8", errors="replace")
+    return {"path": str(target), "name": target.name, "content": content}

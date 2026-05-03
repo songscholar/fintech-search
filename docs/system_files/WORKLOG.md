@@ -977,3 +977,146 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 - 不要自己精简/过滤 `query_index` 结果：`_slim_*` 反而丢失信息。
 - Prompt 不要僵化模板：六章模板导致"证据未覆盖"堆砌。
 - 代码检索（`/query`）与智能助手（`/agent/analyze`）互补而非替代：检索提供毫秒级一手证据，助手提供 LLM 深度解读。
+
+### 阶段 42：Agent Loop 二次提炼修复
+
+#### 问题
+
+- 业务问题走 `/agent/run` → `analyze__business_query` → `run_deep_analysis` 时，`run_deep_analysis` 生成的 report 本身是详细的（约 3500+ 字符）。
+- 但 report 作为 tool result 回传给 Agent Loop 后，第二轮 LLM 会习惯性地做摘要/压缩，导致用户看到的最终输出丢失了输入输出参数、表访问细节、配置项等。
+
+#### 修复
+
+- `api.py` 的 `_execute_analyze_tool` 在返回 report 前增加前缀指令：
+  ```
+  【以下报告已由代码库深度检索引擎自动生成，请直接将该报告完整呈现给用户，
+  不要进行额外摘要、压缩或重新组织，保留所有细节。】
+  ```
+- 验证：直接调用 `/agent/tool-call` 测试 `analyze__business_query`，返回结果包含前缀指令，report 长度 3551 字符，内容完整。
+
+
+## 2026-05-02
+
+### 前端增强：Browse & Evaluation Center
+
+#### 背景
+在完成基础字段映射修复和静态文件服务加固后，继续推进 5 大特性中的 2 个核心面板：**文件浏览 (Browse)** 和 **评测中心 (Evaluation Center)**。
+
+#### 改动清单
+
+1. **browse.js — 代码库文件浏览面板**
+   - 新建 `src/uses_indexer/web/browse.js`
+   - 适配后端已有 `GET /browse` 和 `GET /file` 接口
+   - 实现目录树递归浏览、面包屑导航、文件预览（自动语法高亮）
+   - Fallback 策略：当 `/browse` 不可用时，从 `/query` 或 `/db-summary` 结果构造目录结构
+   - 导出 `window.__browse` 对象，供 HTML `onclick` 调用
+
+2. **evaluation.js — 评测中心**
+   - 新建 `src/uses_indexer/web/evaluation.js`
+   - 匹配后端 debug bundle panel 系列接口的精确参数名：
+     - `POST /compare-debug-bundle-panel`（`before_db_path`, `after_db_path`, `cases_path`, `limit`, `context_window`, `related_limit`）
+     - `POST /save-debug-bundle-panel-baseline`
+     - `POST /promote-debug-bundle-panel-baseline`
+     - `POST /run-debug-bundle-panel-release-workflow`
+     - `POST /evaluate-debug-bundle-panel-promotion-gate`
+     - `POST /delete-debug-bundle-panel-baseline`
+     - `GET /list-debug-bundle-panel-baselines`
+   - 三大 Tab：A/B 对比、基线管理、发布工作流
+   - Markdown → HTML 简易渲染（支持标题、粗体、斜体、行内代码）
+   - 导出 `window.__eval` 对象
+
+3. **样式补充**
+   - `styles.css` 追加 `browse-*` 和 `eval-*` 系列样式
+   - 支持响应式：browse 布局在 <900px 下自动折叠为单列
+
+4. **api.py 路由完善**
+   - 路由文档列表补充 `"GET /browse"` 和 `"GET /file"`
+   - METHOD_NOT_ALLOWED 检查补充 `/browse` 和 `/file`（仅 GET）
+
+5. **index.html 加载**
+   - `<script src="/assets/browse.js?v=1">`
+   - `<script src="/assets/evaluation.js?v=1">`
+   - 导航栏已有 `文件浏览` 和 `评测中心` 入口（data-view="browse" / "evaluation"）
+
+#### 验证结果
+
+- **静态文件服务**：`curl /assets/browse.js` 和 `/assets/evaluation.js` 返回正确内容
+- **Browse API**：`GET /browse?path=` 返回 `{type:"directory", entries:[...kind:"dir"/"file"]}`
+- **File API**：`GET /file?path=uarg_codes/project.xml` 返回 `{name, content}`
+- **Evaluation API**：
+  - `GET /list-debug-bundle-panel-baselines` → `{count:0, items:[]}`（空基线正常）
+  - `POST /compare-debug-bundle-panel` → 因 `uses_codes_index.db` 缺少 `edges` 表报错（数据库差异，非接口问题）
+- **服务器重启**：`serve-api` 在 8000 端口正常运行，health 检查通过
+
+#### 待办
+
+- 为 `compare-debug-bundle-panel` 准备一套完整的 before/after DB（都含 edges 表）以做端到端回归测试
+- 基线列表目前为空，待积累真实 baseline 后验证 card 渲染
+- 删除 baseline 的后端接口已暴露，前端已接入，待积累数据后验证
+
+
+### 2026-05-02 续 — Hook 加载时序修复
+
+#### 问题
+`app.js` 以 `type="module"` 加载（deferred），而 `enhancements.js` 是普通脚本（blocking）。
+当 enhancements.js 在 IIFE 顶层尝试 `const origRunQuery = window.runQuery` 时，`app.js` 尚未执行，`window.runQuery` 为 `undefined`，导致所有 hook（搜索历史、URL 同步）全部失效。
+
+#### 修复
+- 将 hook 逻辑从 IIFE 顶层移入 `init()` 函数中
+- 增加 `__enhanced` 标记，防止重复 hook
+- 确保 `hookAppFunctions()` 在 `DOMContentLoaded` 之后调用，此时 deferred module 已执行完毕
+
+#### 验证
+- `node --check` 通过全部 4 个 JS 文件（app.js / enhancements.js / browse.js / evaluation.js）
+- 服务器 health 检查正常，API `/query` / `/browse` / `/file` 响应正确
+
+
+### 2026-05-02 续 — Code Visualization (调用链图形化)
+
+#### 实现
+新建 `src/uses_indexer/web/code-viz.js`，为 evidence 块提供调用链与表访问关系的交互式 SVG 可视化。
+
+1. **数据建模** (`buildGraph`)
+   - 中心节点：当前证据块的 `procedure_name`
+   - 上游节点：`incoming_callers` + `incoming_caller_edges`
+   - 下游节点：`outgoing_calls` + `outgoing_call_edges`
+   - 表节点：`related_tables`
+   - 动作节点：`related_actions`
+
+2. **布局引擎** (`layoutGraph`)
+   - 水平分层：上游在左，下游在右，表在下，动作在上
+   - 自适应间距，避免节点重叠
+
+3. **SVG 渲染** (`renderSVG`)
+   - 零外部依赖，原生 SVG + DOM API
+   - 节点：圆角矩形 + 标签 + tooltip（完整 meta JSON）
+   - 边：贝塞尔曲线 + 箭头标记 + 关系标签
+   - 五种颜色区分节点类型（root/incoming/outgoing/table/action）
+
+4. **交互**
+   - 鼠标滚轮缩放（0.3x ~ 3x）
+   - 拖拽平移
+   - 悬停显示 tooltip（节点全称 + 边元数据）
+
+5. **UI 集成**
+   - 每个 evidence `.result-item` 自动添加「📊 调用图」按钮
+   - 点击打开全屏 Modal overlay（毛玻璃背景）
+   - 顶部图例说明五种节点颜色含义
+   - 底部提示操作方式
+
+6. **样式**
+   - `styles.css` 追加 `.code-viz-modal`、`.code-viz-panel`、`.code-viz-legend` 等系列样式
+   - 暗色主题适配，与现有玻璃拟态风格一致
+
+#### 验证
+- `node --check` 通过
+- 静态文件 `/assets/code-viz.js?v=1` 返回正确（14,076 B）
+- `buildGraph` + `layoutGraph` 纯数据逻辑在 node 中验证通过：
+  - 7 个节点（1 root + 2 incoming + 1 outgoing + 2 table + 1 action）
+  - 6 条边，方向与类型正确
+- 服务器 health 检查正常
+
+#### 设计取舍
+- **不做 force-directed 布局**：力导向图在节点数少时反而抖动，分层树更稳定、语义更清晰
+- **不做 D3/Cytoscape 依赖**：保持零外部依赖，原生 SVG 足以覆盖当前场景
+- **暂不渲染 multi_hop 关系**：避免图过于复杂；单跳调用链已覆盖 90% 分析场景

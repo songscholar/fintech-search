@@ -32,6 +32,10 @@
   - `agent_gateway.py` 和 `llm.py` 的 `_extract_content()` 增加对 `message.reasoning_content` 的提取 fallback。
   - 兼容 kimi-for-coding 返回空 `content` 但带 `reasoning_content` 的场景。
 
+- **Agent Loop 二次提炼修复**
+  - `api.py` 的 `_execute_analyze_tool` 在返回 report 前增加前缀指令，要求 LLM 直接完整呈现业务分析报告，不要进行额外摘要或压缩。
+  - 解决 `/agent/run` 走 Agent Loop 时，报告被第二轮 LLM 压缩导致输入输出参数、表访问等细节丢失的问题。
+
 - **文档目录重组**
   - 原 `docs/` 根目录文件分类移至 `docs/system_files/` 和 `docs/business_files/`。
   - 新增 `docs/API.md`，汇总当前 HTTP API 端点、请求/响应格式和调用示例。
