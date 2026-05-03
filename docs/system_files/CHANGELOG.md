@@ -38,8 +38,8 @@
   - 双重修复解决 `/agent/run` 走 Agent Loop 时，报告被第二轮 LLM 压缩或截断导致输入输出参数、表访问等细节丢失的问题。
 
 - **前端输入框光标优化**
-  - `web/app.js` 的 `sendAgentRun` 在 `done` / `error` 事件处理后增加 `els.chatInput.blur()`。
-  - 解决回答完成后输入框仍然显示闪烁光标的问题。
+  - `web/app.js` 的 `updateComposerState` 在恢复输入框可用状态时，通过 `requestAnimationFrame` 延迟调用 `blur()`。
+  - 解决浏览器在 `disabled=false` 时自动恢复焦点导致光标闪烁的问题。
 
 - **`downstream_evidence` 补充下游节点 `procedure_profile`**
   - `retrieval.py` 的 `_expand_downstream_for_hit` 现在会为每个下游节点查询 `procedure_features.profile_json`。

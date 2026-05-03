@@ -1760,7 +1760,14 @@ function updateComposerState() {
   } else {
     if (sendBtn) sendBtn.disabled = false;
     if (cancelBtn) cancelBtn.classList.add('hidden');
-    if (els.chatInput) els.chatInput.disabled = false;
+    if (els.chatInput) {
+      els.chatInput.disabled = false;
+      // Force blur to eliminate the caret after the agent run finishes.
+      // Browsers may auto-restore focus when disabled becomes false.
+      requestAnimationFrame(function() {
+        if (els.chatInput) els.chatInput.blur();
+      });
+    }
   }
 }
 
@@ -1831,7 +1838,6 @@ async function sendAgentRun(text, provider, options) {
           isAgentRunning = false;
           agentAbortController = null;
           updateComposerState();
-          if (els.chatInput) els.chatInput.blur();
           break;
         } else if (event.type === 'error') {
           appendMessage('Agent 错误: ' + event.message, 'assistant');
@@ -1839,7 +1845,6 @@ async function sendAgentRun(text, provider, options) {
           isAgentRunning = false;
           agentAbortController = null;
           updateComposerState();
-          if (els.chatInput) els.chatInput.blur();
           break;
         } else if (event.type === 'tool_confirmation_required') {
           handleToolConfirmation(event);

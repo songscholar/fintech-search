@@ -1192,3 +1192,28 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 
 - `web/app.js` 的 `sendAgentRun` 中，`done` 和 `error` 事件处理后增加 `els.chatInput.blur()`。
 - 回答完成后输入框自动失去焦点，光标消失。
+
+
+### 阶段 46：截断与光标问题二次修复
+
+#### 问题 1：内容仍被截断
+
+- 上一轮修复（Agent Loop 短路）后，内容确实多了很多，但 report 末尾仍然被截断。
+- 根因：`run_deep_analysis` 的 Prompt 中，`hits[:3]` 的完整 JSON（含 downstream_evidence 的完整 profile）非常长，加上 LLM 生成的 report，4800 tokens 仍然不够。
+
+#### 修复 1：精简输入 + 提升 max_tokens
+
+- `langchain_agent.py` 的 `run_deep_analysis`：
+  - 新增 `_slim_hit()` 函数，只保留 `procedure_name`、`chinese_name`、`object_id`、`file_path`、`matched_text`、`procedure_profile`。
+  - `downstream_evidence` 只保留前 6 个节点，每个节点只保留关键字段，`excerpt` 截断到 600 字符。
+  - 调用 LLM 前临时将 `config.max_tokens` 提升到 8000，调用后恢复原始值。
+
+#### 问题 2：光标仍闪烁
+
+- 上一轮在 `sendAgentRun` 的 `done`/`error` 事件后直接加 `blur()`，但浏览器在 `updateComposerState()` 设置 `disabled=false` 后自动恢复了焦点。
+
+#### 修复 2：在 `updateComposerState` 中延迟 blur
+
+- `web/app.js` 的 `updateComposerState`：在 `isAgentRunning = false` 分支中，恢复 `disabled=false` 后，通过 `requestAnimationFrame` 延迟调用 `blur()`。
+- 确保在浏览器重绘周期后执行 blur，覆盖浏览器自动恢复焦点的行为。
+- 移除 `sendAgentRun` 中重复的 `blur()` 调用。

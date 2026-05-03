@@ -437,8 +437,30 @@ def run_deep_analysis(
                 direct_hit = True
                 break
 
-    # 3. 取前 3 个原始 hit 直接 JSON 化（不做任何字段删减、不去重、不分层）
-    raw_hits = hits[:3]
+    # 3. 精简原始 hit，只保留 LLM 分析所需的字段，控制 Prompt 长度
+    def _slim_hit(hit: dict[str, Any]) -> dict[str, Any]:
+        slim: dict[str, Any] = {
+            "procedure_name": hit.get("procedure_name"),
+            "chinese_name": hit.get("chinese_name"),
+            "object_id": hit.get("object_id"),
+            "file_path": hit.get("file_path"),
+            "matched_text": hit.get("matched_text"),
+            "procedure_profile": hit.get("procedure_profile"),
+        }
+        ds = hit.get("downstream_evidence", [])
+        slim["downstream_evidence"] = [
+            {
+                "procedure_name": d.get("procedure_name"),
+                "chinese_name": d.get("chinese_name"),
+                "object_id": d.get("object_id"),
+                "procedure_profile": d.get("procedure_profile"),
+                "excerpt": (d.get("excerpt") or "")[:600],
+            }
+            for d in ds[:6]
+        ]
+        return slim
+
+    raw_hits = [_slim_hit(h) for h in hits[:3]]
     hits_json = json.dumps(raw_hits, ensure_ascii=False, indent=2)
 
     if not direct_hit:
@@ -454,7 +476,9 @@ def run_deep_analysis(
             "请基于以上原始检索结果，整理成一份业务逻辑分析报告。"
         )
 
-    # 4. 调用 LLM
+    # 4. 调用 LLM（临时增加 max_tokens，确保长 Prompt 下 report 不被截断）
+    original_max_tokens = config.max_tokens
+    config.max_tokens = max(config.max_tokens, 8000)
     llm_response: dict[str, Any] = {"content": "", "usage": None}
     try:
         llm_result = _complete_openai_compatible(
@@ -467,6 +491,8 @@ def run_deep_analysis(
         llm_response = llm_result
     except Exception as exc:
         llm_response = {"content": f"LLM 调用失败: {exc}", "usage": None, "error": str(exc)}
+    finally:
+        config.max_tokens = original_max_tokens
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
