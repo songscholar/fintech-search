@@ -422,6 +422,9 @@ let providers = [];
 let lastRetrieval = null;
 let lastEvidence = null;
 let lastAnswer = null;
+window.lastRetrieval = lastRetrieval;
+window.lastEvidence = lastEvidence;
+window.lastAnswer = lastAnswer;
 
 // Chat history state
 let chatHistories = [];
@@ -434,8 +437,21 @@ const els = {};
 function $(id) { return document.getElementById(id); }
 
 // Agent chat state
-let agentMode = 'daily';
+let contextMode = 'codebase';
 let chatAttachments = [];
+
+// Command dropdown state
+let commandDropdownVisible = false;
+let commandDropdownIndex = -1;
+let commandDropdownItems = [];
+
+// MCP tools state
+let mcpTools = [];
+
+// Agent loop state
+let agentAbortController = null;
+let isAgentRunning = false;
+let toolCallMap = new Map();
 
 function initRefs() {
   els.statusDot = $('status-dot');
@@ -446,6 +462,7 @@ function initRefs() {
   els.context = $('context-input');
   els.related = $('related-input');
   els.resultsCard = $('results-card');
+  els.vectorStatusBar = $('vector-status-bar');
   els.queryResults = $('query-results');
   els.evidenceResults = $('evidence-results');
   els.answerResults = $('answer-results');
@@ -482,6 +499,8 @@ function initRefs() {
   els.retrievalHints = $('retrieval-hints');
   els.attachmentList = $('attachment-list');
   els.chatHistoryList = $('chat-history-list');
+  els.commandDropdown = $('command-dropdown');
+  els.contextMode = $('context-mode');
 }
 
 // ========================================================================
@@ -668,6 +687,49 @@ async function loadProviders() {
   }
 }
 
+async function loadMcpTools() {
+  try {
+    const data = await apiGet('/agent/tools');
+    mcpTools = data.tools || [];
+    renderMcpToolSidebar();
+  } catch (_e) {
+    mcpTools = [];
+  }
+}
+
+function renderMcpToolSidebar() {
+  const container = document.getElementById('mcp-tool-list');
+  if (!container) return;
+  if (mcpTools.length === 0) {
+    container.innerHTML = '<span class="sidebar-hint">暂无 MCP 工具</span>';
+    return;
+  }
+  // Group tools by source
+  const groups = {};
+  for (const t of mcpTools) {
+    const prefix = (t.source || 'other');
+    if (!groups[prefix]) groups[prefix] = [];
+    groups[prefix].push(t);
+  }
+  let html = '';
+  for (const [source, tools] of Object.entries(groups)) {
+    html += '<div class="tool-source-group">';
+    html += '<div class="tool-source-label">' + escapeHtml(source) + '</div>';
+    html += '<div class="tool-source-items">';
+    for (const t of tools) {
+      html += `<button class="mcp-tool-tag" onclick="insertToolCommand('${escapeHtml(t.name)}')" title="${escapeHtml(t.description || '')}">${escapeHtml(t.name)}</button>`;
+    }
+    html += '</div></div>';
+  }
+  container.innerHTML = html;
+}
+
+function insertToolCommand(toolName) {
+  const input = els.chatInput;
+  input.value = '/tool ' + toolName + ' ';
+  input.focus();
+}
+
 function fmtNum(n) {
   if (n == null) return '—';
   return n.toLocaleString();
@@ -701,17 +763,45 @@ function validateQuery() {
   return true;
 }
 
+function renderVectorStatus(status) {
+  if (!els.vectorStatusBar) return;
+  if (!status) {
+    els.vectorStatusBar.hidden = true;
+    return;
+  }
+  const enabled = status.enabled;
+  const reason = status.reason || '';
+  const indexModel = status.index_model || '?';
+  const queryModel = status.query_model || '?';
+  let cls = 'vector-status-ok';
+  let html = '';
+  if (enabled) {
+    html = `<span class="vstatus-dot ok"></span> 向量召回已启用 · 模型: ${escapeHtml(String(indexModel))}`;
+  } else if (reason === 'embedding_space_mismatch') {
+    cls = 'vector-status-warn';
+    html = `<span class="vstatus-dot warn"></span> 向量召回已降级 · 索引模型: ${escapeHtml(String(indexModel))} · 查询模型: ${escapeHtml(String(queryModel))} · 不匹配`;
+  } else {
+    cls = 'vector-status-warn';
+    html = `<span class="vstatus-dot warn"></span> 向量召回不可用 · ${escapeHtml(String(reason))}`;
+  }
+  els.vectorStatusBar.className = 'vector-status-bar ' + cls;
+  els.vectorStatusBar.innerHTML = html;
+  els.vectorStatusBar.hidden = false;
+}
+
 async function runQuery() {
   if (!validateQuery()) return;
   setLoading('btn-query', true);
   try {
     const data = await apiPost('/query', { ...getPayload(), debug: true });
     lastRetrieval = data;
+    window.lastRetrieval = data;
     renderQuery(data);
+    renderVectorStatus(data.vector_status);
     renderTrace(data.debug, 'query');
     els.resultsCard.hidden = false;
     switchTab('query');
-    showToast(`检索完成，${(data.results || []).length} 条命中`);
+    showToast(`检索完成，${(data.hits || []).length} 条命中`);
   } catch (e) {
     showToast('检索失败: ' + e.message, 'error');
   } finally {
@@ -725,7 +815,9 @@ async function runEvidence() {
   try {
     const data = await apiPost('/evidence', { ...getPayload(), debug: true });
     lastEvidence = data;
+    window.lastEvidence = data;
     renderEvidence(data);
+    renderVectorStatus(data.vector_status);
     renderTrace(data.debug, 'evidence');
     els.resultsCard.hidden = false;
     switchTab('evidence');
@@ -744,6 +836,7 @@ async function runAnswer() {
     const p = getPayload();
     const data = await apiPost('/answer', { db_path: p.db_path, question: p.query, evidence_limit: p.limit, context_window: p.context_window, related_limit: p.related_limit, allow_draft_fallback: true });
     lastAnswer = data;
+    window.lastAnswer = data;
     renderAnswer(data);
     els.resultsCard.hidden = false;
     switchTab('answer');
@@ -804,18 +897,18 @@ async function runBundle() {
 // ========================================================================
 
 function renderQuery(data) {
-  const results = data.results || [];
+  const results = data.hits || [];
   els.queryMeta.textContent = results.length + ' 条';
   if (!results.length) {
     els.queryResults.innerHTML = '<div class="empty-state">无命中结果</div>';
     return;
   }
   els.queryResults.innerHTML = results.map((r, i) => {
-    const meta = [r.source_type, r.procedure_name, r.object_id].filter(Boolean).join(' · ');
-    const text = (r.text || r.excerpt || '').substring(0, 320);
+    const meta = [r.hit_type, r.retrieval_source, r.procedure_name, r.object_id].filter(Boolean).join(' · ');
+    const text = (r.matched_text || '').substring(0, 320);
     return `
       <div class="result-item">
-        <h4>${escapeHtml(r.name || r.procedure_name || '命中项 #' + (i+1))}</h4>
+        <h4>${escapeHtml(r.procedure_name || '命中项 #' + (i+1))}</h4>
         <div class="result-meta">${escapeHtml(meta)}</div>
         <div class="result-code">${escapeHtml(text)}</div>
       </div>
@@ -831,8 +924,8 @@ function renderEvidence(data) {
     return;
   }
   els.evidenceResults.innerHTML = ev.map((item, i) => {
-    const text = (item.text || item.excerpt || '').substring(0, 400);
-    const meta = [item.procedure_name, item.source_type, item.rank ? 'rank:' + item.rank : null].filter(Boolean).join(' · ');
+    const text = (item.excerpt || item.matched_text || '').substring(0, 400);
+    const meta = [item.procedure_name, item.retrieval_source, item.match_source, item.rank ? 'rank:' + item.rank : null].filter(Boolean).join(' · ');
     return `
       <div class="result-item">
         <h4>证据 #${i+1}${item.procedure_name ? ' — ' + escapeHtml(item.procedure_name) : ''}</h4>
@@ -924,7 +1017,7 @@ function createNewChat() {
     id: generateChatId(),
     title: '新对话',
     messages: [],
-    mode: agentMode,
+    mode: contextMode,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -951,8 +1044,8 @@ function loadChat(chatId) {
   chatAttachments = [];
   renderAttachmentList();
   // Restore mode
-  if (chat.mode && chat.mode !== agentMode) {
-    setAgentMode(chat.mode);
+  if (chat.mode && chat.mode !== contextMode) {
+    setContextMode(chat.mode);
   }
   // Restore messages
   for (const msg of chat.messages) {
@@ -1139,19 +1232,14 @@ function onBgUpload(input) {
   window.__rainMedia.setUpload(file);
 }
 
-function setAgentMode(mode) {
-  agentMode = mode;
-  document.querySelectorAll('.mode-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.mode === mode);
-  });
-  if (els.retrievalHints) {
-    els.retrievalHints.style.display = mode === 'business' ? 'flex' : 'none';
-  }
-  const placeholder = mode === 'daily'
+function setContextMode(mode) {
+  contextMode = mode;
+  const badge = document.getElementById('context-mode-badge');
+  if (badge) badge.textContent = mode === 'codebase' ? '代码库模式' : '通用模式';
+  const placeholder = mode === 'general'
     ? '输入问题，智能助手将基于通用知识回答...'
-    : '输入问题，智能助手将结合代码库上下文回答...';
+    : '输入问题，智能助手将结合代码库工具检索回答...';
   if (els.chatInput) els.chatInput.placeholder = placeholder;
-  // Save mode to current chat
   if (currentChatId) {
     const chat = chatHistories.find(c => c.id === currentChatId);
     if (chat && chat.mode !== mode) {
@@ -1469,6 +1557,98 @@ function clearChat() {
   });
 })();
 
+// ========================================================================
+// Command Dropdown
+// ========================================================================
+
+function showCommandDropdown(query) {
+  if (!els.commandDropdown) return;
+  const filtered = window.filterCommands ? window.filterCommands(query) : [];
+  commandDropdownItems = filtered;
+  commandDropdownIndex = -1;
+  if (filtered.length === 0) {
+    els.commandDropdown.innerHTML = '<div class="command-empty">无匹配命令</div>';
+  } else {
+    let html = '';
+    let lastCat = '';
+    for (const cmd of filtered) {
+      if (cmd.category !== lastCat) {
+        lastCat = cmd.category;
+        html += `<div class="command-category">${lastCat}</div>`;
+      }
+      const typeClass = cmd.type === 'prompt' ? 'prompt' : '';
+      const typeLabel = cmd.type === 'prompt' ? '技能' : '本地';
+      html += `<div class="command-item" data-name="${cmd.name}" onclick="selectCommandItem('${cmd.name}')">
+        <span class="command-item-name">${cmd.name}</span>
+        <span class="command-item-desc">${cmd.label || cmd.description || ''}</span>
+        <span class="command-item-type ${typeClass}">${typeLabel}</span>
+      </div>`;
+    }
+    els.commandDropdown.innerHTML = html;
+  }
+  els.commandDropdown.classList.remove('hidden');
+  commandDropdownVisible = true;
+}
+
+function hideCommandDropdown() {
+  if (els.commandDropdown) els.commandDropdown.classList.add('hidden');
+  commandDropdownVisible = false;
+  commandDropdownIndex = -1;
+  commandDropdownItems = [];
+}
+
+function navigateCommandDropdown(direction) {
+  if (!commandDropdownVisible || commandDropdownItems.length === 0) return;
+  const items = els.commandDropdown.querySelectorAll('.command-item');
+  if (items.length === 0) return;
+  items.forEach(i => i.classList.remove('selected'));
+  commandDropdownIndex += direction;
+  if (commandDropdownIndex < 0) commandDropdownIndex = items.length - 1;
+  if (commandDropdownIndex >= items.length) commandDropdownIndex = 0;
+  items[commandDropdownIndex].classList.add('selected');
+  items[commandDropdownIndex].scrollIntoView({ block: 'nearest' });
+}
+
+function selectCurrentCommandItem() {
+  if (!commandDropdownVisible || commandDropdownItems.length === 0) return false;
+  const idx = commandDropdownIndex >= 0 ? commandDropdownIndex : 0;
+  const cmd = commandDropdownItems[idx];
+  if (!cmd) return false;
+  selectCommandItem(cmd.name);
+  return true;
+}
+
+function selectCommandItem(name) {
+  const cmd = window.findCommand ? window.findCommand(name) : null;
+  hideCommandDropdown();
+  if (!cmd) return;
+  if (cmd.type === 'local') {
+    els.chatInput.value = '';
+    if (window.executeLocalCommand) window.executeLocalCommand(name);
+  } else {
+    // Prompt command: insert command name + space into input
+    els.chatInput.value = name + ' ';
+    els.chatInput.focus();
+  }
+}
+
+function handleChatInputChange() {
+  const text = els.chatInput.value;
+  if (text.startsWith('/') && text.indexOf(' ') < 0) {
+    showCommandDropdown(text);
+  } else if (commandDropdownVisible) {
+    hideCommandDropdown();
+  }
+}
+
+// Attach input listener for command dropdown
+document.addEventListener('DOMContentLoaded', () => {
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) {
+    chatInput.addEventListener('input', handleChatInputChange);
+  }
+});
+
 function looksLikeFunctionQuery(text) {
   // 匹配 5-6 位纯数字（功能号）或包含"功能号"关键词
   return /\b\d{5,6}\b/.test(text) || /功能号/.test(text);
@@ -1477,89 +1657,496 @@ function looksLikeFunctionQuery(text) {
 async function sendChat() {
   const text = els.chatInput.value.trim();
   if (!text) return;
+  hideCommandDropdown();
   const provider = els.agentProvider.value;
   if (!provider) { showToast('请选择一个模型', 'error'); return; }
+
+  // Handle slash commands
+  if (text.startsWith('/')) {
+    const spaceIdx = text.indexOf(' ');
+    const cmdName = spaceIdx > 0 ? text.substring(0, spaceIdx) : text;
+    const cmdArgs = spaceIdx > 0 ? text.substring(spaceIdx + 1).trim() : '';
+    const cmd = window.findCommand ? window.findCommand(cmdName) : null;
+
+    if (cmd && cmd.type === 'local') {
+      els.chatInput.value = '';
+      if (window.executeLocalCommand) window.executeLocalCommand(cmdName);
+      return;
+    }
+
+    // Prompt command: augment the user message with skill context and run agent loop
+    if (cmd && cmd.type === 'prompt') {
+      els.chatInput.value = '';
+      appendMessage(text, 'user');
+      addMessageToHistory('user', text);
+      const skillHint = `[Using skill: ${cmd.label || cmd.name}]\n${cmd.description || ''}\n\n`;
+      await sendAgentRun(cmdArgs || text, provider, {
+        context_mode: 'codebase',
+        system_prompt: skillHint + '你是一个代码库智能助手，请基于检索到的证据和上下文回答问题。',
+      });
+      return;
+    }
+
+    // /tool command: call MCP tool directly
+    if (cmdName === '/tool') {
+      els.chatInput.value = '';
+      if (!cmdArgs) {
+        showToast('用法: /tool <工具名> [参数JSON]', 'error');
+        return;
+      }
+      const toolSpaceIdx = cmdArgs.indexOf(' ');
+      const toolName = toolSpaceIdx > 0 ? cmdArgs.substring(0, toolSpaceIdx) : cmdArgs;
+      const toolArgsStr = toolSpaceIdx > 0 ? cmdArgs.substring(toolSpaceIdx + 1).trim() : '{}';
+      let toolArgs;
+      try {
+        toolArgs = JSON.parse(toolArgsStr);
+      } catch (_e) {
+        toolArgs = { query: toolArgsStr };
+      }
+      appendMessage(text, 'user');
+      addMessageToHistory('user', text);
+      try {
+        const data = await apiPost('/agent/tool-call', {
+          tool_name: toolName,
+          arguments: toolArgs
+        });
+        const resultStr = data.is_error
+          ? '❌ ' + (data.result || '工具调用失败')
+          : data.result || '无结果';
+        const latencyHint = data.latency_ms ? ` (${data.latency_ms}ms)` : '';
+        const msg = `🔧 **${toolName}**${latencyHint}\n\`\`\`\n${resultStr}\n\`\`\``;
+        const html = await renderMarkdown(msg);
+        const div = document.createElement('div');
+        div.className = 'chat-message assistant';
+        const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        div.innerHTML = html + '<div class="msg-time">' + time + '</div>';
+        els.chatTranscript.appendChild(div);
+        els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+        addMessageToHistory('assistant', msg);
+        if (window.SiteUtils && window.SiteUtils.bindCodeBlockInteractions) {
+          window.SiteUtils.bindCodeBlockInteractions(div);
+        }
+      } catch (e) {
+        appendMessage('工具调用失败: ' + e.message, 'assistant');
+        addMessageToHistory('assistant', '工具调用失败: ' + e.message);
+      }
+      return;
+    }
+
+    // Unknown command — show help
+    showToast('未知命令: ' + cmdName + '。输入 /help 查看所有命令', 'error');
+    return;
+  }
 
   appendMessage(text, 'user');
   addMessageToHistory('user', text);
   els.chatInput.value = '';
 
-  // 业务问答模式下，如果问题包含功能号，走深度分析流水线
-  if (agentMode === 'business' && looksLikeFunctionQuery(text)) {
-    try {
-      const data = await apiPost('/agent/analyze', {
+  // All non-command chat goes through the agent loop
+  await sendAgentRun(text, provider);
+}
+
+// ========================================================================
+// Agent Loop — SSE streaming with tool call cards
+// ========================================================================
+
+function updateComposerState() {
+  const sendBtn = document.getElementById('send-btn');
+  const cancelBtn = document.getElementById('cancel-btn');
+  if (isAgentRunning) {
+    if (sendBtn) sendBtn.disabled = true;
+    if (cancelBtn) cancelBtn.classList.remove('hidden');
+    if (els.chatInput) els.chatInput.disabled = true;
+  } else {
+    if (sendBtn) sendBtn.disabled = false;
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+    if (els.chatInput) els.chatInput.disabled = false;
+  }
+}
+
+function cancelAgentRun() {
+  if (agentAbortController) agentAbortController.abort();
+  isAgentRunning = false;
+  updateComposerState();
+}
+
+async function sendAgentRun(text, provider, options) {
+  agentAbortController = new AbortController();
+  isAgentRunning = true;
+  toolCallMap = new Map();
+  updateComposerState();
+
+  let currentAssistantEl = null;
+  let currentTextBuffer = '';
+
+  try {
+    const response = await fetch(API_BASE + '/agent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
         provider: provider,
-        question: text
-      });
-      const report = data.report || '无分析报告';
-      // 用 Markdown 渲染器渲染结构化报告
-      const html = await renderMarkdown(report);
-      const div = document.createElement('div');
-      div.className = 'chat-message assistant';
-      const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-      div.innerHTML = html + '<div class="msg-time">' + time + '</div>';
-      els.chatTranscript.appendChild(div);
-      els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
-      addMessageToHistory('assistant', report);
-      // 绑定代码块交互
-      if (window.SiteUtils && window.SiteUtils.bindCodeBlockInteractions) {
-        window.SiteUtils.bindCodeBlockInteractions(div);
-      }
-    } catch (e) {
-      appendMessage('深度分析失败: ' + e.message, 'assistant');
-      addMessageToHistory('assistant', '深度分析失败: ' + e.message);
+        history: getHistoryForApi(),
+        context_mode: (options && options.context_mode) || contextMode,
+        system_prompt: options && options.system_prompt,
+      }),
+      signal: agentAbortController.signal,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => response.statusText);
+      throw new Error(`${response.status}: ${errText}`);
     }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      sseBuffer += decoder.decode(value, { stream: true });
+
+      const events = parseSSE(sseBuffer);
+      sseBuffer = events.remaining;
+
+      for (const event of events.parsed) {
+        if (event.type === 'tool_use') {
+          renderToolCallCard(event);
+        } else if (event.type === 'tool_result') {
+          updateToolCallCard(event);
+        } else if (event.type === 'thinking') {
+          if (!currentAssistantEl) {
+            currentAssistantEl = createAssistantMessageEl();
+          }
+          appendStreamingText(currentAssistantEl, event.content, 'thinking');
+        } else if (event.type === 'text') {
+          if (!currentAssistantEl) {
+            currentAssistantEl = createAssistantMessageEl();
+          }
+          currentTextBuffer += event.content;
+          appendStreamingText(currentAssistantEl, currentTextBuffer, 'text');
+        } else if (event.type === 'done') {
+          finalizeAssistantMessage(currentAssistantEl, currentTextBuffer);
+          isAgentRunning = false;
+          agentAbortController = null;
+          updateComposerState();
+          if (els.chatInput) els.chatInput.blur();
+          break;
+        } else if (event.type === 'error') {
+          appendMessage('Agent 错误: ' + event.message, 'assistant');
+          addMessageToHistory('assistant', 'Agent 错误: ' + event.message);
+          isAgentRunning = false;
+          agentAbortController = null;
+          updateComposerState();
+          if (els.chatInput) els.chatInput.blur();
+          break;
+        } else if (event.type === 'tool_confirmation_required') {
+          handleToolConfirmation(event);
+        }
+      }
+      if (!isAgentRunning) break;
+    }
+
+    // Finalize if done event was missed
+    if (currentAssistantEl && currentTextBuffer) {
+      finalizeAssistantMessage(currentAssistantEl, currentTextBuffer);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      appendMessage('[已取消]', 'assistant');
+      addMessageToHistory('assistant', '[已取消]');
+    } else {
+      appendMessage('Agent 运行失败: ' + e.message, 'assistant');
+      addMessageToHistory('assistant', 'Agent 运行失败: ' + e.message);
+    }
+  } finally {
+    isAgentRunning = false;
+    agentAbortController = null;
+    updateComposerState();
+  }
+}
+
+function parseSSE(buffer) {
+  const parsed = [];
+  let remaining = buffer;
+  const parts = remaining.split('\n\n');
+  for (let i = 0; i < parts.length - 1; i++) {
+    const block = parts[i].trim();
+    if (!block) continue;
+    let eventType = 'message';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event: ')) {
+        eventType = line.substring(7).trim();
+      } else if (line.startsWith('data: ')) {
+        data = line.substring(6);
+      }
+    }
+    if (data) {
+      try {
+        parsed.push({ type: eventType, ...JSON.parse(data) });
+      } catch (_e) {
+        parsed.push({ type: eventType, data: data });
+      }
+    }
+  }
+  remaining = parts[parts.length - 1];
+  return { parsed, remaining };
+}
+
+function getHistoryForApi() {
+  if (!currentChatId) return [];
+  const chat = chatHistories.find(c => c.id === currentChatId);
+  if (!chat) return [];
+  return chat.messages.slice(-12).map(m => ({
+    role: m.role === 'user' ? 'user' : 'assistant',
+    content: m.text,
+  }));
+}
+
+function createAssistantMessageEl() {
+  const div = document.createElement('div');
+  div.className = 'chat-message assistant';
+  div.innerHTML = '<div class="assistant-content streaming"></div><div class="msg-time"></div>';
+  els.chatTranscript.appendChild(div);
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+  return div;
+}
+
+async function appendStreamingText(el, content, kind) {
+  const contentEl = el.querySelector('.assistant-content');
+  if (!contentEl) return;
+  if (kind === 'thinking') {
+    contentEl.innerHTML = '<div class="thinking-text">' + escapeHtml(content) + '</div>';
+  } else {
+    const html = await renderMarkdown(content);
+    contentEl.innerHTML = html;
+  }
+  contentEl.classList.add('streaming');
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+}
+
+async function finalizeAssistantMessage(el, text) {
+  if (!el) return;
+  const contentEl = el.querySelector('.assistant-content');
+  if (contentEl) {
+    contentEl.classList.remove('streaming');
+    if (text) {
+      const html = await renderMarkdown(text);
+      contentEl.innerHTML = html;
+    }
+  }
+  const timeEl = el.querySelector('.msg-time');
+  if (timeEl) {
+    timeEl.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  if (text) addMessageToHistory('assistant', text);
+  if (window.SiteUtils && window.SiteUtils.bindCodeBlockInteractions) {
+    window.SiteUtils.bindCodeBlockInteractions(el);
+  }
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+}
+
+function renderToolCallCard(event) {
+  const card = document.createElement('div');
+  card.className = 'tool-call-card';
+  card.id = 'tool-call-' + event.call_id;
+  const argsPreview = JSON.stringify(event.arguments, null, 2);
+  const truncated = argsPreview.length > 300 ? argsPreview.substring(0, 300) + '...' : argsPreview;
+  card.innerHTML =
+    '<div class="tool-call-header">' +
+      '<span class="tool-call-icon">🔧</span>' +
+      '<span class="tool-call-name">' + escapeHtml(event.tool_name) + '</span>' +
+      '<span class="tool-call-status pending">⏳</span>' +
+    '</div>' +
+    '<details class="tool-call-args"><summary>参数</summary><pre>' + escapeHtml(truncated) + '</pre></details>' +
+    '<div class="tool-call-result"></div>';
+  els.chatTranscript.appendChild(card);
+  toolCallMap.set(event.call_id, card);
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+}
+
+function updateToolCallCard(event) {
+  const card = toolCallMap.get(event.call_id);
+  if (!card) return;
+  const statusEl = card.querySelector('.tool-call-status');
+  if (statusEl) {
+    statusEl.className = 'tool-call-status ' + (event.is_error ? 'error' : 'done');
+    statusEl.textContent = event.is_error ? '❌' : '✅';
+  }
+  const resultEl = card.querySelector('.tool-call-result');
+  if (resultEl) {
+    const resultText = event.result || '';
+    const display = resultText.length > 500 ? resultText.substring(0, 500) + '...' : resultText;
+    resultEl.innerHTML =
+      '<details><summary>结果' + (event.latency_ms ? ' (' + event.latency_ms + 'ms)' : '') + '</summary>' +
+      '<pre class="tool-result-content">' + escapeHtml(display) + '</pre></details>';
+  }
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+}
+
+// ========================================================================
+// Tool Permission Confirmation
+// ========================================================================
+
+let pendingConfirmation = null;
+
+function getToolPermissions() {
+  try {
+    return JSON.parse(localStorage.getItem('uses_indexer_tool_permissions') || '{}');
+  } catch (_e) {
+    return {};
+  }
+}
+
+function saveToolPermission(toolName, decision) {
+  const perms = getToolPermissions();
+  if (decision === 'allow_always') {
+    perms[toolName] = 'allow';
+  } else {
+    delete perms[toolName];
+  }
+  localStorage.setItem('uses_indexer_tool_permissions', JSON.stringify(perms));
+}
+
+function handleToolConfirmation(event) {
+  // Check localStorage for auto-allow rules
+  const perms = getToolPermissions();
+  const autoRule = perms[event.tool_name];
+  if (autoRule === 'allow') {
+    // Auto-confirm without showing dialog
+    apiPost('/agent/tool-confirm', {
+      call_id: event.call_id,
+      decision: 'allow',
+      tool_name: event.tool_name,
+    }).catch(() => {});
     return;
   }
 
-  let payload;
-  if (agentMode === 'daily') {
-    payload = {
-      provider: provider,
-      message: text,
-      include_retrieval: false,
-      include_evidence: false,
-      include_answer_draft: false,
-      limit: 6,
-      context_window: 8000,
-      related_limit: 3,
-      system_prompt: '你是一个通用智能助手，请基于用户问题和上传的附件进行回答。'
-    };
-  } else {
-    const includeRetrieval = $('attach-retrieval').checked && lastRetrieval;
-    const includeEvidence = $('attach-evidence').checked && lastEvidence;
-    const includeDraft = $('attach-draft').checked && lastAnswer;
-    payload = {
-      provider: provider,
-      message: text,
-      include_retrieval: includeRetrieval,
-      include_evidence: includeEvidence,
-      include_answer_draft: includeDraft,
-      limit: parseInt(els.limit.value) || 6,
-      context_window: parseInt(els.context.value) || 8000,
-      related_limit: parseInt(els.related.value) || 3
-    };
+  // Show the dialog
+  pendingConfirmation = event;
+  const dialog = document.getElementById('permission-dialog');
+  const nameEl = document.getElementById('perm-tool-name');
+  const argsEl = document.getElementById('perm-tool-args');
+  if (dialog) dialog.classList.remove('hidden');
+  if (nameEl) nameEl.textContent = event.tool_name;
+  if (argsEl) {
+    const argsStr = JSON.stringify(event.arguments, null, 2);
+    argsEl.textContent = argsStr.length > 400 ? argsStr.substring(0, 400) + '...' : argsStr;
   }
+}
 
-  if (chatAttachments.length > 0) {
-    payload.attachments = chatAttachments.map(a => ({
-      name: a.name,
-      media_kind: a.media_kind,
-      mime_type: a.mime_type,
-      size_bytes: a.size_bytes,
-      text_content: a.text_content || undefined,
-      data_url: a.data_url || undefined
-    }));
+async function resolvePermission(decision) {
+  if (!pendingConfirmation) return;
+  const event = pendingConfirmation;
+  pendingConfirmation = null;
+
+  const dialog = document.getElementById('permission-dialog');
+  if (dialog) dialog.classList.add('hidden');
+
+  if (decision === 'allow_always') {
+    saveToolPermission(event.tool_name, 'allow_always');
   }
 
   try {
-    const data = await apiPost('/agent/chat', payload);
-    const reply = data.reply || data.choices?.[0]?.message?.content || data.content || data.text || '无响应';
-    appendMessage(reply, 'assistant');
-    addMessageToHistory('assistant', reply);
+    await apiPost('/agent/tool-confirm', {
+      call_id: event.call_id,
+      decision: decision,
+      tool_name: event.tool_name,
+    });
+  } catch (_e) {
+    showToast('确认请求发送失败', 'error');
+  }
+}
+
+// ========================================================================
+// MCP Server Management
+// ========================================================================
+
+async function loadMcpServers() {
+  try {
+    const data = await apiGet('/agent/mcp/servers');
+    renderMcpServerList(data.servers || []);
+  } catch (_e) {
+    renderMcpServerList([]);
+  }
+}
+
+function renderMcpServerList(servers) {
+  const container = document.getElementById('mcp-server-list');
+  if (!container) return;
+  if (!servers.length) {
+    container.innerHTML = '<span class="sidebar-hint">暂无外部服务器</span>';
+    return;
+  }
+  container.innerHTML = servers.map(s => {
+    const statusColors = { connected: '#4ade80', disconnected: '#94a3b8', error: '#f87171', connecting: '#fbbf24' };
+    const dot = statusColors[s.status] || '#94a3b8';
+    return '<div class="mcp-server-item" data-name="' + escapeHtml(s.name) + '">' +
+      '<span class="mcp-server-dot" style="background:' + dot + '"></span>' +
+      '<span class="mcp-server-name">' + escapeHtml(s.name) + '</span>' +
+      '<span class="mcp-server-info">' + s.tool_count + ' 工具</span>' +
+      '<button class="mcp-server-action" onclick="disconnectMcpServer(\'' + escapeHtml(s.name) + '\')" title="断开">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function showMcpConnectDialog() {
+  const dialog = document.getElementById('mcp-connect-dialog');
+  if (dialog) dialog.classList.remove('hidden');
+}
+
+function hideMcpConnectDialog() {
+  const dialog = document.getElementById('mcp-connect-dialog');
+  if (dialog) dialog.classList.add('hidden');
+}
+
+function toggleMcpTransportFields() {
+  const transport = document.getElementById('mcp-transport').value;
+  const stdioFields = document.getElementById('mcp-stdio-fields');
+  const sseFields = document.getElementById('mcp-sse-fields');
+  if (stdioFields) stdioFields.classList.toggle('hidden', transport !== 'stdio');
+  if (sseFields) sseFields.classList.toggle('hidden', transport !== 'sse');
+}
+
+async function submitMcpConnect() {
+  const name = document.getElementById('mcp-name').value.trim();
+  const transport = document.getElementById('mcp-transport').value;
+  if (!name) { showToast('请输入服务器名称', 'error'); return; }
+
+  const payload = { name, transport };
+  if (transport === 'stdio') {
+    payload.command = document.getElementById('mcp-command').value.trim();
+    const argsStr = document.getElementById('mcp-args').value.trim();
+    if (argsStr) {
+      try { payload.args = JSON.parse(argsStr); } catch (_e) { payload.args = argsStr.split(/\s+/); }
+    }
+  } else {
+    payload.url = document.getElementById('mcp-url').value.trim();
+    if (!payload.url) { showToast('请输入 URL', 'error'); return; }
+  }
+
+  hideMcpConnectDialog();
+  showToast('正在连接 ' + name + '...', 'info');
+  try {
+    await apiPost('/agent/mcp/connect', payload);
+    showToast(name + ' 已连接', 'success');
+    loadMcpServers();
+    loadMcpTools();
   } catch (e) {
-    appendMessage('请求失败: ' + e.message, 'assistant');
-    addMessageToHistory('assistant', '请求失败: ' + e.message);
+    showToast('连接失败: ' + e.message, 'error');
+  }
+}
+
+async function disconnectMcpServer(name) {
+  try {
+    await apiPost('/agent/mcp/disconnect', { name });
+    showToast(name + ' 已断开', 'success');
+    loadMcpServers();
+    loadMcpTools();
+  } catch (e) {
+    showToast('断开失败: ' + e.message, 'error');
   }
 }
 
@@ -1578,6 +2165,20 @@ function refreshSystem() {
 // ========================================================================
 
 document.addEventListener('keydown', (e) => {
+  // Command dropdown navigation when visible
+  if (commandDropdownVisible && document.activeElement === els.chatInput) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); navigateCommandDropdown(1); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); navigateCommandDropdown(-1); return; }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); selectCurrentCommandItem(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); hideCommandDropdown(); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (commandDropdownItems.length === 1) selectCurrentCommandItem();
+      else navigateCommandDropdown(1);
+      return;
+    }
+  }
+
   // Ctrl/Cmd + Enter in search textarea -> run all
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     if (document.activeElement === els.question) {
@@ -1585,9 +2186,9 @@ document.addEventListener('keydown', (e) => {
       runAll();
     }
   }
-  // Enter in chat textarea -> send
+  // Enter in chat textarea -> send (only when dropdown not visible)
   if (e.key === 'Enter' && !e.shiftKey) {
-    if (document.activeElement === els.chatInput) {
+    if (document.activeElement === els.chatInput && !commandDropdownVisible) {
       e.preventDefault();
       sendChat();
     }
@@ -1729,7 +2330,19 @@ window.runBundle = runBundle;
 window.switchTab = switchTab;
 window.sendChat = sendChat;
 window.clearChat = clearChat;
-window.setAgentMode = setAgentMode;
+window.loadProviders = loadProviders;
+window.showCommandHelp = function() {
+  const cmds = window.getCommandRegistry ? window.getCommandRegistry() : [];
+  if (cmds.length === 0) {
+    showToast('暂无可用命令', 'info');
+    return;
+  }
+  const lines = cmds.map(c => `  ${c.name.padEnd(30)} ${c.label || c.description || ''}`);
+  appendMessage('可用命令:\n```\n' + lines.join('\n') + '\n```', 'assistant');
+};
+window.selectCommandItem = selectCommandItem;
+window.setContextMode = setContextMode;
+window.cancelAgentRun = cancelAgentRun;
 window.createNewChat = createNewChat;
 window.loadChat = loadChat;
 window.renameChat = renameChat;
@@ -1756,6 +2369,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadDbSummary();
   loadProviders();
   initChatHistory();
+  if (window.loadCommands) window.loadCommands();
+  loadMcpTools();
+  loadMcpServers();
 
   // Nav scroll detection — 照搬博客
   const navbar = document.getElementById('navbar');

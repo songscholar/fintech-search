@@ -34,7 +34,12 @@
 
 - **Agent Loop 二次提炼修复**
   - `api.py` 的 `_execute_analyze_tool` 在返回 report 前增加前缀指令，要求 LLM 直接完整呈现业务分析报告，不要进行额外摘要或压缩。
-  - 解决 `/agent/run` 走 Agent Loop 时，报告被第二轮 LLM 压缩导致输入输出参数、表访问等细节丢失的问题。
+  - `agent_loop.py` 的 `AgentLoopRunner` 在检测到 `analyze__business_query` 工具被调用后，直接将该工具的返回结果作为最终回答输出，跳过第二轮 LLM 调用。
+  - 双重修复解决 `/agent/run` 走 Agent Loop 时，报告被第二轮 LLM 压缩或截断导致输入输出参数、表访问等细节丢失的问题。
+
+- **前端输入框光标优化**
+  - `web/app.js` 的 `sendAgentRun` 在 `done` / `error` 事件处理后增加 `els.chatInput.blur()`。
+  - 解决回答完成后输入框仍然显示闪烁光标的问题。
 
 - **`downstream_evidence` 补充下游节点 `procedure_profile`**
   - `retrieval.py` 的 `_expand_downstream_for_hit` 现在会为每个下游节点查询 `procedure_features.profile_json`。

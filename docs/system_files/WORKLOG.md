@@ -1165,3 +1165,30 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
   - `AF_SYSARGPUB_SYSCONFIG_GET`：in=3, out=5, read=['upbs_sysconfig']
   - `LF_SESBID_STOCK_REQ`：in=6, out=6, read=['uses_fund_account', 'uses_stock_real']
 - 之前全部为空，现在结构化数据完整可用。
+
+
+### 阶段 45：前端截断与输入框光标修复
+
+#### 问题 1：前端展示内容截断
+
+- 用户反馈走 `/agent/run` 回答业务问题时，最终输出只展示了一部分，内容被截断。
+- 根因：Agent Loop 第二轮 LLM 调用时，messages 已包含第一轮 `analyze__business_query` 的完整 report（3500+ 字符），加上 system prompt 和对话历史，总输入极长。
+- 当输入 + 输出接近模型上下文窗口限制时，LLM 会截断输出，导致前端显示不全。
+
+#### 修复 1：Agent Loop 短路逻辑
+
+- `agent_loop.py` 的 `AgentLoopRunner.run()` 中，执行完 tool_calls 后增加短路检查：
+  - 如果调用了 `analyze__business_query`，直接将该工具返回的 report 作为最终 `TextEvent` 输出。
+  - 跳过第二轮 LLM 调用，避免上下文限制导致的截断。
+  - 同时避免了第二轮 LLM 的二次提炼/压缩。
+
+#### 问题 2：回答完成后输入框仍有光标
+
+- `<textarea id="chat-input">` 在 Agent Loop 运行期间被 `disabled = true`。
+- 回答完成后 `updateComposerState()` 设置 `disabled = false`，浏览器恢复焦点，光标重新出现。
+- 用户未主动点击输入框，但光标闪烁，造成"还在输入中"的错觉。
+
+#### 修复 2：回答完成后移除焦点
+
+- `web/app.js` 的 `sendAgentRun` 中，`done` 和 `error` 事件处理后增加 `els.chatInput.blur()`。
+- 回答完成后输入框自动失去焦点，光标消失。
