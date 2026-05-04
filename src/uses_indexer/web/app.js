@@ -2575,6 +2575,7 @@ window.onFileSelected = onFileSelected;
 window.removeAttachment = removeAttachment;
 
 window.refreshSystem = refreshSystem;
+window.resolvePermission = resolvePermission;
 window.renderDocDetail = renderDocDetail;
 window.backToDocs = backToDocs;
 window.changeDocPage = changeDocPage;
