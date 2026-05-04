@@ -1,12 +1,29 @@
-let renderMarkdown = async function(md) {
-  var text = String(md || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<pre style="white-space:pre-wrap;font-family:var(--font-mono,monospace);color:#b0c4de;">' + text + '</pre>';
-};
-import('/assets/markdown-renderer.js').then(function(mod) {
-  if (mod && mod.renderMarkdown) renderMarkdown = mod.renderMarkdown;
+// Markdown renderer: wait for the real module to load before rendering.
+// This ensures history restoration uses the same renderer as streaming.
+var _mdModuleReady = import('/assets/markdown-renderer.js').then(function(mod) {
+  if (mod && mod.renderMarkdown) {
+    console.log('[app] markdown-renderer loaded successfully');
+    return mod.renderMarkdown;
+  }
+  console.warn('[app] markdown-renderer module loaded but renderMarkdown not found');
+  return null;
 }).catch(function(err) {
-  console.warn('[app] markdown-renderer unavailable, using fallback:', err);
+  console.error('[app] markdown-renderer import FAILED:', err);
+  return null;
 });
+
+function _escapeHtmlFallback(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+var renderMarkdown = async function(md) {
+  var real = await _mdModuleReady;
+  if (real) {
+    renderMarkdown = real;
+    return real(md);
+  }
+  return '<div style="white-space:pre-wrap;font-family:var(--font-mono,monospace);color:#b0c4de;background:transparent;">' + _escapeHtmlFallback(md) + '</div>';
+};
 
 // Compatibility marker for legacy smoke tests: initializeConsole.
 
@@ -495,6 +512,12 @@ function initRefs() {
   els.docDetailTitle = $('doc-detail-title');
   els.docDetailBody = $('doc-detail-body');
   els.docDetailEyebrow = $('doc-detail-eyebrow');
+  // biz docs
+  els.bizDocsList = $('biz-docs-list');
+  els.bizDocsPagination = $('biz-docs-pagination');
+  els.bizDocDetailTitle = $('biz-doc-detail-title');
+  els.bizDocDetailBody = $('biz-doc-detail-body');
+  els.bizDocDetailEyebrow = $('biz-doc-detail-eyebrow');
   // agent chat
   els.retrievalHints = $('retrieval-hints');
   els.attachmentList = $('attachment-list');
@@ -616,6 +639,9 @@ function setView(viewId) {
   updateContextStatus();
   if (viewId === 'docs' && (!docFiles || docFiles.length === 0)) {
     loadDocs();
+  }
+  if (viewId === 'biz-docs' && (!bizDocFiles || bizDocFiles.length === 0)) {
+    loadBizDocs();
   }
 }
 
@@ -1035,7 +1061,7 @@ function clearTranscript() {
   if (els.chatTranscript) els.chatTranscript.innerHTML = '';
 }
 
-function loadChat(chatId) {
+async function loadChat(chatId) {
   const chat = chatHistories.find(c => c.id === chatId);
   if (!chat) return;
   currentChatId = chatId;
@@ -1049,7 +1075,11 @@ function loadChat(chatId) {
   }
   // Restore messages
   for (const msg of chat.messages) {
-    appendMessage(msg.text, msg.role === 'user' ? 'user' : 'assistant');
+    if (msg.role === 'assistant') {
+      await appendAssistantMessageAsync(msg.text);
+    } else {
+      appendMessage(msg.text, 'user');
+    }
   }
 }
 
@@ -1170,10 +1200,41 @@ function appendMessage(text, sender) {
   let html = escapeHtml(text)
     .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+  // Fix pre blocks: restore newlines inside code blocks
+  html = html.replace(/<pre><code>([\s\S]*?)<\/code><\/pre>/g, (m, code) => {
+    return '<pre><code>' + code.replace(/<br>/g, '\n') + '</code></pre>';
+  });
   div.innerHTML = html + `<div class="msg-time">${time}</div>`;
   els.chatTranscript.appendChild(div);
   els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+}
+
+async function appendAssistantMessageAsync(text) {
+  const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const div = document.createElement('div');
+  div.className = 'chat-message assistant';
+  try {
+    const html = await renderMarkdown(text);
+    div.innerHTML = '<div class="assistant-content">' + html + '</div><div class="msg-time">' + time + '</div>';
+  } catch (e) {
+    console.error('[appendAssistantMessageAsync] renderMarkdown threw:', e);
+    let html = escapeHtml(text)
+      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+    html = html.replace(/<pre><code>([\s\S]*?)<\/code><\/pre>/g, (m, code) => {
+      return '<pre><code>' + code.replace(/<br>/g, '\n') + '</code></pre>';
+    });
+    div.innerHTML = '<div class="assistant-content">' + html + '</div><div class="msg-time">' + time + '</div>';
+  }
+  els.chatTranscript.appendChild(div);
+  els.chatTranscript.scrollTop = els.chatTranscript.scrollHeight;
+  if (window.SiteUtils && window.SiteUtils.bindCodeBlockInteractions) {
+    window.SiteUtils.bindCodeBlockInteractions(div);
+  }
 }
 
 function updateContextStatus() {
@@ -1804,6 +1865,7 @@ async function sendAgentRun(text, provider, options) {
 
   let currentAssistantEl = null;
   let currentTextBuffer = '';
+  let messageFinalized = false;
 
   try {
     const response = await fetch(API_BASE + '/agent/run', {
@@ -1845,20 +1907,25 @@ async function sendAgentRun(text, provider, options) {
           if (!currentAssistantEl) {
             currentAssistantEl = createAssistantMessageEl();
           }
-          appendStreamingText(currentAssistantEl, event.content, 'thinking');
+          await appendStreamingText(currentAssistantEl, event.content, 'thinking');
         } else if (event.type === 'text') {
           if (!currentAssistantEl) {
             currentAssistantEl = createAssistantMessageEl();
           }
           currentTextBuffer += event.content;
-          appendStreamingText(currentAssistantEl, currentTextBuffer, 'text');
+          await appendStreamingText(currentAssistantEl, currentTextBuffer, 'text');
         } else if (event.type === 'done') {
-          finalizeAssistantMessage(currentAssistantEl, currentTextBuffer);
+          await finalizeAssistantMessage(currentAssistantEl, currentTextBuffer);
+          messageFinalized = true;
           isAgentRunning = false;
           agentAbortController = null;
           updateComposerState();
           break;
         } else if (event.type === 'error') {
+          if (currentAssistantEl) {
+            await finalizeAssistantMessage(currentAssistantEl, currentTextBuffer || '');
+            messageFinalized = true;
+          }
           appendMessage('Agent 错误: ' + event.message, 'assistant');
           addMessageToHistory('assistant', 'Agent 错误: ' + event.message);
           isAgentRunning = false;
@@ -1873,10 +1940,21 @@ async function sendAgentRun(text, provider, options) {
     }
 
     // Finalize if done event was missed
-    if (currentAssistantEl && currentTextBuffer) {
-      finalizeAssistantMessage(currentAssistantEl, currentTextBuffer);
+    if (currentAssistantEl && !messageFinalized) {
+      await finalizeAssistantMessage(currentAssistantEl, currentTextBuffer || '');
+    }
+    // Safety: ensure streaming class is removed even if finalize fails
+    if (currentAssistantEl) {
+      var el = currentAssistantEl;
+      setTimeout(function() {
+        var c = el.querySelector('.assistant-content');
+        if (c) c.classList.remove('streaming');
+      }, 500);
     }
   } catch (e) {
+    if (currentAssistantEl && !messageFinalized) {
+      await finalizeAssistantMessage(currentAssistantEl, currentTextBuffer || '');
+    }
     if (e.name === 'AbortError') {
       appendMessage('[已取消]', 'assistant');
       addMessageToHistory('assistant', '[已取消]');
@@ -1955,11 +2033,13 @@ async function finalizeAssistantMessage(el, text) {
   if (!el) return;
   const contentEl = el.querySelector('.assistant-content');
   if (contentEl) {
-    contentEl.classList.remove('streaming');
     if (text) {
-      const html = await renderMarkdown(text);
-      contentEl.innerHTML = html;
+      try {
+        const html = await renderMarkdown(text);
+        contentEl.innerHTML = html;
+      } catch (_e) { /* ignore render errors */ }
     }
+    contentEl.classList.remove('streaming');
   }
   const timeEl = el.querySelector('.msg-time');
   if (timeEl) {
@@ -2338,6 +2418,124 @@ function backToDocs() {
 }
 
 
+// ========================================================================
+// Biz Docs
+// ========================================================================
+
+let bizDocFiles = [];
+let bizDocPage = 1;
+const bizDocPageSize = 8;
+
+async function loadBizDocs() {
+  try {
+    const data = await apiGet('/docs?dir=business_files');
+    bizDocFiles = data.files || [];
+    bizDocPage = 1;
+    renderBizDocsList();
+  } catch (e) {
+    showToast('加载业务文档列表失败: ' + e.message, 'error');
+    els.bizDocsList.innerHTML = '<div class="empty-state">无法加载业务文档列表</div>';
+  }
+}
+
+function renderBizDocsList() {
+  if (!bizDocFiles.length) {
+    els.bizDocsList.innerHTML = '<div class="empty-state">暂无业务文档</div>';
+    els.bizDocsPagination.innerHTML = '';
+    return;
+  }
+  const total = bizDocFiles.length;
+  const totalPages = Math.max(1, Math.ceil(total / bizDocPageSize));
+  if (bizDocPage > totalPages) bizDocPage = totalPages;
+  const start = (bizDocPage - 1) * bizDocPageSize;
+  const pageFiles = bizDocFiles.slice(start, start + bizDocPageSize);
+
+  els.bizDocsList.innerHTML = pageFiles.map((f, i) => `
+    <div class="doc-item" onclick="renderBizDocDetail('${escapeHtml(f.name)}')" style="animation-delay:${i * 0.05}s">
+      <div class="doc-meta">
+        <span class="doc-category">业务文档</span>
+        <span class="doc-date">${escapeHtml(f.path)}</span>
+      </div>
+      <h3 class="doc-title">${escapeHtml(f.title)}</h3>
+      <p class="doc-excerpt">${escapeHtml(f.name)}</p>
+    </div>
+  `).join('');
+  requestAnimationFrame(function() { window.SiteUtils.installDockEffect(els.bizDocsList); });
+
+  const hasPrev = bizDocPage > 1;
+  const hasNext = bizDocPage < totalPages;
+  els.bizDocsPagination.innerHTML = `
+    <button class="pagination-btn" ${hasPrev ? '' : 'disabled'} onclick="changeBizDocPage(-1)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      上一页
+    </button>
+    <div class="pagination-jump">
+      <input type="number" class="pagination-input" id="bizPageInput" value="${bizDocPage}" min="1" max="${totalPages}" oninput="onBizDocPageInput()" onkeydown="if(event.key==='Enter'){changeBizDocPage('jump');}">
+      <span class="pagination-total">/ ${totalPages}</span>
+    </div>
+    <button class="pagination-btn" id="bizPageNextBtn" ${hasNext ? '' : 'disabled'} onclick="changeBizDocPage(1)">
+      <span id="bizPageNextText">下一页</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+    </button>
+  `;
+}
+
+function changeBizDocPage(delta) {
+  const totalPages = Math.max(1, Math.ceil(bizDocFiles.length / bizDocPageSize));
+  var newPage;
+  if (delta === 'jump') {
+    var input = document.getElementById('bizPageInput');
+    newPage = parseInt(input ? input.value : bizDocPage, 10);
+    if (isNaN(newPage)) newPage = bizDocPage;
+  } else {
+    newPage = bizDocPage + delta;
+  }
+  if (newPage >= 1 && newPage <= totalPages) {
+    bizDocPage = newPage;
+    renderBizDocsList();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function onBizDocPageInput() {
+  var input = document.getElementById('bizPageInput');
+  var btn = document.getElementById('bizPageNextBtn');
+  var text = document.getElementById('bizPageNextText');
+  if (!input || !btn || !text) return;
+  var val = parseInt(input.value, 10);
+  var totalPages = Math.max(1, Math.ceil(bizDocFiles.length / bizDocPageSize));
+  if (isNaN(val)) val = bizDocPage;
+  if (val !== bizDocPage) {
+    text.textContent = '跳转';
+    btn.disabled = false;
+    btn.setAttribute('onclick', "changeBizDocPage('jump')");
+  } else {
+    text.textContent = '下一页';
+    btn.disabled = !(bizDocPage < totalPages);
+    btn.setAttribute('onclick', 'changeBizDocPage(1)');
+  }
+}
+
+async function renderBizDocDetail(name) {
+  try {
+    const data = await apiGet('/docs/' + encodeURIComponent(name));
+    els.bizDocDetailTitle.textContent = data.title || data.name;
+    els.bizDocDetailEyebrow.textContent = data.name;
+    const html = await renderMarkdown(data.content || '');
+    els.bizDocDetailBody.innerHTML = html;
+    delete els.bizDocDetailBody.__codeBlockBound;
+    window.SiteUtils.bindCodeBlockInteractions(els.bizDocDetailBody);
+    setView('biz-doc-detail');
+  } catch (e) {
+    showToast('加载业务文档失败: ' + e.message, 'error');
+  }
+}
+
+function backToBizDocs() {
+  setView('biz-docs');
+}
+
+
 
 // ========================================================================
 // Expose globals for HTML onclick handlers
@@ -2381,6 +2579,10 @@ window.renderDocDetail = renderDocDetail;
 window.backToDocs = backToDocs;
 window.changeDocPage = changeDocPage;
 window.onPageInput = onPageInput;
+window.renderBizDocDetail = renderBizDocDetail;
+window.backToBizDocs = backToBizDocs;
+window.changeBizDocPage = changeBizDocPage;
+window.onBizDocPageInput = onBizDocPageInput;
 
 // ========================================================================
 // Init

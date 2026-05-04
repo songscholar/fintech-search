@@ -1780,7 +1780,7 @@ class RetrievalService:
                 JOIN procedure_features pf ON pf.procedure_id = procedure_features_fts.rowid
                 JOIN procedures p ON p.id = pf.procedure_id
                 JOIN files f ON f.id = pf.file_id
-                WHERE procedure_features_fts MATCH ?
+                WHERE procedure_features_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (fts_query, limit),
@@ -1809,7 +1809,7 @@ class RetrievalService:
                 JOIN blocks b ON b.id = blocks_fts.rowid
                 JOIN procedures p ON p.id = b.procedure_id
                 JOIN files f ON f.id = b.file_id
-                WHERE blocks_fts MATCH ?
+                WHERE blocks_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (fts_query, limit),
@@ -1840,7 +1840,7 @@ class RetrievalService:
                 JOIN chunks c ON c.id = chunks_fts.rowid
                 JOIN procedures p ON p.id = c.procedure_id
                 JOIN files f ON f.id = c.file_id
-                WHERE chunks_fts MATCH ?
+                WHERE chunks_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (fts_query, limit),
@@ -1868,7 +1868,7 @@ class RetrievalService:
                 FROM procedures_fts
                 JOIN procedures p ON p.id = procedures_fts.rowid
                 JOIN files f ON f.id = p.file_id
-                WHERE procedures_fts MATCH ?
+                WHERE procedures_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (fts_query, limit),
@@ -1906,7 +1906,7 @@ class RetrievalService:
                 JOIN procedures p ON p.id = a.procedure_id
                 JOIN files f ON f.id = a.file_id
                 JOIN statements s ON s.id = a.statement_id
-                WHERE actions_fts MATCH ?
+                WHERE actions_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (raw_query, raw_query, raw_query, raw_query, fts_query, limit),
@@ -1935,7 +1935,7 @@ class RetrievalService:
                 JOIN statements s ON s.id = statements_fts.rowid
                 JOIN procedures p ON p.id = s.procedure_id
                 JOIN files f ON f.id = s.file_id
-                WHERE statements_fts MATCH ?
+                WHERE statements_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (fts_query, limit),
@@ -1965,7 +1965,7 @@ class RetrievalService:
                 JOIN procedures p ON p.id = e.procedure_id
                 JOIN files f ON f.id = e.file_id
                 LEFT JOIN statements s ON s.id = e.statement_id
-                WHERE edges_fts MATCH ?
+                WHERE edges_fts MATCH ? ORDER BY rank
                 LIMIT ?
                 """,
                 (fts_query, limit),

@@ -40,7 +40,7 @@ from .debug_bundle import (
     summarize_debug_bundle_regression_panel_baseline_trend,
 )
 from .indexer import SQLiteIndexer
-from .llm import LlmConfigError, LlmRequestError
+from .llm import LlmConfigError, LlmRequestError, LlmService
 from .logging_system import (
     log_business,
     log_error,
@@ -157,13 +157,15 @@ class CodebaseApi:
         qa: CodebaseQA | None = None,
         answerer: CodebaseAnswerer | None = None,
         agent_gateway: AgentGateway | None = None,
+        llm_service: LlmService | None = None,
         default_db_path: str | Path | None = None,
         default_metadata_db_path: str | Path | None = None,
         default_table_db_path: str | Path | None = None,
     ) -> None:
         self.indexer = indexer or SQLiteIndexer()
+        self.llm_service = llm_service or LlmService.from_env()
         self.qa = qa or CodebaseQA(self.indexer)
-        self.answerer = answerer or CodebaseAnswerer(self.qa)
+        self.answerer = answerer or CodebaseAnswerer(self.qa, llm=self.llm_service)
         self.agent_gateway = agent_gateway or AgentGateway.from_env(indexer=self.indexer, qa=self.qa)
         self.default_db_path = str(default_db_path) if default_db_path else None
         self.default_metadata_db_path = str(default_metadata_db_path) if default_metadata_db_path else None
@@ -375,6 +377,8 @@ class CodebaseApi:
         try:
             print(f"USES Indexer API listening on http://{host}:{port}")
             server.serve_forever()
+        except KeyboardInterrupt:
+            print("\nShutting down...")
         finally:
             # Shutdown MCP connections
             try:
@@ -1225,12 +1229,14 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
             if not isinstance(history, list):
                 history = None
 
-            # Resolve provider config
-            try:
-                config = api.agent_gateway._resolve_provider(provider_name, None)
-            except AgentConfigError as exc:
+            # Resolve provider name (default to LlmService's default)
+            resolved_provider = provider_name or api.llm_service.default_provider
+            if not api.llm_service.is_configured(resolved_provider):
                 self.send_response(HTTPStatus.BAD_REQUEST)
-                encoded = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                encoded = json.dumps(
+                    {"error": f"LLM provider '{resolved_provider}' is not configured"},
+                    ensure_ascii=False,
+                ).encode("utf-8")
                 self._write_common_headers(content_type="application/json; charset=utf-8", content_length=len(encoded))
                 self.end_headers()
                 self.wfile.write(encoded)
@@ -1238,7 +1244,8 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
 
             loop_config = AgentLoopConfig(max_iterations=max(1, min(max_iterations, 20)))
             runner = AgentLoopRunner(
-                gateway_config=config,
+                llm_service=api.llm_service,
+                provider=resolved_provider,
                 tool_registry=api.tool_registry,
                 config=loop_config,
                 confirmation_manager=api.confirmation_manager,
@@ -1273,18 +1280,19 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
                     message=str(exc),
                     exc=exc,
                     trace_id=trace_id,
-                    context={"provider": config.name, "message": message[:200]},
+                    context={"provider": resolved_provider, "message": message[:200]},
                 )
                 error_event = json.dumps({"type": "error", "message": f"Agent 运行错误: {exc}"}, ensure_ascii=False)
                 self.wfile.write(f"event: error\ndata: {error_event}\n\n".encode("utf-8"))
                 self.wfile.flush()
 
             elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            llm_cfg = api.llm_service.get_config(resolved_provider)
             log_business(
                 "agent_run",
-                provider=config.name,
-                model=config.model,
-                base_url=config.base_url,
+                provider=resolved_provider,
+                model=llm_cfg.model if llm_cfg else None,
+                base_url=llm_cfg.base_url if llm_cfg else None,
                 message=message[:200],
                 elapsed_ms=elapsed_ms,
                 total_events=total_events,

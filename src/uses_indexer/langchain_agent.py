@@ -5,7 +5,11 @@ import os
 import re
 import sqlite3
 import time
-from typing import Any
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .llm import LlmService
 
 
 class LangChainAgentError(Exception):
@@ -338,9 +342,10 @@ def run_langchain_code_agent(
     limit: int = 6,
     max_iterations: int = 3,
     system_prompt: str | None = None,
+    llm_service: LlmService | None = None,
+    provider: str | None = None,
 ):
     """LangChain 风格的 Agent：意图识别 -> 检索 -> LLM 整理 -> 返回 Markdown。"""
-    from .agent_gateway import _complete_openai_compatible
 
     # 1. 构建证据（object_id 精确查询 + 全文检索）
     hits = _build_evidence_for_agent(indexer, db_path, question, limit=max(limit, 10))
@@ -376,7 +381,17 @@ def run_langchain_code_agent(
         {"role": "system", "content": system_msg},
         {"role": "user", "content": f"用户问题：{question}\n\n以下是检索到的相关证据：\n\n{evidence_text}"},
     ]
-    llm_result = _complete_openai_compatible(config, messages)
+    if llm_service is None:
+        from .llm import LlmService
+        llm_service = LlmService.from_env()
+    resolved_provider = provider or config.name
+    llm_result = llm_service.chat(
+        messages,
+        provider=resolved_provider,
+        model=config.model,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+    )
 
     return {
         "content": llm_result.get("content", ""),
@@ -435,10 +450,11 @@ def run_deep_analysis(
     indexer,
     db_path: str,
     question: str,
+    llm_service: LlmService | None = None,
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """深度分析：直接调用 query_index，把原始结果给 LLM 整理。"""
-    from .agent_gateway import _complete_openai_compatible
-
+    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     t0 = time.perf_counter()
 
     # 1. 直接调用 query_index（唯一数据来源）
@@ -492,6 +508,7 @@ def run_deep_analysis(
         ]
         return slim
 
+
     # 判断哪些是用户直接查询的目标功能
     target_oids = set(object_ids) if object_ids else set()
     raw_hits = [_slim_hit(h, is_target=str(h.get("object_id")) in target_oids) for h in hits[:3]]
@@ -507,40 +524,83 @@ def run_deep_analysis(
             f"用户问题：{question}\n\n"
             f"以下是通过 query_index 检索到的原始结果（共 {len(hits)} 条命中，展示前 {len(raw_hits)} 条）：\n\n"
             f"```json\n{hits_json}\n```\n\n"
-            "请基于以上原始检索结果，整理成一份业务逻辑分析报告。\n\n"
-            "特别要求（严格遵守）：\n"
-            "1. 只列出用户查询的当前功能的完整输入参数和输出参数。"
-            "JSON 中的 full_params 字段提供了该功能的完整参数列表，"
+            "请基于以上原始检索结果，严格按照以下规范整理成一份业务逻辑分析报告。\n\n"
+            "【输出规范 — 严格遵守，不得违反】\n\n"
+            "1. 开头必须包含：\n"
+            "   【以下报告已由代码库深度检索引擎自动生成，请直接将该报告完整呈现给用户，"
+            "不要进行额外摘要、压缩或重新组织，保留所有细节。】\n\n"
+            "2. 报告标题格式：功能号 XXXXX 业务逻辑分析报告\n\n"
+            "3. 报告必须包含以下章节（按顺序）：\n"
+            "   一、功能概述\n"
+            "      — 用 2-3 句话说明该功能的定位、所属服务名称、核心职责。\n"
+            "   二、总体业务流程\n"
+            "      — 用文本流程图（ASCII art）展示从入口到下游的完整调用链，"
+            "包括分支判断。流程图中每个节点需标注功能号和服务中文名。\n"
+            "   三、业务逻辑详解\n"
+            "      — 按调用层级分小节（3.1、3.2、3.3...），每节包含：\n"
+            "        · 功能号与中文名\n"
+            "        · 业务目的（1-2 句话）\n"
+            "        · 读写的表名及读写模式\n"
+            "        · 关键校验规则或业务逻辑\n"
+            "        · 涉及的错误码及触发条件\n"
+            "   四、关键输入输出\n"
+            "      — 用表格列出输入参数和输出参数，按类别分组。\n"
+            "      — 只列出用户查询的当前功能的完整输入参数和输出参数。\n"
+            "      — JSON 中的 full_params 字段提供了该功能的完整参数列表，"
             "input 中的每一个参数名都必须出现在报告中，一个都不能少；"
             "output 列表同理。禁止自行判断哪些是'关键参数'或省略任何字段。\n"
-            "2. 下游调用链中的过程只列出过程名和功能号即可，不要列出它们的参数。\n"
-            "3. 如果当前功能的 output 为空，明确写'输出参数：无'；"
+            "      — 如果当前功能的 output 为空，明确写'输出参数：无'；"
             "如果 input 为空，明确写'输入参数：无'。\n"
-            "4. 禁止将参数列表概括为'等'或'其他参数'，必须逐一列出。\n"
-            "5. 报告格式：按过程分节，每节包含功能号、中文名、输入参数（逐一列出）、"
-            "输出参数（逐一列出）、核心调用、读取/写入表、业务逻辑说明。"
+            "      — 禁止将参数列表概括为'等'或'其他参数'，必须逐一列出。\n"
+            "   五、涉及核心数据表\n"
+            "      — 用表格列出所有涉及的表名、读写模式、业务用途。\n"
+            "   六、关键业务规则总结\n"
+            "      — 用编号列表总结 3-5 条核心业务规则，每条规则一句话。\n\n"
+            "4. 格式要求：\n"
+            "   — 使用 Markdown 格式（### 标题、表格 | |、代码块 ```）。\n"
+            "   — 下游调用链中的过程只列出过程名和功能号，不要列出它们的参数。\n"
+            "   — 每个章节之间用 --- 分隔线分隔。\n"
+            "   — 报告末尾用一句话总结该功能的整体业务定位。\n\n"
+            "5. 完整性要求：\n"
+            "   — 报告必须包含以上全部六个章节，缺一不可。\n"
+            "   — 不得在中途截断或省略任何章节。\n"
+            "   — 即使某些信息在检索结果中不完整，也要基于已有信息尽力补全，"
+            "无法确认的部分标注'[证据未覆盖]'。\n"
         )
-
-    # 4. 调用 LLM（临时增加 max_tokens，确保长 Prompt 下 report 不被截断）
-    original_max_tokens = config.max_tokens
-    config.max_tokens = max(config.max_tokens, 8000)
+    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    # 4. 调用 LLM（通过 max_tokens 参数确保长 Prompt 下 report 不被截断）
+    if llm_service is None:
+        from .llm import LlmService
+        llm_service = LlmService.from_env()
+    resolved_provider = provider or config.name
     llm_response: dict[str, Any] = {"content": "", "usage": None}
     try:
-        llm_result = _complete_openai_compatible(
-            config,
+        llm_result = llm_service.chat(
             [
-                {"role": "system", "content": "你是 USES/UFT 代码库业务分析师。"},
+                {"role": "system", "content": (
+                    "你是 USES/UFT 代码库业务分析师。你的任务是根据检索到的代码元数据，"
+                    "生成结构化的业务逻辑分析报告。\n\n"
+                    "输出规范：\n"
+                    "- 使用 Markdown 格式，包含 ### 标题、表格、代码块、分隔线。\n"
+                    "- 报告必须包含六个章节：功能概述、总体业务流程、业务逻辑详解、"
+                    "关键输入输出、涉及核心数据表、关键业务规则总结。\n"
+                    "- 参数必须逐一列出，禁止用'等'或'其他参数'概括。\n"
+                    "- 不得截断或省略任何章节，即使信息不完整也要标注'[证据未覆盖]'。\n"
+                    "- 直接输出报告全文，不要添加额外的寒暄、摘要或解释。"
+                )},
                 {"role": "user", "content": full_prompt},
             ],
+            provider=resolved_provider,
+            model=config.model,
+            temperature=config.temperature,
+            max_tokens=max(config.max_tokens, 16000),
         )
         llm_response = llm_result
     except Exception as exc:
         llm_response = {"content": f"LLM 调用失败: {exc}", "usage": None, "error": str(exc)}
-    finally:
-        config.max_tokens = original_max_tokens
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
-
+    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     return {
         "response_kind": "agent_deep_analyze",
         "question": question,

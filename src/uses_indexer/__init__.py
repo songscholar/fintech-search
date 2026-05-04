@@ -14,7 +14,7 @@ from .embeddings import (
 )
 from .integration import CodexIntegrationInstaller
 from .indexer import SQLiteIndexer
-from .llm import OpenAICompatibleConfig, OpenAICompatibleLlm
+from .llm import LlmService, OpenAICompatibleConfig, OpenAICompatibleLlm
 from .mcp_server import CodebaseMcpServer
 from .parser import UftDslParser
 from .qa import CodebaseQA
@@ -32,6 +32,7 @@ __all__ = [
     "EmbeddingConfigError",
     "EmbeddingInfo",
     "EmbeddingRequestError",
+    "LlmService",
     "LocalHashedEmbedder",
     "OpenAICompatibleEmbedder",
     "OpenAICompatibleEmbeddingConfig",

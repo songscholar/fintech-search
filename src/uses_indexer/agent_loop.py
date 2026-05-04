@@ -18,9 +18,8 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Generator
-from urllib import error, request
 
-from .agent_gateway import AgentProviderConfig
+from .llm import LlmService
 from .logging_system import log_business, log_error
 from .tool_registry import ToolRegistry
 
@@ -183,16 +182,26 @@ class AgentLoopRunner:
     def __init__(
         self,
         *,
-        gateway_config: AgentProviderConfig,
+        llm_service: LlmService,
+        provider: str,
         tool_registry: ToolRegistry,
         config: AgentLoopConfig | None = None,
         confirmation_manager: ConfirmationManager | None = None,
     ) -> None:
         self.config = config or AgentLoopConfig()
-        self.gateway_config = gateway_config
+        self.llm_service = llm_service
+        self.provider = provider
         self.tool_registry = tool_registry
         self.confirmation_manager = confirmation_manager
         self._tools_requiring_confirmation = self._collect_confirmation_tools()
+
+    @property
+    def gateway_config(self):
+        """Backward-compat accessor for code that reads gateway_config.name."""
+        cfg = self.llm_service.get_config(self.provider)
+        if cfg is None:
+            return None
+        return _CompatConfig(cfg)
 
     def _collect_confirmation_tools(self) -> set[str]:
         """Collect full tool names that require confirmation from all sources."""
@@ -243,18 +252,19 @@ class AgentLoopRunner:
 
         for iteration in range(1, self.config.max_iterations + 1):
             try:
-                if supports_function_calling and openai_tools:
-                    llm_response = _call_llm_with_tools(
-                        self.gateway_config, messages, openai_tools
-                    )
-                else:
-                    llm_response = _call_llm_plain(self.gateway_config, messages)
+                result = self.llm_service.chat(
+                    messages,
+                    provider=self.provider,
+                    tools=openai_tools if supports_function_calling and openai_tools else None,
+                )
+                # Convert LlmService result to the raw_response format expected by helpers
+                llm_response = result["raw_response"]
             except Exception as exc:
                 log_error(
                     event="agent_loop_llm_call_failed",
                     message=str(exc),
                     exc=exc,
-                    context={"iteration": iteration, "provider": self.gateway_config.name},
+                    context={"iteration": iteration, "provider": self.provider},
                 )
                 yield _event_to_dict(ErrorEvent(message=f"LLM 调用失败: {exc}"))
                 return
@@ -364,8 +374,8 @@ class AgentLoopRunner:
 
         # Max iterations reached — ask LLM for a final text answer
         try:
-            final_response = _call_llm_plain(self.gateway_config, messages)
-            final_text = _extract_text_content(final_response)
+            final_result = self.llm_service.chat(messages, provider=self.provider)
+            final_text = _extract_text_content(final_result["raw_response"])
             if final_text:
                 yield _event_to_dict(TextEvent(content=final_text))
         except Exception as exc:
@@ -373,7 +383,7 @@ class AgentLoopRunner:
                 event="agent_loop_final_call_failed",
                 message=str(exc),
                 exc=exc,
-                context={"provider": self.gateway_config.name},
+                context={"provider": self.provider},
             )
 
         yield _event_to_dict(DoneEvent(
@@ -430,18 +440,18 @@ class AgentLoopRunner:
 
         for iteration in range(1, self.config.max_iterations + 1):
             try:
-                if supports_function_calling and openai_tools:
-                    llm_response = _call_llm_with_tools(
-                        self.gateway_config, messages, openai_tools
-                    )
-                else:
-                    llm_response = _call_llm_plain(self.gateway_config, messages)
+                result = self.llm_service.chat(
+                    messages,
+                    provider=self.provider,
+                    tools=openai_tools if supports_function_calling and openai_tools else None,
+                )
+                llm_response = result["raw_response"]
             except Exception as exc:
                 log_error(
                     event="agent_loop_llm_call_failed",
                     message=str(exc),
                     exc=exc,
-                    context={"iteration": iteration, "provider": self.gateway_config.name},
+                    context={"iteration": iteration, "provider": self.provider},
                 )
                 yield _event_to_dict(ErrorEvent(message=f"LLM 调用失败: {exc}"))
                 return
@@ -526,8 +536,8 @@ class AgentLoopRunner:
                 total_tool_calls += 1
 
         try:
-            final_response = _call_llm_plain(self.gateway_config, messages)
-            final_text = _extract_text_content(final_response)
+            final_result = self.llm_service.chat(messages, provider=self.provider)
+            final_text = _extract_text_content(final_result["raw_response"])
             if final_text:
                 yield _event_to_dict(TextEvent(content=final_text))
         except Exception as exc:
@@ -535,7 +545,7 @@ class AgentLoopRunner:
                 event="agent_loop_final_call_failed",
                 message=str(exc),
                 exc=exc,
-                context={"provider": self.gateway_config.name},
+                context={"provider": self.provider},
             )
 
         yield _event_to_dict(DoneEvent(
@@ -544,74 +554,12 @@ class AgentLoopRunner:
         ))
 
 
-def _call_llm_with_tools(
-    config: AgentProviderConfig,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Call LLM with OpenAI function calling tools parameter."""
-    payload: dict[str, Any] = {
-        "model": config.model,
-        "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
-        "messages": messages,
-        "tools": tools,
-    }
-    return _perform_llm_request(config, payload)
-
-
-def _call_llm_plain(
-    config: AgentProviderConfig,
-    messages: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Call LLM without tools (text-only)."""
-    payload: dict[str, Any] = {
-        "model": config.model,
-        "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
-        "messages": messages,
-    }
-    return _perform_llm_request(config, payload)
-
-
-def _perform_llm_request(
-    config: AgentProviderConfig,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    """Execute an HTTP request to the LLM and return parsed JSON response."""
-    headers = {"Content-Type": "application/json"}
-    if config.api_key:
-        headers["Authorization"] = f"Bearer {config.api_key}"
-    if config.user_agent:
-        headers["User-Agent"] = config.user_agent
-
-    http_request = request.Request(
-        config.base_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-
-    attempts = config.max_retries + 1
-    last_error: Exception | None = None
-    for attempt in range(1, attempts + 1):
-        try:
-            with request.urlopen(http_request, timeout=config.timeout_seconds) as response:
-                raw = response.read().decode("utf-8")
-                return json.loads(raw)
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            last_error = RuntimeError(f"LLM request failed with status {exc.code}: {detail}")
-        except error.URLError as exc:
-            last_error = RuntimeError(f"LLM request failed: {exc.reason}")
-        except TimeoutError as exc:
-            last_error = RuntimeError(f"LLM request timed out: {exc}")
-        if attempt < attempts:
-            time.sleep(config.retry_backoff_seconds * attempt)
-
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("LLM request failed for an unknown reason")
+class _CompatConfig:
+    """Minimal compat shim so code reading gateway_config.name still works."""
+    def __init__(self, cfg):
+        self.name = cfg.name
+        self.model = cfg.model
+        self.base_url = cfg.base_url
 
 
 def _extract_tool_calls(response: dict[str, Any]) -> list[dict[str, Any]]:

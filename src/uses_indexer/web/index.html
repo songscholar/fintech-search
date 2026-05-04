@@ -22,7 +22,10 @@
       <div class="nav-links">
         <a href="#" class="nav-link active" data-view="search" onclick="setView('search')">代码检索</a>
         <a href="#" class="nav-link" data-view="agent" onclick="setView('agent')">智能助手</a>
+        <a href="#" class="nav-link" data-view="browse" onclick="setView('browse')">文件浏览</a>
+        <a href="#" class="nav-link" data-view="evaluation" onclick="setView('evaluation')">评测中心</a>
         <a href="#" class="nav-link" data-view="docs" onclick="setView('docs')">说明文档</a>
+        <a href="#" class="nav-link" data-view="biz-docs" onclick="setView('biz-docs')">业务文档</a>
         <a href="#" class="nav-link" data-view="system" onclick="setView('system')">系统状态</a>
       </div>
       <div class="nav-right">
@@ -102,10 +105,20 @@
             <div class="input-group">
               <label for="db-path">数据库路径</label>
               <input type="text" id="db-path" placeholder="留空使用默认数据库" />
+              <select id="db-selector" class="db-selector" onchange="window.__enhancements.onDbSelectorChange()">
+                <option value="">使用默认数据库</option>
+              </select>
             </div>
             <div class="input-group">
               <label for="question-input">问题</label>
               <textarea id="question-input" rows="3" placeholder="例如：证券代码获取的逻辑在哪里，失败时会走哪条路径？"></textarea>
+            </div>
+            <div class="search-history-panel" id="search-history-panel">
+              <div class="sh-header">
+                <span>最近检索</span>
+                <button type="button" class="btn icon" onclick="window.__enhancements.clearSearchHistory()" title="清空">🗑</button>
+              </div>
+              <div class="search-history-list" id="search-history-list"></div>
             </div>
             <div class="params-row">
               <div class="input-group small">
@@ -133,6 +146,9 @@
           </div>
         </div>
 
+        <!-- 向量状态条 -->
+        <div class="vector-status-bar" id="vector-status-bar" hidden></div>
+
         <!-- 结果区 -->
         <div class="results-card glass" id="results-card" hidden>
           <div class="results-tabs">
@@ -140,6 +156,11 @@
             <button class="tab-btn" data-tab="evidence" onclick="switchTab('evidence')">证据块</button>
             <button class="tab-btn" data-tab="answer" onclick="switchTab('answer')">最终回答</button>
             <button class="tab-btn" data-tab="trace" onclick="switchTab('trace')">调试信息</button>
+            <div class="tab-actions">
+              <button class="btn ghost small" onclick="window.__enhancements.exportQueryResults()" title="导出检索结果">📥 检索</button>
+              <button class="btn ghost small" onclick="window.__enhancements.exportEvidence()" title="导出证据">📥 证据</button>
+              <button class="btn ghost small" onclick="window.__enhancements.exportAnswer()" title="导出回答">📥 回答</button>
+            </div>
           </div>
           <div class="tab-panes">
             <div class="tab-pane active" id="tab-query">
@@ -185,28 +206,79 @@
               <div class="eyebrow">AI Assistant</div>
               <h2 class="query-title">智能助手</h2>
               <div class="chat-mode-toggle">
-                <button class="mode-btn active" data-mode="daily" onclick="setAgentMode('daily')">日常对话</button>
-                <button class="mode-btn" data-mode="business" onclick="setAgentMode('business')">业务问答</button>
+                <select id="context-mode" class="context-mode-select" onchange="setContextMode(this.value)">
+                  <option value="codebase">代码库模式</option>
+                  <option value="general">通用模式</option>
+                </select>
               </div>
             </div>
             <div class="chat-transcript" id="chat-transcript"></div>
             <div class="chat-composer">
               <textarea id="chat-input" rows="2" placeholder="输入问题，智能助手将结合代码库上下文回答..."></textarea>
+              <div id="command-dropdown" class="command-dropdown hidden"></div>
               <div class="attachment-list" id="attachment-list"></div>
               <div class="composer-actions">
                 <div class="composer-left">
                   <button class="btn icon" onclick="triggerFileUpload()" title="上传文件">📎</button>
                   <input type="file" id="file-upload" style="display:none" multiple accept="image/*,.txt,.md,.json,.csv,.py,.js,.java,.go,.rs,.cpp,.c,.h,.sql,.xml,.yaml,.yml" onchange="onFileSelected(event)" />
                   <div class="composer-hints" id="retrieval-hints">
-                    <label class="hint-check"><input type="checkbox" id="attach-retrieval" checked /><span>附检索</span></label>
-                    <label class="hint-check"><input type="checkbox" id="attach-evidence" checked /><span>附证据</span></label>
-                    <label class="hint-check"><input type="checkbox" id="attach-draft" /><span>附草稿</span></label>
+                    <span class="context-mode-badge" id="context-mode-badge">代码库模式</span>
                   </div>
                 </div>
                 <div class="composer-right">
                   <select id="agent-provider" class="agent-select composer-model-select"></select>
-                  <button class="btn primary" onclick="sendChat()">发送</button>
+                  <button class="btn primary" id="send-btn" onclick="sendChat()">发送</button>
+                  <button class="btn agent-cancel-btn hidden" id="cancel-btn" onclick="cancelAgentRun()">停止</button>
                 </div>
+              </div>
+            </div>
+          </div>
+          <!-- Tool confirmation dialog -->
+          <div id="permission-dialog" class="permission-dialog hidden">
+            <div class="permission-content glass">
+              <h3>工具调用确认</h3>
+              <div class="permission-tool-name" id="perm-tool-name"></div>
+              <details class="permission-args"><summary>参数</summary><pre id="perm-tool-args"></pre></details>
+              <div class="permission-actions">
+                <button class="btn" onclick="resolvePermission('allow')">允许本次</button>
+                <button class="btn accent" onclick="resolvePermission('allow_always')">始终允许</button>
+                <button class="btn ghost" onclick="resolvePermission('deny')">拒绝</button>
+              </div>
+            </div>
+          </div>
+          <div id="mcp-connect-dialog" class="permission-dialog hidden">
+            <div class="permission-content glass">
+              <h3>添加 MCP 服务器</h3>
+              <div class="mcp-form-row">
+                <label>名称</label>
+                <input id="mcp-name" type="text" placeholder="github" />
+              </div>
+              <div class="mcp-form-row">
+                <label>传输方式</label>
+                <select id="mcp-transport" onchange="toggleMcpTransportFields()">
+                  <option value="stdio">stdio</option>
+                  <option value="sse">sse</option>
+                </select>
+              </div>
+              <div id="mcp-stdio-fields">
+                <div class="mcp-form-row">
+                  <label>命令</label>
+                  <input id="mcp-command" type="text" placeholder="npx" />
+                </div>
+                <div class="mcp-form-row">
+                  <label>参数 (JSON)</label>
+                  <input id="mcp-args" type="text" placeholder='["-y", "@modelcontextprotocol/server-github"]' />
+                </div>
+              </div>
+              <div id="mcp-sse-fields" class="hidden">
+                <div class="mcp-form-row">
+                  <label>URL</label>
+                  <input id="mcp-url" type="text" placeholder="https://mcp.example.com/sse" />
+                </div>
+              </div>
+              <div class="permission-actions">
+                <button class="btn accent" onclick="submitMcpConnect()">连接</button>
+                <button class="btn ghost" onclick="hideMcpConnectDialog()">取消</button>
               </div>
             </div>
           </div>
@@ -227,6 +299,19 @@
                 <span class="ctx-tag" id="ctx-evidence">证据: 无</span>
                 <span class="ctx-tag" id="ctx-draft">草稿: 无</span>
               </div>
+            </div>
+            <div class="sidebar-section">
+              <h4>MCP 工具</h4>
+              <div class="mcp-tool-list" id="mcp-tool-list">
+                <span class="sidebar-hint">加载中...</span>
+              </div>
+            </div>
+            <div class="sidebar-section">
+              <h4>MCP 服务器</h4>
+              <div id="mcp-server-list">
+                <span class="sidebar-hint">加载中...</span>
+              </div>
+              <button class="btn ghost sidebar-add-btn" onclick="showMcpConnectDialog()" style="width:100%;margin-top:6px">+ 添加服务器</button>
             </div>
             <div class="sidebar-section">
               <h4>操作</h4>
@@ -282,6 +367,94 @@
       </div>
     </section>
 
+    <!-- ========== 文件浏览视图 ========== -->
+    <section id="view-browse" class="view">
+      <div class="container">
+        <div class="browse-header">
+          <div class="eyebrow">File Browser</div>
+          <h1 class="query-title">代码库文件浏览</h1>
+          <p class="query-subtitle">浏览源码目录结构，点击文件查看内容。</p>
+        </div>
+        <div class="browse-layout">
+          <div class="browse-sidebar glass">
+            <div class="browse-path" id="browse-path">/</div>
+            <div class="browse-tree" id="browse-tree"></div>
+          </div>
+          <div class="browse-preview glass">
+            <div class="browse-preview-header">
+              <span id="preview-filename">请选择文件</span>
+              <button class="btn ghost small" onclick="window.__browse.copyPath()">复制路径</button>
+            </div>
+            <pre class="browse-preview-body" id="preview-body"><code>在左侧点击文件以预览内容</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 评测中心视图 ========== -->
+    <section id="view-evaluation" class="view">
+      <div class="container">
+        <div class="eval-header">
+          <div class="eyebrow">Evaluation Center</div>
+          <h1 class="query-title">评测中心</h1>
+          <p class="query-subtitle">Debug Bundle 对比、回归面板、基线管理与发布工作流。</p>
+        </div>
+        <div class="eval-tabs">
+          <button class="eval-tab active" data-etab="compare" onclick="window.__eval.switchTab('compare')">A/B 对比</button>
+          <button class="eval-tab" data-etab="baseline" onclick="window.__eval.switchTab('baseline')">基线管理</button>
+          <button class="eval-tab" data-etab="workflow" onclick="window.__eval.switchTab('workflow')">发布工作流</button>
+        </div>
+        <div class="eval-panes">
+          <div class="eval-pane active" id="eval-tab-compare">
+            <div class="eval-form">
+              <div class="input-group">
+                <label>Before DB</label>
+                <input type="text" id="eval-before-db" placeholder="examples/uses_codes_index.db" />
+              </div>
+              <div class="input-group">
+                <label>After DB</label>
+                <input type="text" id="eval-after-db" placeholder="examples/business_code_index.db" />
+              </div>
+              <div class="input-group">
+                <label>Cases JSON</label>
+                <input type="text" id="eval-cases" placeholder="eval/uses_codes_cases.json" />
+              </div>
+              <div class="params-row">
+                <div class="input-group small"><label>Limit</label><input type="number" id="eval-limit" value="6" /></div>
+                <div class="input-group small"><label>Context</label><input type="number" id="eval-context" value="2" /></div>
+                <div class="input-group small"><label>Related</label><input type="number" id="eval-related" value="3" /></div>
+              </div>
+              <button class="btn primary" onclick="window.__eval.runComparePanel()">运行回归面板对比</button>
+            </div>
+            <div class="eval-results" id="eval-compare-results"></div>
+          </div>
+          <div class="eval-pane" id="eval-tab-baseline">
+            <div class="eval-toolbar">
+              <button class="btn secondary" onclick="window.__eval.loadBaselines()">刷新列表</button>
+            </div>
+            <div class="eval-results" id="eval-baseline-results"></div>
+          </div>
+          <div class="eval-pane" id="eval-tab-workflow">
+            <div class="eval-form">
+              <div class="input-group">
+                <label>Panel Archive / panel.json</label>
+                <input type="text" id="eval-panel-path" placeholder="path/to/panel.json" />
+              </div>
+              <div class="input-group">
+                <label>Baseline Name</label>
+                <input type="text" id="eval-baseline-name" placeholder="v1.0.0" />
+              </div>
+              <div class="actions-row">
+                <button class="btn primary" onclick="window.__eval.runReleaseWorkflow()">运行发布工作流</button>
+                <button class="btn secondary" onclick="window.__eval.evaluatePromotionGate()">评估晋升门控</button>
+              </div>
+            </div>
+            <div class="eval-results" id="eval-workflow-results"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ========== 说明文档列表视图 ========== -->
     <section id="view-docs" class="view">
       <div class="container">
@@ -309,6 +482,34 @@
         <div class="detail-body" id="doc-detail-body"></div>
       </div>
     </section>
+
+    <!-- ========== 业务文档列表视图 ========== -->
+    <section id="view-biz-docs" class="view">
+      <div class="container">
+        <div class="docs-header">
+          <div class="eyebrow">Business Documentation</div>
+          <h1 class="query-title">业务文档</h1>
+          <p class="query-subtitle">业务相关 Markdown 文档，点击条目查看详情。</p>
+        </div>
+        <div class="docs-list" id="biz-docs-list"></div>
+        <div class="docs-pagination" id="biz-docs-pagination"></div>
+      </div>
+    </section>
+
+    <!-- ========== 业务文档详情视图 ========== -->
+    <section id="view-biz-doc-detail" class="view">
+      <div class="container">
+        <div class="doc-detail-header">
+          <button class="btn ghost doc-back" onclick="backToBizDocs()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+            返回列表
+          </button>
+          <div class="eyebrow" id="biz-doc-detail-eyebrow">Business Documentation</div>
+          <h1 class="query-title" id="biz-doc-detail-title">—</h1>
+        </div>
+        <div class="detail-body" id="biz-doc-detail-body"></div>
+      </div>
+    </section>
   </main>
 
   <!-- 轻量 Toast 通知 -->
@@ -330,6 +531,11 @@
 
   <script src="/assets/highlight.min.js"></script>
   <script src="/assets/site-utils.js"></script>
+  <script src="/assets/agent-commands.js"></script>
   <script src="/assets/app.js?v=8" type="module"></script>
+  <script src="/assets/enhancements.js?v=1"></script>
+  <script src="/assets/browse.js?v=1"></script>
+  <script src="/assets/evaluation.js?v=1"></script>
+  <script src="/assets/code-viz.js?v=1"></script>
 </body>
 </html>

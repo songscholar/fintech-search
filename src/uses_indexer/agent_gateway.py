@@ -8,11 +8,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib import error, request
 
 from .config import bootstrap_env
 from .index_catalog import INDEX_DEFINITIONS
 from .langchain_agent import LangChainAgentError, classify_retrieval_intent, run_langchain_code_agent
+from .llm import LlmService
 from .logging_system import log_business, log_error
 from .qa import CodebaseQA
 from .indexer import SQLiteIndexer
@@ -60,18 +60,49 @@ class AgentGateway:
         *,
         indexer: SQLiteIndexer,
         qa: CodebaseQA,
+        llm_service: LlmService | None = None,
         providers: dict[str, AgentProviderConfig] | None = None,
         default_provider: str | None = None,
     ) -> None:
         self.indexer = indexer
         self.qa = qa
+        self.llm_service = llm_service or LlmService.from_env()
         self.providers = providers or {}
         self.default_provider = default_provider or next(iter(self.providers.keys()), None)
 
     @classmethod
     def from_env(cls, *, indexer: SQLiteIndexer, qa: CodebaseQA) -> "AgentGateway":
         bootstrap_env()
+        llm_service = LlmService.from_env()
+
         providers: dict[str, AgentProviderConfig] = {}
+
+        # 1. 从 LlmService 的 provider 列表自动生成 agent provider
+        _LLM_PROVIDER_LABELS: dict[str, tuple[str, str]] = {
+            "kimi": ("Kimi", "Moonshot Kimi 大模型"),
+            "xiaomi": ("Xiaomi MiMo", "小米 MiMo 大模型"),
+        }
+        for llm_cfg in llm_service.list_providers():
+            name = llm_cfg["name"]
+            label, description = _LLM_PROVIDER_LABELS.get(name, (name, f"{name} LLM"))
+            full_cfg = llm_service.get_config(name)
+            providers[name] = AgentProviderConfig(
+                name=name,
+                label=label,
+                adapter="openai-compatible",
+                base_url=llm_cfg["base_url"],
+                model=llm_cfg["model"],
+                api_key=full_cfg.api_key if full_cfg else None,
+                temperature=full_cfg.temperature if full_cfg else 0.1,
+                max_tokens=full_cfg.max_tokens if full_cfg else 1600,
+                timeout_seconds=full_cfg.timeout_seconds if full_cfg else 90.0,
+                max_retries=full_cfg.max_retries if full_cfg else 0,
+                retry_backoff_seconds=full_cfg.retry_backoff_seconds if full_cfg else 1.0,
+                description=description,
+                user_agent=full_cfg.user_agent if full_cfg else None,
+            )
+
+        # 2. 允许 USES_INDEXER_AGENT_* 覆盖或新增
         for prefix, name, label, description in (
             ("USES_INDEXER_AGENT_OPENAI", "openai-compatible", "通用智能体", "适合对接任意 OpenAI-compatible 聊天服务"),
             ("USES_INDEXER_AGENT_HERMES", "hermes", "Hermes", "适合挂接你自己部署的 Hermes 服务"),
@@ -81,13 +112,18 @@ class AgentGateway:
             if config is not None:
                 providers[name] = config
 
+        # 3. 确定默认 provider
         default_provider = os.getenv("USES_INDEXER_AGENT_DEFAULT_PROVIDER", "").strip() or None
         if default_provider and default_provider not in providers:
-            default_provider = next(iter(providers.keys()), None)
+            default_provider = None
         if default_provider is None:
-            default_provider = next(iter(providers.keys()), None)
+            # 优先用 LlmService 的默认 provider，再 fallback 到第一个
+            if llm_service.default_provider in providers:
+                default_provider = llm_service.default_provider
+            else:
+                default_provider = next(iter(providers.keys()), None)
 
-        return cls(indexer=indexer, qa=qa, providers=providers, default_provider=default_provider)
+        return cls(indexer=indexer, qa=qa, llm_service=llm_service, providers=providers, default_provider=default_provider)
 
     def list_providers(self) -> dict[str, Any]:
         items = [
@@ -187,6 +223,8 @@ class AgentGateway:
                         limit=limit,
                         max_iterations=max_search_rounds,
                         system_prompt=system_prompt,
+                        llm_service=self.llm_service,
+                        provider=config.name,
                     )
                 except LangChainAgentError as exc:
                     log_error(
@@ -314,7 +352,19 @@ class AgentGateway:
 
         started_at = time.time()
         try:
-            model_response = _complete_openai_compatible(config, messages)
+            llm_result = self.llm_service.chat(
+                messages,
+                provider=config.name,
+                model=config.model,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout=config.timeout_seconds,
+            )
+            model_response = {
+                "content": llm_result["content"],
+                "usage": llm_result["usage"],
+                "raw_response": llm_result["raw_response"],
+            }
         except Exception as exc:
             log_error(
                 event="agent_chat_failed",
@@ -381,6 +431,8 @@ class AgentGateway:
             indexer=self.indexer,
             db_path=db_path,
             question=question,
+            llm_service=self.llm_service,
+            provider=config.name,
         )
 
     def _build_auto_retrieve_fallback_response(
@@ -1105,38 +1157,6 @@ def _build_user_prompt(*, message: str, context_bundle: dict[str, Any], attachme
     return {"role": "user", "content": text_content}
 
 
-def _complete_openai_compatible(config: AgentProviderConfig, messages: list[dict[str, Any]]) -> dict[str, Any]:
-    payload = {
-        "model": config.model,
-        "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
-        "messages": messages,
-    }
-    headers = {"Content-Type": "application/json"}
-    if config.api_key:
-        headers["Authorization"] = f"Bearer {config.api_key}"
-    if config.user_agent:
-        headers["User-Agent"] = config.user_agent
-
-    http_request = request.Request(
-        config.base_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-
-    raw = _perform_request(http_request, config)
-    parsed = json.loads(raw)
-    content = _extract_content(parsed)
-    if not content:
-        raise AgentRequestError("Agent response did not contain assistant content")
-    return {
-        "content": content,
-        "usage": parsed.get("usage"),
-        "raw_response": parsed,
-    }
-
-
 def _format_grounded_decision_note(context_bundle: dict[str, Any]) -> str:
     draft = dict(context_bundle.get("answer_draft") or {})
     decision = dict(draft.get("decision") or {})
@@ -1157,59 +1177,6 @@ def _format_grounded_decision_note(context_bundle: dict[str, Any]) -> str:
     if primary_candidate.get("procedure_name"):
         lines.append(f"- primary_candidate: {primary_candidate['procedure_name']}")
     return "\n".join(lines) + "\n\n"
-
-
-def _perform_request(http_request: request.Request, config: AgentProviderConfig) -> str:
-    attempts = config.max_retries + 1
-    last_error: Exception | None = None
-    for attempt in range(1, attempts + 1):
-        try:
-            with request.urlopen(http_request, timeout=config.timeout_seconds) as response:
-                return response.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            last_error = AgentRequestError(f"Agent request failed with status {exc.code}: {detail}")
-        except error.URLError as exc:
-            last_error = AgentRequestError(f"Agent request failed: {exc.reason}")
-        except TimeoutError as exc:
-            last_error = AgentRequestError(f"Agent request timed out: {exc}")
-        if attempt < attempts:
-            time.sleep(config.retry_backoff_seconds * attempt)
-    if last_error is not None:
-        raise last_error
-    raise AgentRequestError("Agent request failed for an unknown reason")
-
-
-def _extract_content(payload: dict[str, Any]) -> str:
-    choices = payload.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return ""
-    first = choices[0]
-    if not isinstance(first, dict):
-        return ""
-    message = first.get("message")
-    if not isinstance(message, dict):
-        return ""
-    content = message.get("content")
-    if isinstance(content, str):
-        text = content.strip()
-        if text:
-            return text
-    if isinstance(content, list):
-        text_parts = []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
-                text_parts.append(item["text"].strip())
-        text = "\n".join(part for part in text_parts if part)
-        if text:
-            return text
-    # fallback: some reasoning models (e.g. kimi-for-coding) may return reasoning_content without content
-    reasoning = message.get("reasoning_content")
-    if isinstance(reasoning, str):
-        reasoning = reasoning.strip()
-        if reasoning:
-            return reasoning
-    return ""
 
 
 def _provider_from_override(provider_override: dict[str, Any], *, provider_name: str | None) -> AgentProviderConfig:

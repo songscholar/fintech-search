@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .answer_strategy import AdaptiveAnswerStrategy
-from .llm import LlmConfigError, LlmRequestError, OpenAICompatibleLlm
+from .llm import LlmConfigError, LlmRequestError, LlmService
 from .qa import CodebaseQA
 from .response_schema import apply_response_envelope
 from .strategy_config import AnswerExecutionPolicy
@@ -13,12 +13,12 @@ class CodebaseAnswerer:
     def __init__(
         self,
         qa: CodebaseQA | None = None,
-        llm: OpenAICompatibleLlm | None = None,
+        llm: LlmService | None = None,
         strategy: AdaptiveAnswerStrategy | None = None,
         policy: AnswerExecutionPolicy | None = None,
     ) -> None:
         self.qa = qa or CodebaseQA()
-        self.llm = llm or OpenAICompatibleLlm.from_env()
+        self.llm = llm or LlmService.from_env()
         self.strategy = strategy or AdaptiveAnswerStrategy()
         self.policy = policy or AnswerExecutionPolicy()
 
@@ -49,6 +49,7 @@ class CodebaseAnswerer:
         qa_bundle["prompt_package"] = prompt_package
         llm_enabled = self.llm.is_configured()
         draft_answer = dict(qa_bundle.get("draft_answer") or {})
+
         confidence = dict(draft_answer.get("confidence") or {})
         confidence_score = float(confidence.get("score") or 0.0)
         low_confidence = confidence_score < float(self.policy.low_confidence_threshold)
@@ -66,9 +67,11 @@ class CodebaseAnswerer:
 
         if llm_enabled:
             try:
-                llm_result = self.llm.complete(
-                    system_prompt=str(prompt_package["system_prompt"]),
-                    user_prompt=str(prompt_package["user_prompt"]),
+                llm_result = self.llm.chat(
+                    [
+                        {"role": "system", "content": str(prompt_package["system_prompt"])},
+                        {"role": "user", "content": str(prompt_package["user_prompt"])},
+                    ],
                 )
             except (LlmConfigError, LlmRequestError) as exc:
                 if not effective_allow_draft_fallback:
