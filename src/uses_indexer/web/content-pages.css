@@ -13,8 +13,8 @@
   --radius: 18px;
   --radius-sm: 12px;
   /* 方案A：杂志/书籍感（推荐） */
-  --font-display: 'Playfair Display', 'LXGW WenKai', Georgia, serif;
-  --font-body: 'Cormorant', 'LXGW WenKai', serif;
+  --font-display: 'LXGW WenKai', 'Playfair Display', Georgia, serif;
+  --font-body: 'LXGW WenKai', 'Crimson Pro', serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
 
   /* 方案B：现代冷峻 — 取消注释即可切换
@@ -24,7 +24,7 @@
   */
 
   /* 方案C：温暖人文 — 取消注释即可切换
-  --font-display: 'Cormorant', 'LXGW WenKai', serif;
+  --font-display: 'LXGW WenKai', 'Playfair Display', serif;
   --font-body: 'Source Serif 4', 'LXGW WenKai', serif;
   --font-mono: 'JetBrains Mono', monospace;
   */

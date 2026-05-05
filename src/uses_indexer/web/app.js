@@ -2317,7 +2317,7 @@ const docPageSize = 8;
 
 async function loadDocs() {
   try {
-    const data = await apiGet('/docs');
+    const data = await apiGet('/docs?dir=system_files');
     docFiles = data.files || [];
     docPage = 1;
     renderDocsList();
@@ -2666,6 +2666,7 @@ function backToCommonData() {
 // ========================================================================
 window.setView = setView;
 window.toggleSettings = toggleSettings;
+window.updateRainConfig = updateRainConfig;
 window.onBgModeClick = onBgModeClick;
 window.onBgUpload = onBgUpload;
 window.runAll = runAll;
