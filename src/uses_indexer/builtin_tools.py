@@ -14,6 +14,7 @@ import fnmatch
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -26,7 +27,7 @@ _PROJECT_ROOT = Path("/Users/songzuoqiang/Documents/agent/condex/codes")
 _HOME = Path.home()
 
 _ALLOWED_READ_PREFIXES = [str(_PROJECT_ROOT), str(_HOME)]
-_ALLOWED_WRITE_PREFIXES = [str(_PROJECT_ROOT)]
+_ALLOWED_WRITE_PREFIXES = [str(_PROJECT_ROOT), str(_HOME)]
 
 _SAFE_COMMANDS = {
     "ls", "cat", "head", "tail", "grep", "find", "wc", "sort", "uniq",
@@ -119,6 +120,59 @@ FILE_TOOL_DEFINITIONS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "edit_file",
+        "description": "Edit a file by replacing exact text. The old_text must match exactly. Use for surgical edits without rewriting the whole file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path to edit"},
+                "old_text": {"type": "string", "description": "Exact text to find and replace (must match uniquely)"},
+                "new_text": {"type": "string", "description": "Replacement text"},
+            },
+            "required": ["path", "old_text", "new_text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "delete_file",
+        "description": "Delete a file or empty directory. Requires confirmation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File or directory path to delete"},
+                "recursive": {"type": "boolean", "description": "If true, delete directory and all contents (default false)"},
+            },
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "move_file",
+        "description": "Move or rename a file or directory. Requires confirmation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "description": "Source path"},
+                "destination": {"type": "string", "description": "Destination path"},
+            },
+            "required": ["source", "destination"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "copy_file",
+        "description": "Copy a file or directory. Creates parent directories if needed.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "description": "Source path"},
+                "destination": {"type": "string", "description": "Destination path"},
+            },
+            "required": ["source", "destination"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -137,6 +191,14 @@ def _execute_file_tool_sync(name: str, arguments: dict[str, Any]) -> tuple[str, 
             return _list_directory(arguments)
         if name == "search_files":
             return _search_files(arguments)
+        if name == "edit_file":
+            return _edit_file(arguments)
+        if name == "delete_file":
+            return _delete_file(arguments)
+        if name == "move_file":
+            return _move_file(arguments)
+        if name == "copy_file":
+            return _copy_file(arguments)
     except PermissionError as exc:
         return str(exc), True
     except FileNotFoundError as exc:
@@ -221,6 +283,71 @@ def _search_files(args: dict[str, Any]) -> tuple[str, bool]:
             break
     result = "\n".join(matches)
     return _truncate(result) if result else "No matches found", False
+
+
+def _edit_file(args: dict[str, Any]) -> tuple[str, bool]:
+    path = _validate_path(args["path"], write=True)
+    if not path.is_file():
+        return f"Not a file: {path}", True
+    old_text = args["old_text"]
+    new_text = args["new_text"]
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return f"Cannot read file: {exc}", True
+    count = content.count(old_text)
+    if count == 0:
+        return "old_text not found in file", True
+    if count > 1:
+        return f"old_text found {count} times — must be unique for surgical edit", True
+    content = content.replace(old_text, new_text, 1)
+    path.write_text(content, encoding="utf-8")
+    return f"Edited {path}: replaced {len(old_text)} chars with {len(new_text)} chars", False
+
+
+def _delete_file(args: dict[str, Any]) -> tuple[str, bool]:
+    path = _validate_path(args["path"], write=True)
+    recursive = args.get("recursive", False)
+    if not path.exists():
+        return f"Path does not exist: {path}", True
+    if path.is_file():
+        path.unlink()
+        return f"Deleted file: {path}", False
+    if path.is_dir():
+        if recursive:
+            shutil.rmtree(path)
+            return f"Deleted directory recursively: {path}", False
+        try:
+            path.rmdir()
+            return f"Deleted empty directory: {path}", False
+        except OSError:
+            return f"Directory not empty. Use recursive=true to delete with contents: {path}", True
+    return f"Unknown path type: {path}", True
+
+
+def _move_file(args: dict[str, Any]) -> tuple[str, bool]:
+    src = _validate_path(args["source"], write=True)
+    dst = _validate_path(args["destination"], write=True)
+    if not src.exists():
+        return f"Source does not exist: {src}", True
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    return f"Moved {src} -> {dst}", False
+
+
+def _copy_file(args: dict[str, Any]) -> tuple[str, bool]:
+    src = _validate_path(args["source"])
+    dst = _validate_path(args["destination"], write=True)
+    if not src.exists():
+        return f"Source does not exist: {src}", True
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if src.is_file():
+        shutil.copy2(str(src), str(dst))
+        return f"Copied file {src} -> {dst}", False
+    if src.is_dir():
+        shutil.copytree(str(src), str(dst))
+        return f"Copied directory {src} -> {dst}", False
+    return f"Unknown source type: {src}", True
 
 
 # ========================================================================
@@ -465,12 +592,12 @@ def create_builtin_file_source() -> ToolSource:
         prefix="builtin__",
         definitions=FILE_TOOL_DEFINITIONS + WEB_TOOL_DEFINITIONS + COMMAND_TOOL_DEFINITIONS,
         execute=_execute_builtin_tool,
-        requires_confirmation={"write_file", "web_fetch", "run_command"},
+        requires_confirmation={"write_file", "edit_file", "delete_file", "move_file", "web_fetch", "run_command"},
     )
 
 
 async def _execute_builtin_tool(name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
-    if name in ("read_file", "write_file", "list_directory", "search_files"):
+    if name in ("read_file", "write_file", "list_directory", "search_files", "edit_file", "delete_file", "move_file", "copy_file"):
         return await _execute_file_tool(name, arguments)
     if name in ("web_search", "web_fetch"):
         return await _execute_web_tool(name, arguments)

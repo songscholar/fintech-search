@@ -1,7 +1,7 @@
 """Skill tools — expose SkillManager operations as agent-callable tools.
 
 Registers a ToolSource with prefix "skill__" so the agent loop can
-list, search, install, uninstall, and invoke skills via function calling.
+list, search, install, uninstall, invoke, and create skills via function calling.
 Mirrors Claude Code's SkillTool architecture.
 """
 
@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
+from urllib import request, error
 
 from .skill_manager import SkillManager
 from .tool_registry import ToolSource
@@ -70,6 +71,32 @@ SKILL_TOOL_DEFINITIONS = [
                 "args": {"type": "string", "description": "Arguments to pass to the skill (replaces $ARGUMENTS placeholder)"},
             },
             "required": ["skill"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_skill",
+        "description": "Create a new skill from markdown content. Use this to create skills by converting rules from other tools (Cursor, Windsurf, etc.) or writing new ones from scratch. The content should be a complete SKILL.md with YAML frontmatter.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill_id": {"type": "string", "description": "Skill ID (directory name, e.g. 'my-skill')"},
+                "content": {"type": "string", "description": "Full SKILL.md content with YAML frontmatter (---\\nname: ...\\ndescription: ...\\n---\\n\\n# markdown body)"},
+            },
+            "required": ["skill_id", "content"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "read_remote_skill",
+        "description": "Fetch a skill/rules file from a URL. Returns the raw content so you can analyze and convert it to internal SKILL.md format using create_skill.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "URL to fetch the skill/rules file from"},
+                "max_chars": {"type": "integer", "description": "Maximum characters to return (default 20000)", "minimum": 1000, "maximum": 50000},
+            },
+            "required": ["url"],
             "additionalProperties": False,
         },
     },
@@ -162,6 +189,40 @@ async def _execute_skill_tool(
         if skill:
             body = body.replace("${SKILL_DIR}", skill.get("path", ""))
         return body, False
+
+    if name == "create_skill":
+        skill_id = arguments.get("skill_id", "")
+        content = arguments.get("content", "")
+        if not skill_id:
+            return "Missing required parameter: skill_id", True
+        if not content:
+            return "Missing required parameter: content", True
+        # Validate skill_id (no path traversal)
+        if "/" in skill_id or "\\" in skill_id or ".." in skill_id:
+            return f"Invalid skill_id: {skill_id}", True
+        target_dir = skill_manager.cache_dir / skill_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_file = target_dir / "SKILL.md"
+        target_file.write_text(content, encoding="utf-8")
+        return f"Skill '{skill_id}' created at {target_dir}", False
+
+    if name == "read_remote_skill":
+        url = arguments.get("url", "")
+        max_chars = int(arguments.get("max_chars", 20000))
+        if not url:
+            return "Missing required parameter: url", True
+        try:
+            req = request.Request(url, headers={"User-Agent": "UsesIndexer/1.0"})
+            with request.urlopen(req, timeout=15) as resp:
+                raw = resp.read()
+                text = raw.decode("utf-8", errors="replace")
+        except error.HTTPError as exc:
+            return f"HTTP {exc.code}: {exc.reason}", True
+        except Exception as exc:
+            return f"Fetch failed: {exc}", True
+        if len(text) > max_chars:
+            text = text[:max_chars] + f"\n... [truncated, {len(text)} total chars]"
+        return text, False
 
     return f"Unknown skill tool: {name}", True
 
