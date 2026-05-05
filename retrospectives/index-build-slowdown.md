@@ -8,8 +8,8 @@
 
 - 旧构建运行数小时仍未完成。
 - Python 进程 CPU 持续接近满载，不像死锁。
-- `examples/business_code_index.db-wal` 持续增长到 GB 级。
-- 主库 `examples/business_code_index.db` 长时间只有很小体积。
+- `indexes/business_code_index.db-wal` 持续增长到 GB 级。
+- 主库 `indexes/business_code_index.db` 长时间只有很小体积。
 - 另一个 SQLite 连接查询时，`files / procedures / chunks / procedure_features` 等核心表仍接近 0。
 - 用户体感从“半小时左右构建完成”变成“看起来要跑好几个小时”。
 
@@ -18,7 +18,7 @@
 排查时没有立即停止旧构建，而是先用只读方式观察：
 
 - 通过 `ps` 确认构建进程仍在运行。
-- 通过 `ls -lh examples/business_code_index.db*` 观察主库和 WAL 文件大小。
+- 通过 `ls -lh indexes/business_code_index.db*` 观察主库和 WAL 文件大小。
 - 通过 SQLite 只读查询核心表行数，确认主库尚未提交可见数据。
 - 对照 `index_build.py` 发现全量构建虽然已经做了阶段级提交，但 `index_files` 阶段内部仍是一个巨大的事务。
 

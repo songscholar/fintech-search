@@ -12,7 +12,7 @@
 
 平时默认用：
 
-- `examples/business_code_index.db`
+- `indexes/business_code_index.db`
 
 它表示：
 
@@ -22,15 +22,15 @@
 
 如果你要同时查代码和元数据，再切到：
 
-- `examples/business_full_index.db`
+- `indexes/business_full_index.db`
 
 如果你只查元数据，请用：
 
-- `examples/business_metadata_index.db`
+- `indexes/business_metadata_index.db`
 
 如果你只做小范围回归调试，可以继续用：
 
-- `examples/uses_codes_index.db`
+- `indexes/uses_codes_index.db`
 
 更完整的边界说明见：
 
@@ -42,7 +42,7 @@
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 10
 ```
@@ -57,7 +57,7 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 3
 ```
@@ -72,7 +72,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --question "哪些流程调用证券代码获取"
 ```
 

@@ -9,9 +9,9 @@ Use this skill for complex questions about the USES/UFT codebase that require in
 
 ## Default Index Paths
 
-- **Code Index**: `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
-- **Metadata Index**: `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_metadata_index.db`
-- **Table Structure Index**: `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_table_index.db`
+- **Code Index**: `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db`
+- **Metadata Index**: `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_metadata_index.db`
+- **Table Structure Index**: `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_table_index.db`
 
 ## Available Tools
 

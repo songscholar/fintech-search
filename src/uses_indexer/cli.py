@@ -313,8 +313,8 @@ def main() -> int:
         "--db",
         help=(
             "Default SQLite code database path. If omitted, the server will try "
-            "examples/business_code_index.db first, then examples/business_full_index.db, "
-            "then examples/uses_codes_index.db."
+            "indexes/business_code_index.db first, then indexes/business_full_index.db, "
+            "then indexes/uses_codes_index.db."
         ),
     )
     mcp_parser.add_argument(

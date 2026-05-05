@@ -30,7 +30,7 @@ cd /Users/songzuoqiang/Documents/agent/condex/codes
 python3 -m pip install -e .
 
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 10
 ```
@@ -48,7 +48,7 @@ python3 -m uses_indexer query-index \
 ```bash
 cd /Users/songzuoqiang/Documents/agent/condex/codes
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -117,7 +117,7 @@ export USES_INDEXER_AGENT_OPENCLAW_API_KEY=""
 ```bash
 cd /Users/songzuoqiang/Documents/agent/condex/codes
 PYTHONPATH=src python3 -m uses_indexer serve-mcp \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db
 ```
 
 暴露工具：
@@ -136,8 +136,8 @@ PYTHONPATH=src python3 -m uses_indexer serve-mcp \
 
 现成完整索引库：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db` 仅作为子库回归索引保留
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_index.db` 仅作为子库回归索引保留
 
 优点：
 
@@ -158,8 +158,8 @@ python3 -m pip install -e .
 
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_summary.json
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_summary.json
 ```
 
 适合：
@@ -176,12 +176,12 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=8
 export OPENAI_EMBEDDING_TIMEOUT=120
-export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_embedding_cache.db"
+export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_embedding_cache.db"
 
 cd /Users/songzuoqiang/Documents/agent/condex/codes
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_openai.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_openai.db
 ```
 
 如果中途中断：
@@ -189,7 +189,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_openai.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_openai.db \
   --resume-vectors
 ```
 
@@ -270,7 +270,7 @@ python3 ./plugins/uses-codebase-plugin/scripts/run_mcp_server.py \
 ### 只看效果
 
 1. `pip install -e .`
-2. 直接使用现成的 `examples/business_code_index.db`
+2. 直接使用现成的 `indexes/business_code_index.db`
 3. 跑 `query-index`
 4. 跑 `answer-codebase`
 
@@ -285,9 +285,9 @@ python3 ./plugins/uses-codebase-plugin/scripts/run_mcp_server.py \
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db examples/business_code_index.db \
-  --metadata-db examples/business_metadata_index.db \
-  --table-db examples/business_table_index.db \
+  --db indexes/business_code_index.db \
+  --metadata-db indexes/business_metadata_index.db \
+  --table-db indexes/business_table_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -298,7 +298,7 @@ PYTHONPATH=src python3 -m uses_indexer serve-api \
 - `--metadata-db`：默认 metadata 元数据索引库，供智能助手工具检索字段、常量、错误号、主题、菜单等线索。
 - `--table-db`：默认表结构索引库，供智能助手工具检索表、字段、索引和表空间信息。
 
-如果不传 `--metadata-db` 或 `--table-db`，LangChain 智能助手会继续按 `examples/business_metadata_index.db` 和 `examples/business_table_index.db` 自动发现；生产部署建议显式指定，避免目录或文件名变化导致召回缺失。
+如果不传 `--metadata-db` 或 `--table-db`，LangChain 智能助手会继续按 `indexes/business_metadata_index.db` 和 `indexes/business_table_index.db` 自动发现；生产部署建议显式指定，避免目录或文件名变化导致召回缺失。
 
 ### 做 Codex 工具化接入
 

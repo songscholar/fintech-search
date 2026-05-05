@@ -238,19 +238,19 @@
 # 构建代码专用索引
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /path/to/code \
-  --db examples/business_code_index.db \
+  --db indexes/business_code_index.db \
   --index-type code
 
 # 构建元数据专用索引
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /path/to/code \
-  --db examples/business_metadata_index.db \
+  --db indexes/business_metadata_index.db \
   --index-type metadata
 
 # 构建完整索引（默认行为）
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /path/to/code \
-  --db examples/business_full_index.db \
+  --db indexes/business_full_index.db \
   --index-type all
 ```
 
@@ -5159,7 +5159,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `PYTHONPATH=src python3 -m pytest tests/test_table_indexer.py tests/test_mcp.py::test_initialize_and_tool_listing -q`
   - 结果：`2 passed`
 - 重建表结构索引：
-  - `PYTHONPATH=src python3 -m uses_indexer build-table-index /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure --db ./examples/business_table_index.db --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/stdfield.stdfield --mdbobject /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/mdbobject.mdbobject --output ./examples/business_table_index_summary.json`
+  - `PYTHONPATH=src python3 -m uses_indexer build-table-index /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure --db ./indexes/business_table_index.db --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/stdfield.stdfield --mdbobject /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/mdbobject.mdbobject --output ./indexes/business_table_index_summary.json`
   - 结果：成功
 
 ### 重建后数据

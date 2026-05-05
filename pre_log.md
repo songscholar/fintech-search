@@ -74,9 +74,9 @@
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db examples/business_code_index.db \
-  --metadata-db examples/business_metadata_index.db \
-  --table-db examples/business_table_index.db \
+  --db indexes/business_code_index.db \
+  --metadata-db indexes/business_metadata_index.db \
+  --table-db indexes/business_table_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```

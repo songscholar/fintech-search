@@ -2,7 +2,7 @@ import os
 import glob
 
 # 检查examples目录中的索引文件大小
-db_files = glob.glob('/Users/songzuoqiang/Documents/agent/condex/codes/examples/*.db')
+db_files = glob.glob('/Users/songzuoqiang/Documents/agent/condex/codes/indexes/*.db')
 
 print("索引文件大小:")
 for db_file in db_files:

@@ -1701,7 +1701,7 @@ SQL 恢复这边也有一个仓库特性要处理：
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --index-type code \
   --skip-vectors \
   --progress
@@ -1712,7 +1712,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --index-type code \
   --resume-vectors
 ```

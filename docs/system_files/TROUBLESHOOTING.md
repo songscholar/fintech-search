@@ -19,7 +19,7 @@
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "你的问题" \
   --limit 10 \
   --debug
@@ -43,7 +43,7 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "你的问题" \
   --limit 5 \
   --debug
@@ -100,10 +100,10 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer debug-bundle \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --question "证券代码获取的逻辑在哪里" \
-  --archive-dir ./examples/debug_bundle_archive \
-  --output ./examples/debug_bundle.json
+  --archive-dir ./indexes/debug_bundle_archive \
+  --output ./indexes/debug_bundle.json
 ```
 
 这个 bundle 会同时包含：
@@ -163,10 +163,10 @@ PYTHONPATH=. python3 -m uses_indexer debug-bundle \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
-  --before ./examples/debug_bundle_archive_before \
-  --after ./examples/debug_bundle_archive_after \
-  --markdown-output ./examples/debug_bundle_compare.md \
-  --output ./examples/debug_bundle_compare.json
+  --before ./indexes/debug_bundle_archive_before \
+  --after ./indexes/debug_bundle_archive_after \
+  --markdown-output ./indexes/debug_bundle_compare.md \
+  --output ./indexes/debug_bundle_compare.json
 ```
 
 `--before` 和 `--after` 既可以传：
@@ -258,16 +258,16 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
-  --before-db ./examples/business_code_index_before.db \
-  --after-db ./examples/business_code_index_after.db \
+  --before-db ./indexes/business_code_index_before.db \
+  --after-db ./indexes/business_code_index_after.db \
   --cases ./eval/uses_codes_effect_cases.json \
   --max-changed-cases 0 \
   --max-verdict-count possible_regression=0 \
   --max-focus-area-count retrieval=1 \
   --fail-on-thresholds \
-  --archive-dir ./examples/debug_bundle_panel \
-  --markdown-output ./examples/debug_bundle_panel.md \
-  --output ./examples/debug_bundle_panel.json
+  --archive-dir ./indexes/debug_bundle_panel \
+  --markdown-output ./indexes/debug_bundle_panel.md \
+  --output ./indexes/debug_bundle_panel.json
 ```
 
 这个命令会做三件事：
@@ -338,8 +338,8 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
-  --before-db ./examples/business_code_index_before.db \
-  --after-db ./examples/business_code_index_after.db \
+  --before-db ./indexes/business_code_index_before.db \
+  --after-db ./indexes/business_code_index_after.db \
   --cases ./eval/uses_codes_effect_cases.json \
   --max-changed-cases 2 \
   --max-high-priority-cases 0 \
@@ -388,10 +388,10 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
-  --before ./examples/debug_bundle_panel_baseline \
-  --after ./examples/debug_bundle_panel_current \
-  --markdown-output ./examples/debug_bundle_panel_compare.md \
-  --output ./examples/debug_bundle_panel_compare.json
+  --before ./indexes/debug_bundle_panel_baseline \
+  --after ./indexes/debug_bundle_panel_current \
+  --markdown-output ./indexes/debug_bundle_panel_compare.md \
+  --output ./indexes/debug_bundle_panel_compare.json
 ```
 
 这里的 `--before / --after` 既可以传：
@@ -422,28 +422,28 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
-  --output ./examples/release_candidate_baseline.json
+  --baseline-dir ./indexes/panel_baselines \
+  --output ./indexes/release_candidate_baseline.json
 ```
 
 再查看当前有哪些 baseline：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-baselines \
-  --baseline-dir ./examples/panel_baselines
+  --baseline-dir ./indexes/panel_baselines
 ```
 
 最后把当前 panel 和固定 baseline 做比较：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
-  --markdown-output ./examples/release_candidate_compare.md \
-  --output ./examples/release_candidate_compare.json
+  --baseline-dir ./indexes/panel_baselines \
+  --markdown-output ./indexes/release_candidate_compare.md \
+  --output ./indexes/release_candidate_compare.json
 ```
 
 这套命名 baseline 的好处是：
@@ -456,9 +456,9 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --note "2026-04-21 发布候选版本" \
   --tag release \
   --tag smoke
@@ -468,7 +468,7 @@ PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-baselines \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release
 ```
 
@@ -477,17 +477,17 @@ PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-baselines \
 ```bash
 PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines
+  --baseline-dir ./indexes/panel_baselines
 ```
 
 如果你只想和“最近一份 release baseline”比较，而不想手写 baseline 名称，可以直接用：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline \
-  --panel ./examples/debug_bundle_panel_current \
-  --baseline-dir ./examples/panel_baselines \
+  --panel ./indexes/debug_bundle_panel_current \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
-  --markdown-output ./examples/release_candidate_latest_compare.md
+  --markdown-output ./indexes/release_candidate_latest_compare.md
 ```
 
 最后，如果某个 baseline 已经过时，也可以直接删掉：
@@ -495,16 +495,16 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer delete-debug-bundle-panel-baseline \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines
+  --baseline-dir ./indexes/panel_baselines
 ```
 
 如果你已经确认当前 panel 可以作为新的正式标准，也可以直接 promote：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --note "通过 release gate，提升为当前正式基线" \
   --tag release \
   --tag active
@@ -516,8 +516,8 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer evaluate-debug-bundle-panel-promotion-gate \
-  --panel ./examples/debug_bundle_panel_current \
-  --baseline-dir ./examples/panel_baselines \
+  --panel ./indexes/debug_bundle_panel_current \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --require-threshold-pass \
   --block-latest-verdict possible_regression
@@ -532,9 +532,9 @@ PYTHONPATH=. python3 -m uses_indexer evaluate-debug-bundle-panel-promotion-gate 
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --tag active \
   --gate-tag release \
@@ -548,16 +548,16 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --tag active \
   --gate-tag release \
   --require-threshold-pass \
   --block-latest-verdict possible_regression \
-  --markdown-output ./examples/release_workflow.md \
-  --output ./examples/release_workflow.json
+  --markdown-output ./indexes/release_workflow.md \
+  --output ./indexes/release_workflow.json
 ```
 
 这个命令会一次性给你：
@@ -571,16 +571,16 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --tag active \
   --gate-tag release \
   --require-threshold-pass \
   --block-latest-verdict possible_regression \
-  --archive-dir ./examples/release_workflow_archive \
-  --markdown-output ./examples/release_workflow.md
+  --archive-dir ./indexes/release_workflow_archive \
+  --markdown-output ./indexes/release_workflow.md
 ```
 
 这个 archive 里现在会包含：
@@ -596,10 +596,10 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-release-workflows \
-  --before ./examples/release_workflow_archive_before \
-  --after ./examples/release_workflow_archive_after \
-  --markdown-output ./examples/release_workflow_compare.md \
-  --output ./examples/release_workflow_compare.json
+  --before ./indexes/release_workflow_archive_before \
+  --after ./indexes/release_workflow_archive_after \
+  --markdown-output ./indexes/release_workflow_compare.md \
+  --output ./indexes/release_workflow_compare.json
 ```
 
 这个结果特别适合回答：
@@ -612,7 +612,7 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-release-workflow
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-release-workflows \
-  --workflow-dir ./examples/release_workflows \
+  --workflow-dir ./indexes/release_workflows \
   --tag release \
   --status promoted
 ```
@@ -621,7 +621,7 @@ PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-release-workflows \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
-  --workflow ./examples/release_workflows/release_candidate_20260421
+  --workflow ./indexes/release_workflows/release_candidate_20260421
 ```
 
 这个 `--workflow` 既可以传：
@@ -633,10 +633,10 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
-  --markdown-output ./examples/release_baseline_trend.md \
-  --output ./examples/release_baseline_trend.json
+  --markdown-output ./indexes/release_baseline_trend.md \
+  --output ./indexes/release_baseline_trend.json
 ```
 
 这个结果适合回答三类问题：

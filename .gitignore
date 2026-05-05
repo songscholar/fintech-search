@@ -1,9 +1,9 @@
 .pytest_cache/
 __pycache__/
 *.pyc
-examples/*.db
-examples/*.db-wal
-examples/*.db-shm
+indexes/*.db
+indexes/*.db-wal
+indexes/*.db-shm
 *.db
 *.db-wal
 *.db-shm

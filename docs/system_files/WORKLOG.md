@@ -349,7 +349,7 @@
 - 如果展开成功，会继续按标准 SQL 规则抽取 `reads_table / writes_table`
 - 在真实仓库中已验证到 `AF_DATASEINIT_SECONDLOADUSESTABLE` 这类 `delete from %s` 模式能恢复出可用表访问证据
 - 新增样例：
-  - `examples/uses_codes_dynamic_sql_example.json`
+  - `indexes/uses_codes_dynamic_sql_example.json`
 - 补充测试，覆盖：
   - 动态 SQL 建库不回归
   - 动态 SQL 表名检索
@@ -371,7 +371,7 @@
   - 失败处理问题优先抬高失败块、异常块、`WHEN_OTHERS` 相关证据
 - 对非调用链问题会降低调用链 bonus，避免调用关系把局部证据挤下去
 - 新增样例：
-  - `examples/uses_codes_intent_rerank_example.json`
+  - `indexes/uses_codes_intent_rerank_example.json`
 - 补充测试，覆盖：
   - 变量赋值意图
   - 表写入意图
@@ -386,7 +386,7 @@
 - 新增评测用例文件：
   - `eval/uses_codes_cases.json`
 - 新增评测报告样例：
-  - `examples/uses_codes_eval_report.json`
+  - `indexes/uses_codes_eval_report.json`
 - 当前评测用例覆盖：
   - 动态 SQL 表写入
   - 错误码报错路径
@@ -431,7 +431,7 @@
   - `added`
   - `removed`
 - 新增样例：
-  - `examples/uses_codes_eval_compare.json`
+  - `indexes/uses_codes_eval_compare.json`
 - 补充测试，覆盖：
   - 相同报告自比较
   - 首个相关排名后移时标记为 regression
@@ -452,9 +452,9 @@
   - batch size `1`、`4`、`16` 均返回 `3072` 维向量
   - 完整建库建议先使用 `OPENAI_EMBEDDING_BATCH_SIZE=16`
 - 新增本地 hash 评测基准：
-  - `examples/uses_codes_eval_report_local_hash.json`
+  - `indexes/uses_codes_eval_report_local_hash.json`
 - 新增不含密钥的真实 embedding 探测记录：
-  - `examples/uses_codes_embedding_smoke.json`
+  - `indexes/uses_codes_embedding_smoke.json`
 - 补充测试，覆盖：
   - OpenAI embedding 别名配置
   - 别名维度、批量大小和超时参数
@@ -468,14 +468,14 @@
   - 子集语义块数：`193`
   - 真实 embedding 向量数：`193`
 - 新增子集索引摘要：
-  - `examples/uses_codes_index_subset_local_hash_summary.json`
-  - `examples/uses_codes_index_real_embedding_subset_summary.json`
+  - `indexes/uses_codes_index_subset_local_hash_summary.json`
+  - `indexes/uses_codes_index_real_embedding_subset_summary.json`
 - 新增子集评测报告：
-  - `examples/uses_codes_eval_report_subset_local_hash.json`
-  - `examples/uses_codes_eval_report_real_embedding_subset.json`
-  - `examples/uses_codes_eval_compare_real_embedding_subset.json`
+  - `indexes/uses_codes_eval_report_subset_local_hash.json`
+  - `indexes/uses_codes_eval_report_real_embedding_subset.json`
+  - `indexes/uses_codes_eval_compare_real_embedding_subset.json`
 - 新增端到端测试汇总：
-  - `examples/uses_codes_embedding_e2e_report.json`
+  - `indexes/uses_codes_embedding_e2e_report.json`
 - 本轮评测结论：
   - 本地 hash 子集和真实 embedding 子集的 `pass@10` 都是 `1.0`
   - 真实 embedding 子集的 `matched_cases` 为 `5`
@@ -544,7 +544,7 @@
 - 首次构建启用：
   - `OPENAI_EMBEDDING_BATCH_SIZE=16`
   - `OPENAI_EMBEDDING_TIMEOUT=90`
-  - `OPENAI_EMBEDDING_CACHE_DB=examples/uses_codes_embedding_cache_medium.db`
+  - `OPENAI_EMBEDDING_CACHE_DB=indexes/uses_codes_embedding_cache_medium.db`
 - 首次构建在 `256` 条向量已落库后遇到接口读取超时
 - 修复 `OpenAICompatibleEmbedder`：
   - 将底层 `TimeoutError` 包装为 `EmbeddingRequestError`
@@ -563,8 +563,8 @@
   - `inserted = 0`
   - `batches = 0`
 - 新增报告：
-  - `examples/uses_codes_embedding_medium_benchmark.json`
-  - `examples/uses_codes_index_real_embedding_medium_summary.json`
+  - `indexes/uses_codes_embedding_medium_benchmark.json`
+  - `indexes/uses_codes_index_real_embedding_medium_summary.json`
 - 结论：
   - 全局批处理、每批提交、cache 和 `--resume-vectors` 已能覆盖真实接口中途超时场景
   - 全量建库建议优先使用 batch size `8` 或 `16` 并开启 embedding cache
@@ -592,9 +592,9 @@
   - `stock-code-get-callers` 从首个相关命中 rank `3` 提升到 rank `1`
   - case 级变化为 `improved = 1`、`regressed = 0`、`unchanged = 4`
 - 更新报告：
-  - `examples/uses_codes_eval_report_real_embedding_subset.json`
-  - `examples/uses_codes_eval_compare_real_embedding_subset.json`
-  - `examples/uses_codes_embedding_e2e_report.json`
+  - `indexes/uses_codes_eval_report_real_embedding_subset.json`
+  - `indexes/uses_codes_eval_compare_real_embedding_subset.json`
+  - `indexes/uses_codes_embedding_e2e_report.json`
 
 ### 阶段 29：架构图与说明文档补强
 
@@ -655,13 +655,13 @@
   - 索引侧 `files = 2564`
   - `chunks = chunk_vectors = 28748`
 - 新增完整根目录摘要文件：
-  - `examples/agent_code_index_summary.json`
-  - `examples/agent_code_db_summary.json`
+  - `indexes/agent_code_index_summary.json`
+  - `indexes/agent_code_db_summary.json`
 - 调整默认库发现逻辑：
   - `serve-mcp`
   - plugin `run_mcp_server.py`
   - skill 文档
-  - 都改为优先使用 `examples/agent_code_index.db`
+  - 都改为优先使用 `indexes/agent_code_index.db`
 - 更新文档：
   - `README.md`
   - `docs/DEPLOYMENT.md`
@@ -731,7 +731,7 @@
 
 ### 阶段 34：带 MC 语义的完整根目录重建
 
-- 删除旧的 `examples/agent_code_index.db`
+- 删除旧的 `indexes/agent_code_index.db`
 - 基于完整目录 `/Users/songzuoqiang/Documents/agent/code` 重新全量建库
 - 新库复核结果：
   - `files = 21148`
@@ -751,7 +751,7 @@
   - `CNST_MC_UFT_CRTSYNC = 117`
   - `CNST_MC_UFT_OPTSYNC = 53`
 - 新增样例：
-  - `examples/agent_code_mc_publish_example.json`
+  - `indexes/agent_code_mc_publish_example.json`
 - 验证“谁发布 CNST_MC_UFT_OPTSYNC”时，证据中已能显示：
   - `消息中心主题发布`
   - `同步发布 / 异步发布`
@@ -813,9 +813,9 @@
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db examples/business_code_index.db \
-  --metadata-db examples/business_metadata_index.db \
-  --table-db examples/business_table_index.db \
+  --db indexes/business_code_index.db \
+  --metadata-db indexes/business_metadata_index.db \
+  --table-db indexes/business_table_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```

@@ -1,6 +1,6 @@
 import sqlite3
 
-db_path = 'examples/agent_code_index.db'
+db_path = 'indexes/agent_code_index.db'
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 

@@ -87,7 +87,7 @@ DEFAULT_DB_CANDIDATES = tuple(
 
 
 def discover_default_db(root: Path) -> str | None:
-    examples_dir = root / "examples"
+    examples_dir = root / "indexes"
     for filename in DEFAULT_DB_CANDIDATES:
         candidate = examples_dir / filename
         if candidate.exists():

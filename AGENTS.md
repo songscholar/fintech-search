@@ -140,8 +140,11 @@
 │   ├── uses_codes_cases.json
 │   └── uses_codes_effect_cases.json
 │
-├── examples/                   # 示例输出、摘要、报告（不纳入版本控制）
-│   # .db 文件、.json 报告等均在此目录生成
+├── indexes/                   # 索引数据库文件（不纳入版本控制）
+│   # .db 文件均在此目录生成
+│
+├── examples/                  # CLI 输出、摘要、报告（不纳入版本控制）
+│   # .json 报告等均在此目录生成
 │
 ├── plugins/
 │   └── uses-codebase-plugin/   # Codex repo-local 插件
@@ -181,8 +184,8 @@ python3 -m uses_indexer --help
 # 全量建库（本地哈希向量，默认）
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db examples/business_code_index.db \
-  --output examples/business_code_index_summary.json
+  --db indexes/business_code_index.db \
+  --output indexes/business_code_index_summary.json
 
 # 增量建库
 python3 -m uses_indexer build-index ... --incremental
@@ -213,16 +216,16 @@ python3 -m uses_indexer answer-codebase --db <db> --question "..."
 ```bash
 # 检索评测
 PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
-  --db examples/uses_codes_index.db \
+  --db indexes/uses_codes_index.db \
   --cases eval/uses_codes_cases.json \
   --limit 10 \
   --top-k 1,3,5,10 \
-  --output examples/uses_codes_eval_report.json
+  --output indexes/uses_codes_eval_report.json
 
 # 评测对比
 python3 -m uses_indexer compare-eval \
-  --before examples/uses_codes_eval_report_before.json \
-  --after examples/uses_codes_eval_report_after.json
+  --before indexes/uses_codes_eval_report_before.json \
+  --after indexes/uses_codes_eval_report_after.json
 ```
 
 ### 服务启动
@@ -380,19 +383,20 @@ python3 -m py_compile src/uses_indexer/*.py
 - 执行 CLI 时**总是显式指定 `--output`**：
   ```bash
   python3 -m uses_indexer query-index \
-    --db examples/business_code_index_openai.db \
+    --db indexes/business_code_index_openai.db \
     --query "证券代码获取" \
     --output examples/query_result.json
   ```
 - 临时诊断脚本放到 `examples/scripts/` 或 `examples/tmp/` 下
-- 索引库和缓存库统一放到 `examples/` 下
+- 索引库和缓存库统一放到 `indexes/` 下
 - 如果 `examples/` 下文件过多，可以按日期建立子目录，如 `examples/2026-04-29/`
 
 ### 3. 已有目录约定
 
 | 目录 | 用途 |
 |------|------|
-| `examples/` | CLI 输出、索引库、缓存、报告、摘要 |
+| `indexes/` | 索引数据库文件（.db） |
+| `examples/` | CLI 输出、缓存、报告、摘要 |
 | `examples/scripts/` | 临时诊断/测试脚本 |
 | `examples/tmp/` | 一次性临时文件 |
 | `src/uses_indexer/web/` | 内置前端资源 |
@@ -426,9 +430,9 @@ cp .env.example .env
 
 服务启动时按以下优先级自动发现索引库：
 
-1. `examples/business_code_index.db`（推荐，完整代码目录，不含 metadata）
-2. `examples/business_full_index.db`（代码 + metadata 混合）
-3. `examples/uses_codes_index.db`（子库，用于回归评测）
+1. `indexes/business_code_index.db`（推荐，完整代码目录，不含 metadata）
+2. `indexes/business_full_index.db`（代码 + metadata 混合）
+3. `indexes/uses_codes_index.db`（子库，用于回归评测）
 
 ---
 

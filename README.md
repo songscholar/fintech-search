@@ -117,7 +117,7 @@ flowchart LR
 当前推荐默认代码检索库是完整根目录范围内的代码索引：
 
 - 源码根目录：`/Users/songzuoqiang/Documents/agent/code`
-- 索引库：`/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
+- 索引库：`/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db`
 - 文件总数：`21148`
 - `procedures`：`21148`
 - `statements`：`1122460`
@@ -147,15 +147,15 @@ flowchart LR
 
 摘要文件：
 
-- `examples/business_code_index_summary.json`
-- `examples/business_code_mc_publish_example.json`
+- `indexes/business_code_index_summary.json`
+- `indexes/business_code_mc_publish_example.json`
 
 说明：
 
 - 这个库是默认代码检索库，优先用于 CLI、HTTP API、MCP、Codex skill/plugin
 - 这个库覆盖完整根目录中的业务 DSL 代码文件，但不把 `metadata` 混进默认代码检索结果
-- 如果需要跨代码和 metadata 做综合检索，请使用 `examples/business_full_index.db`
-- `examples/uses_codes_index.db` 继续保留，用于更小范围的评测和回归验证
+- 如果需要跨代码和 metadata 做综合检索，请使用 `indexes/business_full_index.db`
+- `indexes/uses_codes_index.db` 继续保留，用于更小范围的评测和回归验证
 
 ### uses_codes 子库解析层摘要
 
@@ -174,7 +174,7 @@ flowchart LR
 
 摘要文件：
 
-- `examples/uses_codes_summary.json`
+- `indexes/uses_codes_summary.json`
 
 ### SQLite 索引摘要
 
@@ -199,27 +199,27 @@ flowchart LR
 
 摘要文件：
 
-- `examples/uses_codes_index_summary.json`
-- `examples/uses_codes_db_summary.json`
-- `examples/uses_codes_evidence_example.json`
-- `examples/uses_codes_qa_example.json`
-- `examples/uses_codes_answer_example.json`
-- `examples/uses_codes_failure_flow_example.json`
-- `examples/uses_codes_exit_flow_example.json`
-- `examples/uses_codes_sql_table_example.json`
-- `examples/uses_codes_call_chain_example.json`
-- `examples/uses_codes_dynamic_sql_example.json`
-- `examples/uses_codes_intent_rerank_example.json`
-- `examples/uses_codes_eval_report.json`
-- `examples/uses_codes_eval_report_local_hash.json`
-- `examples/uses_codes_eval_compare.json`
-- `examples/uses_codes_embedding_smoke.json`
-- `examples/uses_codes_embedding_e2e_report.json`
-- `examples/uses_codes_eval_report_subset_local_hash.json`
-- `examples/uses_codes_eval_report_real_embedding_subset.json`
-- `examples/uses_codes_eval_compare_real_embedding_subset.json`
-- `examples/uses_codes_embedding_medium_benchmark.json`
-- `examples/uses_codes_index_real_embedding_medium_summary.json`
+- `indexes/uses_codes_index_summary.json`
+- `indexes/uses_codes_db_summary.json`
+- `indexes/uses_codes_evidence_example.json`
+- `indexes/uses_codes_qa_example.json`
+- `indexes/uses_codes_answer_example.json`
+- `indexes/uses_codes_failure_flow_example.json`
+- `indexes/uses_codes_exit_flow_example.json`
+- `indexes/uses_codes_sql_table_example.json`
+- `indexes/uses_codes_call_chain_example.json`
+- `indexes/uses_codes_dynamic_sql_example.json`
+- `indexes/uses_codes_intent_rerank_example.json`
+- `indexes/uses_codes_eval_report.json`
+- `indexes/uses_codes_eval_report_local_hash.json`
+- `indexes/uses_codes_eval_compare.json`
+- `indexes/uses_codes_embedding_smoke.json`
+- `indexes/uses_codes_embedding_e2e_report.json`
+- `indexes/uses_codes_eval_report_subset_local_hash.json`
+- `indexes/uses_codes_eval_report_real_embedding_subset.json`
+- `indexes/uses_codes_eval_compare_real_embedding_subset.json`
+- `indexes/uses_codes_embedding_medium_benchmark.json`
+- `indexes/uses_codes_index_real_embedding_medium_summary.json`
 
 ### 检索评测摘要
 
@@ -227,16 +227,16 @@ flowchart LR
 
 当前样例报告：
 
-- `examples/uses_codes_eval_report.json`
-- `examples/uses_codes_eval_report_local_hash.json`
+- `indexes/uses_codes_eval_report.json`
+- `indexes/uses_codes_eval_report_local_hash.json`
 - `pass@1`: `1.0`
 - `pass@3`: `1.0`
 - `pass@5`: `1.0`
 - `pass@10`: `1.0`
 - `expectation_recall@10`: `0.9`
-- 当前自比较样例 `examples/uses_codes_eval_compare.json` 中 `improved/regressed` 都是 `0`，用于展示报告格式
+- 当前自比较样例 `indexes/uses_codes_eval_compare.json` 中 `improved/regressed` 都是 `0`，用于展示报告格式
 
-本地默认库发现现在会优先使用 `examples/business_code_index.db`，如果不存在，再回退到 `examples/business_full_index.db`，最后才回退到 `examples/uses_codes_index.db`。这些数据库文件体积都较大，当前都不纳入版本控制。
+本地默认库发现现在会优先使用 `indexes/business_code_index.db`，如果不存在，再回退到 `indexes/business_full_index.db`，最后才回退到 `indexes/uses_codes_index.db`。这些数据库文件体积都较大，当前都不纳入版本控制。
 
 ## Embedding 配置
 
@@ -276,11 +276,11 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
-export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_embedding_cache.db"
+export OPENAI_EMBEDDING_CACHE_DB="/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_embedding_cache.db"
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_openai.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_openai.db
 ```
 
 如果外部 embedding 建库中途失败或被中断，可以复用同一个缓存和索引库续建缺失向量：
@@ -288,7 +288,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_openai.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_openai.db \
   --resume-vectors
 ```
 
@@ -302,7 +302,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - 查询时会校验当前 embedding 配置是否和索引库一致
 - 如果不一致，会自动禁用向量召回，并在返回结果里输出 `vector_status`
 - 如果切换了 embedding 模型，应该重新执行一次 `build-index`
-- 如果配置了 `*_EMBEDDING_CACHE_DB`，外部 embedding 会先查本地 SQLite 缓存，未命中才请求接口；缓存文件建议放在 `examples/*.db` 或其他不纳入版本控制的位置
+- 如果配置了 `*_EMBEDDING_CACHE_DB`，外部 embedding 会先查本地 SQLite 缓存，未命中才请求接口；缓存文件建议放在 `indexes/*.db` 或其他不纳入版本控制的位置
 - `--resume-vectors` 只补齐已有索引库中缺失的向量，会自动跳过已经存在的 `chunk_vectors`
 
 ## 目录结构
@@ -319,7 +319,7 @@ docs/
   WORKLOG.md
 eval/
   uses_codes_cases.json
-examples/
+indexes/
   uses_codes_summary.json
   uses_codes_index_summary.json
   uses_codes_db_summary.json
@@ -388,7 +388,7 @@ python3 -m uses_indexer parse-file \
 python3 -m uses_indexer scan-dir \
   /Users/songzuoqiang/Documents/agent/code \
   --limit 20 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_summary.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_summary.json
 ```
 
 构建 SQLite 索引：
@@ -396,8 +396,8 @@ python3 -m uses_indexer scan-dir \
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_summary.json
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_summary.json
 ```
 
 只补齐已有索引库中缺失的向量：
@@ -405,7 +405,7 @@ python3 -m uses_indexer build-index \
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --resume-vectors
 ```
 
@@ -413,15 +413,15 @@ python3 -m uses_indexer build-index \
 
 ```bash
 python3 -m uses_indexer db-summary \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index_summary.json
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index_summary.json
 ```
 
 执行简单关键词查询：
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "证券代码获取" \
   --limit 10
 ```
@@ -430,11 +430,11 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer eval-retrieval \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_index.db \
   --cases /Users/songzuoqiang/Documents/agent/condex/codes/eval/uses_codes_cases.json \
   --limit 10 \
   --top-k 1,3,5,10 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_report.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_eval_report.json
 ```
 
 这个命令会输出：
@@ -449,9 +449,9 @@ python3 -m uses_indexer eval-retrieval \
 
 ```bash
 python3 -m uses_indexer compare-eval \
-  --before /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_report.json \
-  --after /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_report.json \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_eval_compare.json
+  --before /Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_eval_report.json \
+  --after /Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_eval_report.json \
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_eval_compare.json
 ```
 
 这个命令会输出：
@@ -464,12 +464,12 @@ python3 -m uses_indexer compare-eval \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "证券代码获取的逻辑在哪里" \
   --limit 6 \
   --context-window 2 \
   --related-limit 3 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_evidence_example.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_evidence_example.json
 ```
 
 这个命令会返回：
@@ -489,7 +489,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer ask-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --question "证券代码获取的逻辑在哪里" \
   --evidence-limit 6 \
   --context-window 2 \
@@ -508,12 +508,12 @@ python3 -m uses_indexer ask-codebase \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --question "证券代码获取的逻辑在哪里" \
   --evidence-limit 6 \
   --context-window 2 \
   --related-limit 3 \
-  --output /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_answer_example.json
+  --output /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_answer_example.json
 ```
 
 当前行为：
@@ -532,7 +532,7 @@ python3 -m uses_indexer answer-codebase \
 
 ```bash
 python3 -m uses_indexer serve-api \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -581,7 +581,7 @@ curl -s http://127.0.0.1:8000/answer \
 
 ```bash
 python3 -m uses_indexer serve-mcp \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db
 ```
 
 可用 MCP 工具：
@@ -606,7 +606,7 @@ python3 ./scripts/run_mcp_server.py
 
 默认索引库是：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db`
 
 如果需要切换索引库，可以传：
 

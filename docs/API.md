@@ -25,7 +25,7 @@
 
 ```json
 {
-  "db_path": "examples/business_code_index.db",
+  "db_path": "indexes/business_code_index.db",
   "question": "333104功能的业务逻辑有哪些",
   "provider": "openai-compatible",
   "provider_override": {
@@ -110,7 +110,7 @@
 
 ```json
 {
-  "db_path": "examples/business_code_index.db",
+  "db_path": "indexes/business_code_index.db",
   "query": "333001",
   "limit": 10,
   "expand_downstream": true

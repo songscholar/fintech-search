@@ -9,11 +9,11 @@ Use this skill for questions about the local USES/UFT codebase under `/Users/son
 
 默认优先使用完整根目录索引库：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db`
 
 如果调用方明确只想查 `uses_codes` 子目录，再退回：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/uses_codes_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/uses_codes_index.db`
 
 ## Preferred workflow
 
@@ -25,7 +25,7 @@ Use this skill for questions about the local USES/UFT codebase under `/Users/son
 2. If MCP is unavailable, check whether the local API is already running:
    - `curl -s http://127.0.0.1:8000/health`
 3. If it is not running, start it from `/Users/songzuoqiang/Documents/agent/condex/codes`:
-   - `PYTHONPATH=src python3 -m uses_indexer serve-api --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db --host 127.0.0.1 --port 8000`
+   - `PYTHONPATH=src python3 -m uses_indexer serve-api --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db --host 127.0.0.1 --port 8000`
 4. For a final grounded answer, call:
    - `POST http://127.0.0.1:8000/answer`
 5. If the caller only needs evidence or prompt material, use:

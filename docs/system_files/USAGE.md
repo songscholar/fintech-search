@@ -129,7 +129,7 @@ CLI 也支持阶段日志和向量拆分：
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --index-type code \
   --skip-vectors \
   --progress
@@ -137,17 +137,17 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 当前推荐默认代码检索库是：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db`
 
 如果你要同时查代码和 metadata，请显式切到：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_full_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_full_index.db`
 
 如果你只查 metadata，请使用：
 
-- `/Users/songzuoqiang/Documents/agent/condex/codes/examples/business_metadata_index.db`
+- `/Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_metadata_index.db`
 
-`examples/uses_codes_index.db` 继续保留，但主要用于较小范围的回归测试和调试。
+`indexes/uses_codes_index.db` 继续保留，但主要用于较小范围的回归测试和调试。
 
 ## 先选入口
 
@@ -168,7 +168,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 10
 ```
@@ -183,7 +183,7 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 3 \
   --context-window 2 \
@@ -200,7 +200,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer ask-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --question "哪些流程调用证券代码获取"
 ```
 
@@ -214,7 +214,7 @@ python3 -m uses_indexer ask-codebase \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --question "哪些流程调用证券代码获取"
 ```
 
@@ -227,7 +227,7 @@ python3 -m uses_indexer answer-codebase \
 
 ```bash
 python3 -m uses_indexer query-table-index \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_table_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_table_index.db \
   --query "客户" \
   --limit 5
 ```
@@ -437,7 +437,7 @@ python3 -m uses_indexer query-table-index \
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```

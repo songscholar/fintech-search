@@ -139,7 +139,7 @@ python3 build_indexes.py --mode all
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --index-type code \
   --progress
 ```
@@ -151,7 +151,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_metadata_index.db \
+  --db ./indexes/business_metadata_index.db \
   --index-type metadata
 ```
 
@@ -160,7 +160,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_full_index.db \
+  --db ./indexes/business_full_index.db \
   --index-type all
 ```
 
@@ -169,7 +169,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-table-index \
   /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure \
-  --db ./examples/business_table_index.db \
+  --db ./indexes/business_table_index.db \
   --stdfield /Users/songzuoqiang/Documents/agent/code/upub_codes/metadata/stdfield.stdfield \
   --mdbobject /Users/songzuoqiang/Documents/agent/code/upub_codes/uftstructure/mdbobject.mdbobject
 ```
@@ -184,7 +184,7 @@ PYTHONPATH=src python3 -m uses_indexer build-table-index \
 
 ```bash
 python3 -m uses_indexer db-summary \
-  --db ./examples/my_index.db
+  --db ./indexes/my_index.db
 ```
 
 输出示例：
@@ -210,7 +210,7 @@ python3 -m uses_indexer db-summary \
 
 ```bash
 python3 -m uses_indexer query-index \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --query "证券代码获取" \
   --limit 10
 ```
@@ -221,7 +221,7 @@ python3 -m uses_indexer query-index \
 
 ```bash
 python3 -m uses_indexer assemble-evidence \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --query "哪些流程调用证券代码获取" \
   --limit 6 \
   --context-window 2 \
@@ -234,7 +234,7 @@ python3 -m uses_indexer assemble-evidence \
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --question "证券代码获取的逻辑在哪里"
 ```
 
@@ -260,7 +260,7 @@ export USES_INDEXER_EMBEDDING_MODEL="text-embedding-3-small"
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_code_index_openai.db
+  --db ./indexes/business_code_index_openai.db
 ```
 
 ### 4.3 断点续传
@@ -270,7 +270,7 @@ python3 -m uses_indexer build-index \
 ```bash
 python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code \
-  --db ./examples/business_code_index_openai.db \
+  --db ./indexes/business_code_index_openai.db \
   --resume-vectors
 ```
 
@@ -290,7 +290,7 @@ export USES_INDEXER_LLM_BASE_URL="https://oapi.aivue.cn/v1"
 
 ```bash
 python3 -m uses_indexer answer-codebase \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --question "证券代码获取的逻辑在哪里"
 ```
 
@@ -307,7 +307,7 @@ python3 -m uses_indexer answer-codebase \
 
 ```bash
 python3 -m uses_indexer serve-api \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```
@@ -344,7 +344,7 @@ curl -X POST http://127.0.0.1:8000/answer \
 
 ```bash
 python3 -m uses_indexer serve-mcp \
-  --db ./examples/business_code_index.db
+  --db ./indexes/business_code_index.db
 ```
 
 ### 7.2 可用工具
@@ -378,20 +378,20 @@ python3 -m uses_indexer install-codex-integration
 
 ```bash
 python3 -m uses_indexer eval-retrieval \
-  --db ./examples/uses_codes_index.db \
+  --db ./indexes/uses_codes_index.db \
   --cases ./eval/uses_codes_cases.json \
   --limit 10 \
   --top-k 1,3,5,10 \
-  --output ./examples/eval_report.json
+  --output ./indexes/eval_report.json
 ```
 
 ### 8.2 对比评测结果
 
 ```bash
 python3 -m uses_indexer compare-eval \
-  --before ./examples/before_report.json \
-  --after ./examples/after_report.json \
-  --output ./examples/compare_report.json
+  --before ./indexes/before_report.json \
+  --after ./indexes/after_report.json \
+  --output ./indexes/compare_report.json
 ```
 
 ---
@@ -417,7 +417,7 @@ python3 -m uses_indexer compare-eval \
 ```bash
 # 检查向量状态
 python3 -m uses_indexer query-index \
-  --db ./examples/business_code_index.db \
+  --db ./indexes/business_code_index.db \
   --query "测试" | jq '.vector_status'
 ```
 
@@ -528,9 +528,9 @@ python3 -m uses_indexer build-index /path/to/code --db test.db
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer serve-api \
-  --db examples/business_code_index.db \
-  --metadata-db examples/business_metadata_index.db \
-  --table-db examples/business_table_index.db \
+  --db indexes/business_code_index.db \
+  --metadata-db indexes/business_metadata_index.db \
+  --table-db indexes/business_table_index.db \
   --host 127.0.0.1 \
   --port 8000
 ```

@@ -58,18 +58,18 @@
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
-  --db examples/uses_codes_index.db \
+  --db indexes/uses_codes_index.db \
   --cases eval/uses_codes_cases.json \
   --limit 10 \
   --top-k 1,3,5,10 \
-  --output examples/uses_codes_eval_report.json
+  --output indexes/uses_codes_eval_report.json
 ```
 
 如果你希望评测直接作为质量门槛，还可以加 threshold：
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
-  --db examples/uses_codes_index.db \
+  --db indexes/uses_codes_index.db \
   --cases eval/uses_codes_effect_cases.json \
   --limit 10 \
   --top-k 1,3,5,10 \
@@ -116,9 +116,9 @@ PYTHONPATH=src python3 -m uses_indexer eval-retrieval \
 
 ```bash
 PYTHONPATH=src python3 -m uses_indexer compare-eval \
-  --before examples/uses_codes_eval_report_local_hash.json \
-  --after examples/uses_codes_eval_report_real_embedding.json \
-  --output examples/uses_codes_eval_compare.json
+  --before indexes/uses_codes_eval_report_local_hash.json \
+  --after indexes/uses_codes_eval_report_real_embedding.json \
+  --output indexes/uses_codes_eval_compare.json
 ```
 
 对比报告会输出：
@@ -169,27 +169,27 @@ PYTHONPATH=src python3 -m uses_indexer compare-eval \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer debug-bundle \
-  --db examples/business_code_index.db \
+  --db indexes/business_code_index.db \
   --question "AF_DEEP 被谁调用" \
-  --archive-dir examples/debug_callers_before
+  --archive-dir indexes/debug_callers_before
 ```
 
 2. 在改动后再跑一次：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer debug-bundle \
-  --db examples/business_code_index.db \
+  --db indexes/business_code_index.db \
   --question "AF_DEEP 被谁调用" \
-  --archive-dir examples/debug_callers_after
+  --archive-dir indexes/debug_callers_after
 ```
 
 3. 最后直接比较：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
-  --before examples/debug_callers_before \
-  --after examples/debug_callers_after \
-  --markdown-output examples/debug_callers_compare.md
+  --before indexes/debug_callers_before \
+  --after indexes/debug_callers_after \
+  --markdown-output indexes/debug_callers_compare.md
 ```
 
 这样你就能把“总体指标变化”和“单题链路变化”连起来看：
@@ -210,13 +210,13 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundles \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
-  --before-db examples/business_code_index_before.db \
-  --after-db examples/business_code_index_after.db \
+  --before-db indexes/business_code_index_before.db \
+  --after-db indexes/business_code_index_after.db \
   --cases eval/uses_codes_effect_cases.json \
   --max-verdict-count possible_regression=0 \
   --fail-on-thresholds \
-  --markdown-output examples/debug_bundle_panel.md \
-  --output examples/debug_bundle_panel.json
+  --markdown-output indexes/debug_bundle_panel.md \
+  --output indexes/debug_bundle_panel.json
 ```
 
 这个面板的定位是：
@@ -244,10 +244,10 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
-  --before examples/debug_bundle_panel_baseline \
-  --after examples/debug_bundle_panel_current \
-  --markdown-output examples/debug_bundle_panel_compare.md \
-  --output examples/debug_bundle_panel_compare.json
+  --before indexes/debug_bundle_panel_baseline \
+  --after indexes/debug_bundle_panel_current \
+  --markdown-output indexes/debug_bundle_panel_compare.md \
+  --output indexes/debug_bundle_panel_compare.json
 ```
 
 这样可以把“这次回归和上一次基线相比，整体 case 结构到底怎么变了”也一起量化出来。
@@ -264,9 +264,9 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
 
 当前样例报告：
 
-- `examples/uses_codes_eval_report.json`
-- `examples/uses_codes_eval_report_local_hash.json`
-- `examples/uses_codes_eval_compare.json`
+- `indexes/uses_codes_eval_report.json`
+- `indexes/uses_codes_eval_report_local_hash.json`
+- `indexes/uses_codes_eval_compare.json`
 
 当前样例结果：
 
@@ -283,7 +283,7 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panels \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code/uses_codes \
-  --db examples/uses_codes_index.db
+  --db indexes/uses_codes_index.db
 ```
 
 ```bash
@@ -292,11 +292,11 @@ export OPENAI_EMBEDDING_URL="https://oapi.aivue.cn/v1"
 export OPENAI_EMBEDDING_NAME="text-embedding-3-large"
 export OPENAI_EMBEDDING_BATCH_SIZE=16
 export OPENAI_EMBEDDING_TIMEOUT=60
-export OPENAI_EMBEDDING_CACHE_DB="examples/uses_codes_embedding_cache.db"
+export OPENAI_EMBEDDING_CACHE_DB="indexes/uses_codes_embedding_cache.db"
 
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code/uses_codes \
-  --db examples/uses_codes_index_openai.db
+  --db indexes/uses_codes_index_openai.db
 ```
 
 如果真实 embedding 建库中断，可以续建缺失向量：
@@ -304,11 +304,11 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 ```bash
 PYTHONPATH=src python3 -m uses_indexer build-index \
   /Users/songzuoqiang/Documents/agent/code/uses_codes \
-  --db examples/uses_codes_index_openai.db \
+  --db indexes/uses_codes_index_openai.db \
   --resume-vectors
 ```
 
-然后分别运行 `eval-retrieval`，再用 `compare-eval` 生成对比报告。`examples/uses_codes_eval_report_local_hash.json` 是当前本地 hash 索引的基准报告，真实 embedding 的报告建议输出为 `examples/uses_codes_eval_report_real_embedding.json`。
+然后分别运行 `eval-retrieval`，再用 `compare-eval` 生成对比报告。`indexes/uses_codes_eval_report_local_hash.json` 是当前本地 hash 索引的基准报告，真实 embedding 的报告建议输出为 `indexes/uses_codes_eval_report_real_embedding.json`。
 
 注意事项：
 
@@ -317,7 +317,7 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 - `OPENAI_EMBEDDING_CACHE_DB` 是可选的本地 SQLite 缓存；开启后，相同模型、地址、维度和文本 hash 的 embedding 会复用缓存。
 - `--resume-vectors` 会复用已有索引库，只扫描缺失 `chunk_vectors` 的 chunk，并自动跳过已有向量。
 - 当前对 `https://oapi.aivue.cn/v1` 的 smoke test 中，batch size `1`、`4`、`16` 均可返回 `3072` 维向量；完整大仓建库建议先从 `OPENAI_EMBEDDING_BATCH_SIZE=16` 开始。
-- `examples/uses_codes_index_openai.db` 和 `examples/uses_codes_embedding_cache.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
+- `indexes/uses_codes_index_openai.db` 和 `indexes/uses_codes_embedding_cache.db` 属于本地构建产物，体积较大并且可能包含外部 embedding 结果，不纳入版本控制。
 
 ## 当前真实 Embedding 端到端结果
 
@@ -325,12 +325,12 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 输出文件：
 
-- `examples/uses_codes_embedding_e2e_report.json`
-- `examples/uses_codes_index_subset_local_hash_summary.json`
-- `examples/uses_codes_index_real_embedding_subset_summary.json`
-- `examples/uses_codes_eval_report_subset_local_hash.json`
-- `examples/uses_codes_eval_report_real_embedding_subset.json`
-- `examples/uses_codes_eval_compare_real_embedding_subset.json`
+- `indexes/uses_codes_embedding_e2e_report.json`
+- `indexes/uses_codes_index_subset_local_hash_summary.json`
+- `indexes/uses_codes_index_real_embedding_subset_summary.json`
+- `indexes/uses_codes_eval_report_subset_local_hash.json`
+- `indexes/uses_codes_eval_report_real_embedding_subset.json`
+- `indexes/uses_codes_eval_compare_real_embedding_subset.json`
 
 子集对比结论：
 
@@ -356,8 +356,8 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 输出文件：
 
-- `examples/uses_codes_embedding_medium_benchmark.json`
-- `examples/uses_codes_index_real_embedding_medium_summary.json`
+- `indexes/uses_codes_embedding_medium_benchmark.json`
+- `indexes/uses_codes_index_real_embedding_medium_summary.json`
 
 结论：
 
@@ -390,38 +390,38 @@ PYTHONPATH=src python3 -m uses_indexer build-index \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer save-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_current \
+  --panel ./indexes/debug_bundle_panel_current \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --note "2026-04-21 发布候选版本" \
   --tag release \
   --tag smoke
 
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_next \
+  --panel ./indexes/debug_bundle_panel_next \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
-  --markdown-output ./examples/release_candidate_compare.md \
-  --output ./examples/release_candidate_compare.json
+  --baseline-dir ./indexes/panel_baselines \
+  --markdown-output ./indexes/release_candidate_compare.md \
+  --output ./indexes/release_candidate_compare.json
 ```
 
 如果你不想每次写 baseline 名称，也可以直接和“最近一份 release baseline”比较：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-latest-baseline \
-  --panel ./examples/debug_bundle_panel_next \
-  --baseline-dir ./examples/panel_baselines \
+  --panel ./indexes/debug_bundle_panel_next \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
-  --markdown-output ./examples/release_candidate_latest_compare.md
+  --markdown-output ./indexes/release_candidate_latest_compare.md
 ```
 
 如果当前这一版已经通过 gate，想把它直接提升成新的正式 baseline，也可以直接 promote：
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_next \
+  --panel ./indexes/debug_bundle_panel_next \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --note "本轮 release gate 全通过，提升为正式基线" \
   --tag release \
   --tag active
@@ -431,8 +431,8 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer evaluate-debug-bundle-panel-promotion-gate \
-  --panel ./examples/debug_bundle_panel_next \
-  --baseline-dir ./examples/panel_baselines \
+  --panel ./indexes/debug_bundle_panel_next \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --require-threshold-pass \
   --block-latest-verdict possible_regression
@@ -442,9 +442,9 @@ PYTHONPATH=. python3 -m uses_indexer evaluate-debug-bundle-panel-promotion-gate 
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
-  --panel ./examples/debug_bundle_panel_next \
+  --panel ./indexes/debug_bundle_panel_next \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --tag active \
   --gate-tag release \
@@ -456,21 +456,21 @@ PYTHONPATH=. python3 -m uses_indexer promote-debug-bundle-panel-baseline \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
-  --panel ./examples/debug_bundle_panel_next \
+  --panel ./indexes/debug_bundle_panel_next \
   --name "release-candidate" \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
   --tag active \
   --gate-tag release \
   --require-threshold-pass \
   --block-latest-verdict possible_regression \
-  --markdown-output ./examples/release_workflow.md
+  --markdown-output ./indexes/release_workflow.md
 ```
 
 如果你希望把这次 workflow 作为正式 release 审计材料保留下来，可以再加：
 
 ```bash
-  --archive-dir ./examples/release_workflow_archive
+  --archive-dir ./indexes/release_workflow_archive
 ```
 
 这样后面不仅能看最终 markdown，还能回头检查当时的：
@@ -484,9 +484,9 @@ PYTHONPATH=. python3 -m uses_indexer run-debug-bundle-panel-release-workflow \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-release-workflows \
-  --before ./examples/release_workflow_archive_before \
-  --after ./examples/release_workflow_archive_after \
-  --markdown-output ./examples/release_workflow_compare.md
+  --before ./indexes/release_workflow_archive_before \
+  --after ./indexes/release_workflow_archive_after \
+  --markdown-output ./indexes/release_workflow_compare.md
 ```
 
 它比直接看两份 JSON 更适合 reviewer，因为会直接把下面几类变化挑出来：
@@ -501,7 +501,7 @@ PYTHONPATH=. python3 -m uses_indexer compare-debug-bundle-panel-release-workflow
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-release-workflows \
-  --workflow-dir ./examples/release_workflows \
+  --workflow-dir ./indexes/release_workflows \
   --tag release \
   --status promoted
 ```
@@ -510,7 +510,7 @@ PYTHONPATH=. python3 -m uses_indexer list-debug-bundle-panel-release-workflows \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
-  --workflow ./examples/release_workflows/release_candidate_20260421
+  --workflow ./indexes/release_workflows/release_candidate_20260421
 ```
 
 这样做的价值是：
@@ -529,9 +529,9 @@ PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-release-workflow \
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer show-debug-bundle-panel-baseline-trend \
-  --baseline-dir ./examples/panel_baselines \
+  --baseline-dir ./indexes/panel_baselines \
   --tag release \
-  --markdown-output ./examples/release_baseline_trend.md
+  --markdown-output ./indexes/release_baseline_trend.md
 ```
 
 这个命令更适合：

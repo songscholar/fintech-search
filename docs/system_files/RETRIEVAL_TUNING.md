@@ -51,7 +51,7 @@
 
 ```bash
 PYTHONPATH=. python3 -m uses_indexer eval-retrieval \
-  --db /Users/songzuoqiang/Documents/agent/condex/codes/examples/business_code_index.db \
+  --db /Users/songzuoqiang/Documents/agent/condex/codes/indexes/business_code_index.db \
   --cases /Users/songzuoqiang/Documents/agent/condex/codes/eval/uses_codes_cases.json
 ```
 

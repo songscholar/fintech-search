@@ -1,7 +1,7 @@
 import sqlite3
 
 # 连接到索引数据库
-conn = sqlite3.connect('/Users/songzuoqiang/Documents/agent/condex/codes/examples/agent_code_index.db')
+conn = sqlite3.connect('/Users/songzuoqiang/Documents/agent/condex/codes/indexes/agent_code_index.db')
 conn.row_factory = sqlite3.Row
 
 # 查询LS_SESEXT_NORMALORDER_ENTER的信息
