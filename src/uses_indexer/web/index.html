@@ -26,6 +26,7 @@
         <a href="#" class="nav-link" data-view="evaluation" onclick="setView('evaluation')">评测中心</a>
         <a href="#" class="nav-link" data-view="docs" onclick="setView('docs')">说明文档</a>
         <a href="#" class="nav-link" data-view="biz-docs" onclick="setView('biz-docs')">业务文档</a>
+        <a href="#" class="nav-link" data-view="common-data" onclick="setView('common-data')">公共数据</a>
         <a href="#" class="nav-link" data-view="system" onclick="setView('system')">系统状态</a>
       </div>
       <div class="nav-right">
@@ -508,6 +509,34 @@
           <h1 class="query-title" id="biz-doc-detail-title">—</h1>
         </div>
         <div class="detail-body" id="biz-doc-detail-body"></div>
+      </div>
+    </section>
+
+    <!-- ========== 公共数据列表视图 ========== -->
+    <section id="view-common-data" class="view">
+      <div class="container">
+        <div class="docs-header">
+          <div class="eyebrow">Common Data</div>
+          <h1 class="query-title">公共数据</h1>
+          <p class="query-subtitle">公共数据相关 Markdown 文档，点击条目查看详情。</p>
+        </div>
+        <div class="docs-list" id="common-data-list"></div>
+        <div class="docs-pagination" id="common-data-pagination"></div>
+      </div>
+    </section>
+
+    <!-- ========== 公共数据详情视图 ========== -->
+    <section id="view-common-data-detail" class="view">
+      <div class="container">
+        <div class="doc-detail-header">
+          <button class="btn ghost doc-back" onclick="backToCommonData()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+            返回列表
+          </button>
+          <div class="eyebrow" id="common-data-detail-eyebrow">Common Data</div>
+          <h1 class="query-title" id="common-data-detail-title">—</h1>
+        </div>
+        <div class="detail-body" id="common-data-detail-body"></div>
       </div>
     </section>
   </main>

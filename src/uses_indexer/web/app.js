@@ -518,6 +518,11 @@ function initRefs() {
   els.bizDocDetailTitle = $('biz-doc-detail-title');
   els.bizDocDetailBody = $('biz-doc-detail-body');
   els.bizDocDetailEyebrow = $('biz-doc-detail-eyebrow');
+  els.commonDataList = $('common-data-list');
+  els.commonDataPagination = $('common-data-pagination');
+  els.commonDataDetailTitle = $('common-data-detail-title');
+  els.commonDataDetailBody = $('common-data-detail-body');
+  els.commonDataDetailEyebrow = $('common-data-detail-eyebrow');
   // agent chat
   els.retrievalHints = $('retrieval-hints');
   els.attachmentList = $('attachment-list');
@@ -642,6 +647,9 @@ function setView(viewId) {
   }
   if (viewId === 'biz-docs' && (!bizDocFiles || bizDocFiles.length === 0)) {
     loadBizDocs();
+  }
+  if (viewId === 'common-data' && (!commonDataFiles || commonDataFiles.length === 0)) {
+    loadCommonData();
   }
 }
 
@@ -2535,6 +2543,122 @@ function backToBizDocs() {
   setView('biz-docs');
 }
 
+// ========================================================================
+// 公共数据模块
+// ========================================================================
+let commonDataFiles = [];
+let commonDataPage = 1;
+const commonDataPageSize = 8;
+
+async function loadCommonData() {
+  try {
+    const data = await apiGet('/docs?dir=common_data');
+    commonDataFiles = data.files || [];
+    commonDataPage = 1;
+    renderCommonDataList();
+  } catch (e) {
+    showToast('加载公共数据列表失败: ' + e.message, 'error');
+    els.commonDataList.innerHTML = '<div class="empty-state">无法加载公共数据列表</div>';
+  }
+}
+
+function renderCommonDataList() {
+  if (!commonDataFiles.length) {
+    els.commonDataList.innerHTML = '<div class="empty-state">暂无公共数据</div>';
+    els.commonDataPagination.innerHTML = '';
+    return;
+  }
+  const total = commonDataFiles.length;
+  const totalPages = Math.max(1, Math.ceil(total / commonDataPageSize));
+  if (commonDataPage > totalPages) commonDataPage = totalPages;
+  const start = (commonDataPage - 1) * commonDataPageSize;
+  const pageFiles = commonDataFiles.slice(start, start + commonDataPageSize);
+
+  els.commonDataList.innerHTML = pageFiles.map((f, i) => `
+    <div class="doc-item" onclick="renderCommonDataDetail('${escapeHtml(f.name)}')" style="animation-delay:${i * 0.05}s">
+      <div class="doc-meta">
+        <span class="doc-category">公共数据</span>
+        <span class="doc-date">${escapeHtml(f.path)}</span>
+      </div>
+      <h3 class="doc-title">${escapeHtml(f.title)}</h3>
+      <p class="doc-excerpt">${escapeHtml(f.name)}</p>
+    </div>
+  `).join('');
+  requestAnimationFrame(function() { window.SiteUtils.installDockEffect(els.commonDataList); });
+
+  const hasPrev = commonDataPage > 1;
+  const hasNext = commonDataPage < totalPages;
+  els.commonDataPagination.innerHTML = `
+    <button class="pagination-btn" ${hasPrev ? '' : 'disabled'} onclick="changeCommonDataPage(-1)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      上一页
+    </button>
+    <div class="pagination-jump">
+      <input type="number" class="pagination-input" id="commonDataPageInput" value="${commonDataPage}" min="1" max="${totalPages}" oninput="onCommonDataPageInput()" onkeydown="if(event.key==='Enter'){changeCommonDataPage('jump');}">
+      <span class="pagination-total">/ ${totalPages}</span>
+    </div>
+    <button class="pagination-btn" id="commonDataPageNextBtn" ${hasNext ? '' : 'disabled'} onclick="changeCommonDataPage(1)">
+      <span id="commonDataPageNextText">下一页</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+    </button>
+  `;
+}
+
+function changeCommonDataPage(delta) {
+  const totalPages = Math.max(1, Math.ceil(commonDataFiles.length / commonDataPageSize));
+  var newPage;
+  if (delta === 'jump') {
+    var input = document.getElementById('commonDataPageInput');
+    newPage = parseInt(input ? input.value : commonDataPage, 10);
+    if (isNaN(newPage)) newPage = commonDataPage;
+  } else {
+    newPage = commonDataPage + delta;
+  }
+  if (newPage >= 1 && newPage <= totalPages) {
+    commonDataPage = newPage;
+    renderCommonDataList();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function onCommonDataPageInput() {
+  var input = document.getElementById('commonDataPageInput');
+  var btn = document.getElementById('commonDataPageNextBtn');
+  var text = document.getElementById('commonDataPageNextText');
+  if (!input || !btn || !text) return;
+  var val = parseInt(input.value, 10);
+  var totalPages = Math.max(1, Math.ceil(commonDataFiles.length / commonDataPageSize));
+  if (isNaN(val)) val = commonDataPage;
+  if (val !== commonDataPage) {
+    text.textContent = '跳转';
+    btn.disabled = false;
+    btn.setAttribute('onclick', "changeCommonDataPage('jump')");
+  } else {
+    text.textContent = '下一页';
+    btn.disabled = !(commonDataPage < totalPages);
+    btn.setAttribute('onclick', 'changeCommonDataPage(1)');
+  }
+}
+
+async function renderCommonDataDetail(name) {
+  try {
+    const data = await apiGet('/docs/' + encodeURIComponent(name));
+    els.commonDataDetailTitle.textContent = data.title || data.name;
+    els.commonDataDetailEyebrow.textContent = data.name;
+    const html = await renderMarkdown(data.content || '');
+    els.commonDataDetailBody.innerHTML = html;
+    delete els.commonDataDetailBody.__codeBlockBound;
+    window.SiteUtils.bindCodeBlockInteractions(els.commonDataDetailBody);
+    setView('common-data-detail');
+  } catch (e) {
+    showToast('加载公共数据失败: ' + e.message, 'error');
+  }
+}
+
+function backToCommonData() {
+  setView('common-data');
+}
+
 
 
 // ========================================================================
@@ -2584,6 +2708,10 @@ window.renderBizDocDetail = renderBizDocDetail;
 window.backToBizDocs = backToBizDocs;
 window.changeBizDocPage = changeBizDocPage;
 window.onBizDocPageInput = onBizDocPageInput;
+window.renderCommonDataDetail = renderCommonDataDetail;
+window.backToCommonData = backToCommonData;
+window.changeCommonDataPage = changeCommonDataPage;
+window.onCommonDataPageInput = onCommonDataPageInput;
 
 // ========================================================================
 // Init
