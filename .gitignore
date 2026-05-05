@@ -11,3 +11,8 @@ log/*
 !log/.gitkeep
 .claude/
 *.egg-info/
+.DS_Store
+
+# Skill large data files
+skills/sec-business-knowledge/business_file/
+skills/test-case-generator/test-cases/
