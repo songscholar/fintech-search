@@ -187,12 +187,14 @@ class AgentLoopRunner:
         tool_registry: ToolRegistry,
         config: AgentLoopConfig | None = None,
         confirmation_manager: ConfirmationManager | None = None,
+        skill_manager: Any | None = None,
     ) -> None:
         self.config = config or AgentLoopConfig()
         self.llm_service = llm_service
         self.provider = provider
         self.tool_registry = tool_registry
         self.confirmation_manager = confirmation_manager
+        self.skill_manager = skill_manager
         self._tools_requiring_confirmation = self._collect_confirmation_tools()
 
     @property
@@ -222,6 +224,48 @@ class AgentLoopRunner:
             or d.get("function", {}).get("name", "").startswith("analyze__")
         )]
 
+    def _build_system_prompt_with_context(self, base_prompt: str) -> str:
+        """Augment system prompt with available skills and MCP server listings."""
+        parts = [base_prompt]
+
+        # Append available skills
+        if self.skill_manager:
+            try:
+                skills = self.skill_manager.list_skills()
+            except Exception:
+                skills = []
+            if skills:
+                skill_lines = []
+                for s in skills:
+                    desc = s.get("description", "")[:100]
+                    skill_lines.append(f"- {s['id']}: {desc}")
+                parts.append(
+                    "\n\n## 可用 Skills\n"
+                    + "\n".join(skill_lines)
+                    + "\n你可以调用 skill__invoke_skill(skill, args) 来使用这些 skills。"
+                    " skill 内容会作为指令注入上下文，你需要按照 skill 的指引完成任务。"
+                )
+
+        # Append connected external MCP servers
+        try:
+            mcp_servers = self.tool_registry.list_sources()
+        except Exception:
+            mcp_servers = []
+        _internal = {"builtin", "uses", "analyze", "skill", "mcp_mgmt"}
+        external = [s for s in mcp_servers if s["name"] not in _internal]
+        if external:
+            mcp_lines = []
+            for s in external:
+                mcp_lines.append(f"- {s['name']}: {s['tool_count']} 个工具")
+            parts.append(
+                "\n\n## 已连接的外部 MCP 服务器\n"
+                + "\n".join(mcp_lines)
+                + "\n你可以调用 mcp_mgmt__list_mcp_servers 查看详情，"
+                "或调用 mcp_mgmt__connect_mcp_server 连接新的 MCP 服务器。"
+            )
+
+        return "".join(parts)
+
     def run(
         self,
         user_message: str,
@@ -231,9 +275,10 @@ class AgentLoopRunner:
     ) -> Generator[dict[str, Any], None, None]:
         """Yield SSE event dicts until done."""
         use_codebase_tools = context_mode == "codebase"
-        system_prompt = system_prompt_override or (
+        base_prompt = system_prompt_override or (
             _SYSTEM_PROMPT_CODEBASE if use_codebase_tools else _SYSTEM_PROMPT_GENERAL
         )
+        system_prompt = self._build_system_prompt_with_context(base_prompt)
 
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         if history:
@@ -346,12 +391,25 @@ class AgentLoopRunner:
                     latency_ms=latency_ms,
                 ))
 
-                # Add tool result to conversation
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": result_text,
-                })
+                # Special handling: inject skill content as user message
+                if tool_name == "skill__invoke_skill" and not is_error:
+                    skill_id = arguments.get("skill", "")
+                    messages.append({
+                        "role": "user",
+                        "content": f"[Skill: {skill_id}]\n\n{result_text}",
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": f"Skill '{skill_id}' 已加载，内容已注入上下文。请按照 skill 指引完成任务。",
+                    })
+                else:
+                    # Add tool result to conversation
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": result_text,
+                    })
                 total_tool_calls += 1
 
             # Short-circuit: if analyze__business_query was called, its report is already
@@ -420,9 +478,10 @@ class AgentLoopRunner:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Async variant of run() for use in async contexts (e.g. MCP client)."""
         use_codebase_tools = context_mode == "codebase"
-        system_prompt = system_prompt_override or (
+        base_prompt = system_prompt_override or (
             _SYSTEM_PROMPT_CODEBASE if use_codebase_tools else _SYSTEM_PROMPT_GENERAL
         )
+        system_prompt = self._build_system_prompt_with_context(base_prompt)
 
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         if history:
@@ -528,11 +587,24 @@ class AgentLoopRunner:
                     latency_ms=latency_ms,
                 ))
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": result_text,
-                })
+                # Special handling: inject skill content as user message
+                if tool_name == "skill__invoke_skill" and not is_error:
+                    skill_id = arguments.get("skill", "")
+                    messages.append({
+                        "role": "user",
+                        "content": f"[Skill: {skill_id}]\n\n{result_text}",
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": f"Skill '{skill_id}' 已加载，内容已注入上下文。请按照 skill 指引完成任务。",
+                    })
+                else:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": result_text,
+                    })
                 total_tool_calls += 1
 
         try:

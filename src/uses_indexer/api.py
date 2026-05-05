@@ -14,7 +14,9 @@ from .agent_gateway import AgentConfigError, AgentGateway, AgentRequestError
 from .agent_loop import ConfirmationManager
 from .builtin_tools import create_builtin_file_source
 from .mcp_client_manager import McpClientManager, McpServerConfig
+from .mcp_tools import create_mcp_tool_source
 from .skill_manager import SkillManager
+from .skill_tools import create_skill_tool_source
 from .tool_registry import ToolRegistry, ToolSource
 from .answering import CodebaseAnswerer
 from .debug_bundle import (
@@ -193,6 +195,10 @@ class CodebaseApi:
 
         # Skill manager for local + remote skills
         self.skill_manager = SkillManager()
+
+        # Register skill and MCP management tools
+        self.tool_registry.register_source(create_skill_tool_source(self.skill_manager))
+        self.tool_registry.register_source(create_mcp_tool_source(self.mcp_client_manager))
 
     def _register_uses_mcp_source(self) -> None:
         """Wrap the internal CodebaseMcpServer as a ToolSource in the registry."""
@@ -1249,6 +1255,7 @@ def make_handler_class(api: CodebaseApi) -> type[BaseHTTPRequestHandler]:
                 tool_registry=api.tool_registry,
                 config=loop_config,
                 confirmation_manager=api.confirmation_manager,
+                skill_manager=api.skill_manager,
             )
 
             # Write SSE headers
