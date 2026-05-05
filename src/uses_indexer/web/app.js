@@ -51,11 +51,11 @@ var renderMarkdown = async function(md) {
   var currentMode = 'gradient'; // 'gradient' | 'uploadImage' | 'uploadVideo'
 
   window.__rainConfig = {
-    rain: 0.55,
+    rain: 0.45,
     fog: 0.25,
-    refract: 1.0,
-    glass: 0.0,
-    speed: 0.2
+    refract: 3.0,
+    glass: 1.0,
+    speed: 0.15
   };
 
   window.__rainMedia = {
@@ -376,11 +376,11 @@ var renderMarkdown = async function(md) {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.uniform1f(u.time, elapsed);
     gl.uniform2f(u.res, w, h);
-    gl.uniform1f(u.rain, cfg.rain != null ? cfg.rain : 0.55);
+    gl.uniform1f(u.rain, cfg.rain != null ? cfg.rain : 0.45);
     gl.uniform1f(u.fog, cfg.fog != null ? cfg.fog : 0.25);
-    gl.uniform1f(u.refract, cfg.refract != null ? cfg.refract : 1.0);
-    gl.uniform1f(u.glass, cfg.glass != null ? cfg.glass : 0.0);
-    gl.uniform1f(u.speed, cfg.speed != null ? cfg.speed : 0.2);
+    gl.uniform1f(u.refract, cfg.refract != null ? cfg.refract : 3.0);
+    gl.uniform1f(u.glass, cfg.glass != null ? cfg.glass : 1.0);
+    gl.uniform1f(u.speed, cfg.speed != null ? cfg.speed : 0.15);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     rafId = requestAnimationFrame(render);
   }
@@ -1483,6 +1483,9 @@ function clearChat() {
       docSearchIndexBuilding = false;
     });
   }
+
+  // Build search index on page load so it's ready when user opens search
+  buildDocSearchIndex();
 
   function highlightSearch(text, terms) {
     var result = escapeHtml(text || '');
